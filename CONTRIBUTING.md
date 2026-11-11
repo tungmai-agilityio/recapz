@@ -6,7 +6,8 @@
 - Delete the branch after merge (local and remote).
 
 ## Commits
-- Subject: `area: imperative summary`, at most 72 characters, no trailing period.
+- Subject: `area: imperative summary` (CI checks the PR title, which becomes the squashed commit subject;
+  CI rejects tool-attribution trailers on every commit), at most 72 characters, no trailing period.
   Areas are crate or app names and topics: `server`, `core`, `web`, `meetings`, `deploy`, `docs`, `ci`.
 - Body (optional): wrap at 72, explain why, not what.
 - Example:

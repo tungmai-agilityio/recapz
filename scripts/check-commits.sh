@@ -1,13 +1,13 @@
 #!/bin/sh
-# Usage: check-commits.sh <range>   e.g. origin/main..HEAD
-# Enforces "area: summary" subjects (<=72 chars) and bans tool-attribution trailers.
+# Usage: check-commits.sh <range> <pr-title>
+# PRs are squash-merged, so the PR title is the commit subject that lands on main:
+# it must be "area: summary" (<=72 chars). No commit may carry tool-attribution trailers.
 fail=0
+title="$2"
+echo "$title" | grep -Eq '^[a-z0-9_-]+: .{1,}[^.]$' && [ ${#title} -le 72 ] \
+  || { echo "bad PR title: $title"; fail=1; }
 for c in $(git rev-list --no-merges "$1"); do
-  subj=$(git log -1 --format=%s "$c")
-  msg=$(git log -1 --format=%B "$c")
-  echo "$subj" | grep -Eq '^[a-z0-9_-]+: .{1,}[^.]$' && [ ${#subj} -le 72 ] \
-    || { echo "bad subject ($c): $subj"; fail=1; }
-  echo "$msg" | grep -Eiq '^co-authored-by:|generated with' \
-    && { echo "banned trailer ($c)"; fail=1; }
+  git log -1 --format=%B "$c" | grep -Eiq '^co-authored-by:|generated with' \
+    && { echo "banned trailer in $c"; fail=1; }
 done
 exit $fail
