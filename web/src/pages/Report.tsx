@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { clock } from '../clock'
 import { getMeeting, getTranscript, Unauthorized } from '../api'
@@ -6,6 +7,8 @@ import { getMeeting, getTranscript, Unauthorized } from '../api'
 export function Report() {
   const { id = '' } = useParams()
   const meeting = useQuery({ queryKey: ['meeting', id], queryFn: () => getMeeting(id) })
+  const audio = useRef<HTMLAudioElement>(null)
+  const [now, setNow] = useState(0) // playhead, ms
   const transcript = useQuery({
     queryKey: ['transcript', id],
     queryFn: () => getTranscript(id),
@@ -24,6 +27,15 @@ export function Report() {
       <p className="font-mono text-xs text-mute">{m.platform} · {m.status}</p>
       {m.error && <p className="mt-3 text-sm text-red-700">{m.error}</p>}
 
+      <audio
+        ref={audio}
+        controls
+        preload="metadata"
+        src={`/api/meetings/${id}/audio`}
+        onTimeUpdate={(e) => setNow(e.currentTarget.currentTime * 1000)}
+        className="mt-4 w-full"
+      />
+
       <h2 className="mt-8 text-lg font-semibold">Transcript</h2>
       {transcript.isLoading && <p className="mt-3 text-mute">Loading…</p>}
       {transcript.isError && <p className="mt-3 text-red-700">Could not load the transcript.</p>}
@@ -33,12 +45,27 @@ export function Report() {
         </p>
       )}
       <ol className="mt-3 space-y-3">
-        {transcript.data?.map((s) => (
-          <li key={s.id} className="flex gap-4">
-            <time className="w-14 shrink-0 pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
-            <p>{s.text}</p>
-          </li>
-        ))}
+        {transcript.data?.map((s) => {
+          const active = now >= s.start_ms && now < s.end_ms
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                aria-current={active || undefined}
+                onClick={() => {
+                  if (!audio.current) return
+                  audio.current.currentTime = s.start_ms / 1000
+                  setNow(s.start_ms)
+                  void audio.current.play().catch(() => {})
+                }}
+                className={`flex w-full gap-4 rounded-md border-l-2 px-2 py-1 text-left hover:bg-sheet ${active ? 'border-signal bg-sheet' : 'border-transparent'}`}
+              >
+                <time className="w-14 shrink-0 pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
+                <span>{s.text}</span>
+              </button>
+            </li>
+          )
+        })}
       </ol>
     </article>
   )
