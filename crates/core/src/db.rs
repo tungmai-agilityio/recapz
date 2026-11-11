@@ -1,7 +1,11 @@
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite_migration::{Migrations, M};
 use std::path::{Path, PathBuf};
+
+pub fn new_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
 
 pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -44,6 +48,101 @@ pub fn tenant_ids(control: &Connection) -> Result<Vec<String>> {
     Ok(ids)
 }
 
+/// Creates the first tenant and admin when the control DB has no tenants.
+pub fn bootstrap_admin(control: &Connection, email: &str) -> Result<()> {
+    if !tenant_ids(control)?.is_empty() {
+        return Ok(());
+    }
+    let tid = new_id();
+    control.execute(
+        "INSERT INTO tenants (id, name) VALUES (?1, 'Workspace')",
+        [&tid],
+    )?;
+    control.execute(
+        "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'admin')",
+        params![email.to_lowercase(), tid],
+    )?;
+    Ok(())
+}
+
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub name: Option<String>,
+    pub tenant_id: String,
+    pub role: String,
+}
+
+/// Invite-only sign-in: an existing user, or a pending invite which becomes a user.
+/// Returns None for anyone else.
+pub fn user_for_sign_in(
+    control: &Connection,
+    email: &str,
+    name: Option<&str>,
+) -> Result<Option<User>> {
+    let email = email.to_lowercase();
+    let find = |c: &Connection| -> Result<Option<User>> {
+        Ok(c.query_row(
+            "SELECT id, email, name, tenant_id, role FROM users WHERE email = ?1",
+            [&email],
+            |r| {
+                Ok(User {
+                    id: r.get(0)?,
+                    email: r.get(1)?,
+                    name: r.get(2)?,
+                    tenant_id: r.get(3)?,
+                    role: r.get(4)?,
+                })
+            },
+        )
+        .optional()?)
+    };
+    if let Some(u) = find(control)? {
+        return Ok(Some(u));
+    }
+    let invite: Option<(String, String)> = control
+        .query_row(
+            "SELECT tenant_id, role FROM invites WHERE email = ?1",
+            [&email],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((tenant_id, role)) = invite else {
+        return Ok(None);
+    };
+    control.execute(
+        "INSERT INTO users (id, email, name, tenant_id, role) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![new_id(), email, name, tenant_id, role],
+    )?;
+    control.execute("DELETE FROM invites WHERE email = ?1", [&email])?;
+    find(control)
+}
+
+pub fn create_session(control: &Connection, user_id: &str, ttl_ms: i64) -> Result<String> {
+    let id = format!("{}{}", new_id(), new_id()).replace('-', "");
+    control.execute(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?1, ?2, ?3)",
+        params![id, user_id, now_ms() + ttl_ms],
+    )?;
+    Ok(id)
+}
+
+pub fn user_for_session(control: &Connection, session_id: &str) -> Result<Option<User>> {
+    Ok(control
+        .query_row(
+            "SELECT u.id, u.email, u.name, u.tenant_id, u.role FROM sessions s JOIN users u ON u.id = s.user_id
+             WHERE s.id = ?1 AND s.expires_at > ?2",
+            params![session_id, now_ms()],
+            |r| Ok(User { id: r.get(0)?, email: r.get(1)?, name: r.get(2)?, tenant_id: r.get(3)?, role: r.get(4)? }),
+        )
+        .optional()?)
+}
+
+pub fn delete_session(control: &Connection, session_id: &str) -> Result<()> {
+    control.execute("DELETE FROM sessions WHERE id = ?1", [session_id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,5 +178,33 @@ mod tests {
         assert_eq!(hit("hop"), 0);
         // Reopening is a no-op migration.
         open_tenant(dir.path(), "t1").unwrap();
+    }
+
+    #[test]
+    fn migrations_and_invite_only_sign_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let control = open_control(dir.path()).unwrap();
+        bootstrap_admin(&control, "Boss@Example.com").unwrap();
+        bootstrap_admin(&control, "other@example.com").unwrap(); // no-op, tenant exists
+        assert!(user_for_sign_in(&control, "stranger@example.com", None)
+            .unwrap()
+            .is_none());
+        let u = user_for_sign_in(&control, "boss@example.com", Some("Boss"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(u.role, "admin");
+        let sid = create_session(&control, &u.id, 60_000).unwrap();
+        assert_eq!(
+            user_for_session(&control, &sid).unwrap().unwrap().email,
+            "boss@example.com"
+        );
+        delete_session(&control, &sid).unwrap();
+        assert!(user_for_session(&control, &sid).unwrap().is_none());
+
+        let t = open_tenant(dir.path(), &u.tenant_id).unwrap();
+        let n: i64 = t
+            .query_row("SELECT count(*) FROM meetings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0);
     }
 }
