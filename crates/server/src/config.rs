@@ -1,14 +1,17 @@
 use serde::Deserialize;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
+    pub data_dir: PathBuf,
     pub bind: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            data_dir: "./data".into(),
             bind: "127.0.0.1:8080".into(),
         }
     }

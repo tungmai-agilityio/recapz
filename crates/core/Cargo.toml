@@ -1,0 +1,13 @@
+[package]
+name = "recapz-core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite_migration = "2"
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
