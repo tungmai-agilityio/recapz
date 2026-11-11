@@ -1,20 +1,21 @@
 use crate::config::Config;
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, Multipart, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use recapz_core::db;
-use rusqlite::Connection;
+use recapz_core::{db, jobs};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 const SESSION_COOKIE: &str = "recapz_session";
 const OAUTH_STATE_COOKIE: &str = "recapz_oauth_state";
 const SESSION_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
+const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct App {
@@ -38,6 +39,11 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
+        .route("/api/meetings", get(list_meetings))
+        .route(
+            "/api/uploads",
+            post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
+        )
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(app)
 }
@@ -94,6 +100,15 @@ impl App {
     ) -> Res<T> {
         let c = self.control.clone();
         Ok(tokio::task::spawn_blocking(move || f(&c.lock().unwrap())).await??)
+    }
+
+    async fn tenant<T: Send + 'static>(
+        &self,
+        tenant_id: String,
+        f: impl FnOnce(&Connection) -> anyhow::Result<T> + Send + 'static,
+    ) -> Res<T> {
+        let dir = self.cfg.data_dir.clone();
+        Ok(tokio::task::spawn_blocking(move || f(&db::open_tenant(&dir, &tenant_id)?)).await??)
     }
 
     async fn current_user(&self, jar: &CookieJar) -> Res<db::User> {
@@ -255,4 +270,128 @@ async fn me(State(app): State<App>, jar: CookieJar) -> Res<Json<Me>> {
         name: u.name,
         role: u.role,
     }))
+}
+
+/// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).
+fn ensure_member(c: &Connection, u: &db::User) -> anyhow::Result<()> {
+    c.execute(
+        "INSERT OR IGNORE INTO members (id, email, name, role) VALUES (?1, ?2, ?3, ?4)",
+        params![u.id, u.email, u.name, u.role],
+    )?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct MeetingRow {
+    id: String,
+    title: String,
+    platform: String,
+    status: String,
+    started_at: Option<i64>,
+    created_at: i64,
+}
+
+async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<MeetingRow>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let rows = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            // Visible to the owner, or to everyone when shared with the workspace.
+            let mut s = c.prepare(
+                "SELECT id, title, platform, status, started_at, created_at FROM meetings
+                 WHERE owner_id = ?1 OR share = 'workspace' ORDER BY COALESCE(started_at, created_at) DESC",
+            )?;
+            let rows = s
+                .query_map([uid], |r| {
+                    Ok(MeetingRow {
+                        id: r.get(0)?,
+                        title: r.get(1)?,
+                        platform: r.get(2)?,
+                        status: r.get(3)?,
+                        started_at: r.get(4)?,
+                        created_at: r.get(5)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await?;
+    Ok(Json(rows))
+}
+
+#[derive(Serialize)]
+struct Created {
+    id: String,
+}
+
+fn safe_name(n: &str) -> String {
+    let s: String = n
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    s.trim_start_matches('.').chars().take(100).collect()
+}
+
+async fn upload(
+    State(app): State<App>,
+    jar: CookieJar,
+    mut mp: Multipart,
+) -> Res<(StatusCode, Json<Created>)> {
+    let u = app.current_user(&jar).await?;
+    let mut title = None;
+    let mut file: Option<(String, axum::body::Bytes)> = None;
+    while let Some(f) = mp
+        .next_field()
+        .await
+        .map_err(|_| ApiError::BadRequest("bad multipart body"))?
+    {
+        match f.name() {
+            Some("title") => title = f.text().await.ok().filter(|t| !t.trim().is_empty()),
+            Some("file") => {
+                let name = f.file_name().unwrap_or("upload").to_owned();
+                let bytes = f
+                    .bytes()
+                    .await
+                    .map_err(|_| ApiError::BadRequest("could not read file"))?;
+                file = Some((name, bytes));
+            }
+            _ => {}
+        }
+    }
+    let (name, bytes) = file.ok_or(ApiError::BadRequest("missing file field"))?;
+    if bytes.is_empty() {
+        return Err(ApiError::BadRequest("empty file"));
+    }
+    let id = db::new_id();
+    let rel = format!("audio/{id}/{}", safe_name(&name));
+    let path = db::tenant_dir(&app.cfg.data_dir, &u.tenant_id).join(&rel);
+    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    tokio::fs::write(&path, &bytes).await?;
+
+    let title = title.unwrap_or_else(|| name.clone());
+    let (mid, rel2) = (id.clone(), rel.clone());
+    let res = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status, owner_id, audio_path, created_at)
+                 VALUES (?1, ?2, 'upload', 'uploaded', ?3, ?4, ?5)",
+                params![mid, title, u.id, rel2, db::now_ms()],
+            )?;
+            jobs::enqueue(c, "transcribe", Some(&mid), None)?;
+            Ok(())
+        })
+        .await;
+    if res.is_err() {
+        let _ = tokio::fs::remove_dir_all(path.parent().unwrap()).await; // no orphan audio on failure
+    }
+    res?;
+    Ok((StatusCode::CREATED, Json(Created { id })))
 }
