@@ -1,0 +1,24 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+jobs:
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE" "$BRANCH"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+  banned-names:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/banned-names.sh
+        env:
+          BANNED_NAMES: ${{ secrets.BANNED_NAMES }}
