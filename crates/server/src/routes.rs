@@ -1,6 +1,6 @@
 use crate::config::Config;
 use axum::{
-    extract::{DefaultBodyLimit, Multipart, State},
+    extract::{DefaultBodyLimit, Multipart, Path, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -8,7 +8,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use recapz_core::{db, jobs};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -40,6 +40,8 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
         .route("/api/meetings", get(list_meetings))
+        .route("/api/meetings/{id}", get(meeting_detail))
+        .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
@@ -52,6 +54,7 @@ enum ApiError {
     Unauthorized,
     BadRequest(&'static str),
     Forbidden,
+    NotFound,
     Internal(anyhow::Error),
 }
 impl<E: Into<anyhow::Error>> From<E> for ApiError {
@@ -66,6 +69,7 @@ impl IntoResponse for ApiError {
                 (StatusCode::UNAUTHORIZED, "sign in required").into_response()
             }
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
+            ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m).into_response(),
             ApiError::Internal(e) => {
                 tracing::error!("{e:#}");
@@ -318,6 +322,101 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
         })
         .await?;
     Ok(Json(rows))
+}
+
+#[derive(Serialize)]
+struct MeetingDetail {
+    id: String,
+    title: String,
+    platform: String,
+    status: String,
+    language: String,
+    started_at: Option<i64>,
+    ended_at: Option<i64>,
+    created_at: i64,
+    error: Option<String>,
+}
+
+/// The one meeting access rule: the owner, or anyone when shared with the workspace.
+/// A meeting the member may not see is reported as missing, so its existence does not leak.
+fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option<MeetingDetail>> {
+    Ok(c.query_row(
+        "SELECT id, title, platform, status, language, started_at, ended_at, created_at, error
+         FROM meetings WHERE id = ?1 AND (owner_id = ?2 OR share = 'workspace')",
+        params![id, uid],
+        |r| {
+            Ok(MeetingDetail {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                platform: r.get(2)?,
+                status: r.get(3)?,
+                language: r.get(4)?,
+                started_at: r.get(5)?,
+                ended_at: r.get(6)?,
+                created_at: r.get(7)?,
+                error: r.get(8)?,
+            })
+        },
+    )
+    .optional()?)
+}
+
+async fn meeting_detail(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<MeetingDetail>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let m = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            visible_meeting(c, &uid, &id)
+        })
+        .await?;
+    Ok(Json(m.ok_or(ApiError::NotFound)?))
+}
+
+#[derive(Serialize)]
+struct SegmentRow {
+    id: i64,
+    speaker_id: Option<String>,
+    start_ms: i64,
+    end_ms: i64,
+    text: String,
+}
+
+async fn meeting_transcript(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Vec<SegmentRow>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let rows = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            let mut s = c.prepare(
+                "SELECT id, speaker_id, start_ms, end_ms, text FROM segments WHERE meeting_id = ?1 ORDER BY start_ms, id",
+            )?;
+            let rows = s
+                .query_map([&id], |r| {
+                    Ok(SegmentRow {
+                        id: r.get(0)?,
+                        speaker_id: r.get(1)?,
+                        start_ms: r.get(2)?,
+                        end_ms: r.get(3)?,
+                        text: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(rows))
+        })
+        .await?;
+    Ok(Json(rows.ok_or(ApiError::NotFound)?))
 }
 
 #[derive(Serialize)]
