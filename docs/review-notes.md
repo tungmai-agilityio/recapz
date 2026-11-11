@@ -19,6 +19,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Google sign-in has not been exercised against real Google credentials.
 - `BANNED_NAMES` is not set anywhere, so `scripts/banned-names.sh` skips. The list must be provided outside the repo.
 - Dependabot opened major bumps (#12 tower-http 0.7, #13 toml 1.x, #14 @types/node 26). Not reviewed or merged.
+- No CSRF token on state-changing routes yet (`POST /auth/logout`, `POST /api/uploads`); only `SameSite=Lax` cookies protect them. Add before any public exposure.
+- PRs #15-#21 are open for review as a stack (#16 → #18 → #19 → #20 → #21; #15 and #17 independent).
 - Repo settings still allow merge commits and rebase merges (earlier PRs landed as merge commits); squash-only is not enforced. Branch protection needs a paid plan for private repos.
 
 ## Blockers
