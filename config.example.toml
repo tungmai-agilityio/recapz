@@ -1,2 +1,9 @@
 data_dir = "./data"
+base_url = "http://localhost:8080"
 bind = "127.0.0.1:8080"
+bootstrap_admin_email = ""   # first admin, invited on first start
+dev_login = false            # local development only: enables POST /auth/dev-login
+
+[google]
+client_id = ""
+client_secret = ""
