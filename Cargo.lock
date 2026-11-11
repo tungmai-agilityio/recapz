@@ -1101,6 +1101,7 @@ dependencies = [
  "recapz-speech",
  "rusqlite",
  "rusqlite_migration",
+ "serde_json",
  "tempfile",
  "uuid",
 ]
