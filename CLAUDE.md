@@ -20,6 +20,7 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
 - make release  # production build with CUDA
 
 ## Conventions
+- Git branch, commit and PR rules: see CONTRIBUTING.md (Conventional Commits, `type/` branches, squash merge).
 - Every DB read checks meeting access for the current member.
 - Migrations are additive only. Deletions of user data are hard deletes.
 - New dependencies need a one-line reason in the PR description.
