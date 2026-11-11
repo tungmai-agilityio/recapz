@@ -1130,6 +1130,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "recapz-notetaker"
+version = "0.1.0"
+
+[[package]]
 name = "recapz-server"
 version = "0.1.0"
 dependencies = [
