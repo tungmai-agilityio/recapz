@@ -3,6 +3,13 @@ use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 use std::path::{Path, PathBuf};
 
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
 fn open(path: &Path, migrations: &Migrations) -> Result<Connection> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
