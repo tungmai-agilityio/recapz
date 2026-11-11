@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router'
+import { Meetings } from './pages/Meetings'
 
 export default function App() {
   return (
@@ -17,7 +18,7 @@ export default function App() {
       </header>
       <main>
         <Routes>
-          <Route path="/" element={<p className="text-mute">Nothing here yet.</p>} />
+          <Route path="/" element={<Meetings />} />
         </Routes>
       </main>
     </div>
