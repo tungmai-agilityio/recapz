@@ -17,7 +17,10 @@ impl Anthropic {
 
     pub fn with_base_url(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .expect("http client"),
             base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.into(),
         }
