@@ -1,5 +1,5 @@
 use recapz_core::db;
-use recapz_server::{config::Config, routes};
+use recapz_server::{config::Config, routes, runner};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,6 +14,7 @@ async fn main() -> anyhow::Result<()> {
     for tenant in db::tenant_ids(&control)? {
         db::open_tenant(&cfg.data_dir, &tenant)?; // run migrations on startup
     }
+    runner::spawn(cfg.data_dir.clone());
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on {}", cfg.bind);
     axum::serve(listener, routes::router()).await?;
