@@ -1,10 +1,11 @@
 use crate::config::Config;
+mod calendar;
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -43,6 +44,9 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
         .route("/api/meetings", get(list_meetings))
+        .route("/api/meetings/upcoming", get(calendar::upcoming))
+        .route("/api/meetings/join", post(calendar::join_link))
+        .route("/api/calendar-events/{id}", patch(calendar::set_join))
         .route("/api/meetings/{id}", get(meeting_detail))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/audio", get(meeting_audio))

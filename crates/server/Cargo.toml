@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 recapz-core = { path = "../core" }
+recapz-notetaker = { path = "../notetaker" }
 recapz-speech = { path = "../speech" }
 axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.10", features = ["cookie"] }

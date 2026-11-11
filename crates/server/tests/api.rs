@@ -289,3 +289,241 @@ async fn audio_supports_ranges_and_follows_the_access_rule() {
     let (s, ..) = send(&app, get(&path, "recapz_session=nope")).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
+
+fn json_req(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn upcoming_events_are_private_and_the_join_switch_needs_a_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    // The handlers create the member rows on first use.
+    send(&app, get("/api/meetings/upcoming", &boss)).await;
+    send(&app, get("/api/meetings/upcoming", &amy)).await;
+
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let boss_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email='boss@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let far = db::now_ms() + 3_600_000;
+    let ev = |ext: &str, url: Option<&str>| recapz_core::calendar::NewEvent {
+        external_id: ext.into(),
+        title: format!("Standup {ext}"),
+        starts_at: far,
+        ends_at: far + 1000,
+        join_url: url.map(Into::into),
+        platform: url.map(|_| "meet".into()),
+    };
+    recapz_core::calendar::sync(
+        &t,
+        &boss_id,
+        &[
+            ev("a", Some("https://meet.google.com/abc-defg-hij")),
+            ev("b", None),
+        ],
+        0,
+        far * 2,
+        false,
+    )
+    .unwrap();
+
+    let (s, _, body) = send(&app, get("/api/meetings/upcoming", &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        !body.contains("meet.google.com"),
+        "the link must not reach the browser: {body}"
+    );
+    let rows: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(
+        (
+            rows[0]["has_link"].as_bool(),
+            rows[0]["auto_join"].as_bool()
+        ),
+        (Some(true), Some(false))
+    );
+    assert_eq!(rows[1]["has_link"], false);
+    let (a, b) = (
+        rows[0]["id"].as_str().unwrap().to_string(),
+        rows[1]["id"].as_str().unwrap().to_string(),
+    );
+
+    let (s, _, body) = send(&app, get("/api/meetings/upcoming", &amy)).await;
+    assert_eq!(
+        (s, body.as_str()),
+        (StatusCode::OK, "[]"),
+        "another member sees none of it"
+    );
+
+    let on = r#"{"auto_join":true}"#;
+    let (s, ..) = send(
+        &app,
+        json_req("PATCH", &format!("/api/calendar-events/{a}"), &amy, on),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "not amy's event");
+    let (s, ..) = send(
+        &app,
+        json_req("PATCH", &format!("/api/calendar-events/{b}"), &boss, on),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "no link, nothing to join");
+    let (s, ..) = send(
+        &app,
+        json_req("PATCH", &format!("/api/calendar-events/{a}"), &boss, on),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, body) = send(&app, get("/api/meetings/upcoming", &boss)).await;
+    let rows: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(rows[0]["auto_join"], true);
+    let (s, ..) = send(
+        &app,
+        json_req(
+            "PATCH",
+            &format!("/api/calendar-events/{a}"),
+            "recapz_session=nope",
+            on,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn joining_a_pasted_link_queues_a_scheduled_meeting_for_the_owner_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+
+    let (s, _, body) = send(
+        &app,
+        json_req("POST", "/api/meetings/join", &boss, r#"{"url":"https://us02web.zoom.us/j/84012345678?pwd=abc","title":"  Design review  "}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    let id = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &boss)).await;
+    let m: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (
+            m["title"].as_str(),
+            m["platform"].as_str(),
+            m["status"].as_str()
+        ),
+        (Some("Design review"), Some("zoom"), Some("scheduled"))
+    );
+
+    let (s, _, body) = send(
+        &app,
+        json_req(
+            "POST",
+            "/api/meetings/join",
+            &boss,
+            r#"{"url":"https://meet.google.com/abc-defg-hij"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    let id2 = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id2}"), &boss)).await;
+    assert!(
+        body.contains(r#""title":"Meet call""#) && body.contains(r#""platform":"meet""#),
+        "{body}"
+    );
+
+    // Sending the same link again returns the queued meeting instead of a second one.
+    let (s, _, again) = send(
+        &app,
+        json_req(
+            "POST",
+            "/api/meetings/join",
+            &boss,
+            r#"{"url":"https://meet.google.com/abc-defg-hij?authuser=2"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&again).unwrap()["id"],
+        id2.as_str()
+    );
+    let long = format!(
+        r#"{{"url":"https://us02web.zoom.us/j/84012345679","title":"{}"}}"#,
+        "x".repeat(300)
+    );
+    let (s, _, body) = send(&app, json_req("POST", "/api/meetings/join", &boss, &long)).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let id3 = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id3}"), &boss)).await;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["title"]
+            .as_str()
+            .unwrap()
+            .len(),
+        200
+    );
+
+    for bad in [
+        r#"{"url":"https://meet.google.com.evil.com/abc-defg-hij"}"#,
+        r#"{"url":"http://meet.google.com/abc-defg-hij"}"#,
+        r#"{"url":"https://example.com/"}"#,
+    ] {
+        let (s, ..) = send(&app, json_req("POST", "/api/meetings/join", &boss, bad)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let (_, _, body) = send(&app, get("/api/meetings", &boss)).await;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        3,
+        "rejected links and repeats create nothing"
+    );
+    let (s, ..) = send(
+        &app,
+        json_req(
+            "POST",
+            "/api/meetings/join",
+            "recapz_session=nope",
+            r#"{"url":"https://meet.google.com/abc-defg-hij"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
