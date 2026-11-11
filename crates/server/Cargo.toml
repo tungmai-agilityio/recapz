@@ -1,0 +1,30 @@
+[package]
+name = "recapz-server"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "recapz"
+path = "src/main.rs"
+
+[dependencies]
+recapz-core = { path = "../core" }
+axum = { version = "0.8", features = ["multipart"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["trace", "compression-gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+anyhow = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
+time = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"
+http-body-util = "0.1"
