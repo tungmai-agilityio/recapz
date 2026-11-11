@@ -21,6 +21,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The `eval` crate is the speech/WER tool; prompt evaluation (`cargo run -p eval` in CLAUDE.md) will need a subcommand of its own when prompts land.
 - Zoom v1 join path: Meeting SDK bot, proposed in `docs/zoom-join-path.md`; needs the maintainer's confirmation and a Zoom developer account.
 
+- LLM adapters (#42-#45): `crates/llm` has a `Provider` trait with one non-streaming `complete`; streaming is added with Ask. Prices are micro-USD per million tokens, set per route. Routing config and the `llm_usage` insert are not wired yet.
+- Report prompts are version 1 and written without an eval set; replies are checked by shape only (no ISO-date or range checks).
+
 ## Open issues
 - Google sign-in has not been exercised against real Google credentials.
 - `BANNED_NAMES` is not set anywhere, so `scripts/banned-names.sh` skips. The list must be provided outside the repo.
@@ -38,9 +41,15 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Root `Cargo.toml` workspace members will conflict between the speech PR (#33) and the eval PR (#40); keep all crates.
 - The test-runner agent is not allowed to run `pnpm build`; builds were run by hand.
 
+- Neither LLM adapter has been called against a live API. The OpenAI-compatible adapter records 0 tokens when a local server omits `usage`.
+- `report::generate` returns early with no usage rows if a provider call errors on the retry, so a failed generation's first call is not recorded.
+- Assigning the PR author as assignee/reviewer through the API was denied by the permission classifier, so week 3-5 PRs have no assignee.
+
 ## Blockers
 - `gh pr merge` is denied by the session's permission system even with an allow rule, so PRs are opened as a stack and merged by the maintainer. Week 2 hit the same block ("Merge Without Review") on #33.
 - Week 2 merge order: #33 → #34 → #35 → #36 → #37 → #38 → #39 (stacked, each against the previous branch; after each squash-merge retarget the next to `main`). Independent: #40 (eval), #28 and #29 (docs), this notes PR.
+
+- Week 3-5 LLM stack: #42 → #43 → #44 → #45 (each against the previous branch); retarget the next to `main` after each squash-merge.
 
 ## Questions for review
 - Confirm the Zoom Meeting SDK bot for v1 (#29) and who owns the Zoom developer account.
