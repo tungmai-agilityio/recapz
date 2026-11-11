@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+/* Daylight skin. Amber `signal` is only for the playhead, recording state and focus rings. */
+:root {
+  --paper: #f2f4f7; --sheet: #ffffff; --ink: #18212f; --mute: #677489; --hair: #d6dce5;
+  --primary: #2f63d8; --signal: #e39a2d;
+  --speaker-1: #3c6fb0; --speaker-2: #c4573f; --speaker-3: #2f9583; --speaker-4: #8b5aa6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #161c27; --sheet: #1d2532; --ink: #e6ebf2; --mute: #919db0; --hair: #323d4e;
+    --primary: #79a1ff; --signal: #f0ac44;
+    --speaker-1: #7ea6e0; --speaker-2: #e98a72; --speaker-3: #5cc4b1; --speaker-4: #bd94d6;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper); --color-sheet: var(--sheet); --color-ink: var(--ink);
+  --color-mute: var(--mute); --color-hair: var(--hair); --color-primary: var(--primary);
+  --color-signal: var(--signal);
+  --color-speaker-1: var(--speaker-1); --color-speaker-2: var(--speaker-2);
+  --color-speaker-3: var(--speaker-3); --color-speaker-4: var(--speaker-4);
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+
+body { @apply bg-paper font-sans text-ink antialiased; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
