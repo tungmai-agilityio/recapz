@@ -11,9 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE"
+      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE" "$BRANCH"
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
   banned-names:
     runs-on: ubuntu-latest
     steps:
