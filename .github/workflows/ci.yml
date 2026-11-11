@@ -33,3 +33,10 @@ jobs:
       - run: ./scripts/banned-names.sh
         env:
           BANNED_NAMES: ${{ secrets.BANNED_NAMES }}
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: ./scripts/check-commits.sh origin/${{ github.base_ref }}..HEAD
