@@ -38,6 +38,8 @@ fn body(req: &CompletionRequest) -> Value {
 #[derive(Deserialize)]
 struct Resp {
     choices: Vec<Choice>,
+    /// Some local servers omit usage; counts then default to 0.
+    #[serde(default)]
     usage: Usage,
 }
 #[derive(Deserialize)]
@@ -49,9 +51,11 @@ struct Message {
     #[serde(default)]
     content: Option<String>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Usage {
+    #[serde(default)]
     prompt_tokens: u64,
+    #[serde(default)]
     completion_tokens: u64,
 }
 
@@ -74,10 +78,13 @@ fn parse(raw: &str) -> Result<Completion, LlmError> {
 #[async_trait]
 impl Provider for OpenAiCompat {
     async fn complete(&self, req: CompletionRequest) -> Result<Completion, LlmError> {
-        let resp = self
+        let mut rb = self
             .http
-            .post(format!("{}/chat/completions", self.base_url))
-            .bearer_auth(&self.api_key)
+            .post(format!("{}/chat/completions", self.base_url));
+        if !self.api_key.is_empty() {
+            rb = rb.bearer_auth(&self.api_key);
+        }
+        let resp = rb
             .json(&body(&req))
             .send()
             .await
@@ -125,6 +132,18 @@ mod tests {
             (c.text.as_str(), c.input_tokens, c.output_tokens),
             ("a", 7, 2)
         );
+    }
+
+    #[test]
+    fn parse_defaults_missing_usage_to_zero() {
+        let c = parse(r#"{"choices":[{"message":{"content":"a"}}]}"#).unwrap();
+        assert_eq!(
+            (c.text.as_str(), c.input_tokens, c.output_tokens),
+            ("a", 0, 0)
+        );
+        let c = parse(r#"{"choices":[{"message":{"content":"a"}}],"usage":{"prompt_tokens":4}}"#)
+            .unwrap();
+        assert_eq!((c.input_tokens, c.output_tokens), (4, 0));
     }
 
     #[test]
