@@ -26,7 +26,7 @@
 ## Pull requests
 - One concern per PR; keep it reviewable. Title uses the same `type(scope): summary` format.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.
-- CI must pass: branch name, PR title and commit subjects follow this guide, no tool trailers,
-  banned-names check, plus the Rust and web checks once those projects exist.
+- CI is paused for now. Before opening a PR run `make lint test`,
+  `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and `node scripts/pr-size.mjs origin/main`.
 - Merge with **squash**; the PR title becomes the commit subject on `main`.
 - Run `make lint test` locally before pushing.
