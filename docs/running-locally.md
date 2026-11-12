@@ -14,7 +14,7 @@ One command once the setup below is done: `make local` (server with real transcr
    - `bootstrap_admin_email = "you@example.com"`
    - `dev_login = true` (local only; Google sign-in is not needed)
    - `base_url = "http://localhost:5173"`: the server rejects browser POSTs (upload, Ask) whose Origin is not `base_url`, and the browser talks to the web app on :5173. Leave the default and every upload and Ask in the browser returns 403.
-   - Optional, for reports and Ask, under `[llm]`: `provider = "openai"`, `base_url = "https://api.openai.com/v1"`, `api_key`, `model` (for example `gpt-4o-mini`), and the two prices. The key lives only in this file; keep it out of git and chat.
+   - Optional, for reports and Ask, under `[llm]`: `provider = "openai"`, `base_url = "https://api.openai.com/v1"`, `api_key`, `model` (for example `gpt-4o-mini`), and the two prices. Reasoning models (the gpt-5 family) spend `max_tokens` on thinking before the reply, so with the default 2048 some report tasks come back empty and the report fails with `invalid JSON after retry (Eof)`. Start at `max_tokens = 8192` for them (a 40-second sample already used about 3,700 thinking tokens per task, so longer meetings may need more). The key lives only in this file; keep it out of git and chat.
 4. `pnpm -C web install`
 
 ## Run
