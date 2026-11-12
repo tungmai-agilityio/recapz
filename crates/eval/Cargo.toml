@@ -1,0 +1,9 @@
+[package]
+name = "eval"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = "1"
+unicode-normalization = "0.1"
