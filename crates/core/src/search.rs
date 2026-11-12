@@ -1,7 +1,7 @@
 //! Hybrid search over chunks for Ask: FTS5 keyword ranking and vector similarity, merged by
 //! reciprocal rank. The meeting access rule is part of every query, so a chunk of a meeting the
 //! member cannot see is never read, ranked or returned.
-use crate::embed::{cosine, from_blob};
+use crate::embed::{cosine, from_blob, is_stop};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
@@ -10,6 +10,9 @@ use std::collections::HashMap;
 const VISIBLE: &str = "(m.owner_id = ?1 OR m.share = 'workspace')";
 const POOL: usize = 50;
 const RRF_K: f32 = 60.0;
+/// Vector matches below this cosine are noise (shared filler words), not hits. Tuned for the
+/// hashed baseline embedder; revisit when a real model replaces it.
+const MIN_SIMILARITY: f32 = 0.2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
@@ -26,7 +29,7 @@ pub struct Hit {
 fn fts_query(q: &str) -> Option<String> {
     let words: Vec<String> = q
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
+        .filter(|w| !w.is_empty() && !is_stop(w))
         .map(|w| format!("\"{w}\""))
         .collect();
     (!words.is_empty()).then(|| words.join(" OR "))
@@ -59,7 +62,7 @@ fn vector_ids(c: &Connection, member: &str, qvec: &[f32]) -> Result<Vec<i64>> {
         .query_map([member], |r| Ok((r.get(0)?, r.get::<_, Vec<u8>>(1)?)))?
         .map(|r| r.map(|(id, b)| (id, cosine(qvec, &from_blob(&b)))))
         .collect::<Result<_, _>>()?;
-    scored.retain(|(_, s)| *s > 0.0);
+    scored.retain(|(_, s)| *s >= MIN_SIMILARITY);
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     Ok(scored.into_iter().take(POOL).map(|(id, _)| id).collect())
 }
@@ -175,6 +178,19 @@ mod tests {
             1,
             "the unrelated chunk shares no word or vector overlap"
         );
+    }
+
+    #[test]
+    fn filler_words_alone_do_not_match() {
+        let (_d, c) = setup();
+        add(
+            &c,
+            "mine",
+            0,
+            "the launch date moved to May after the review",
+        );
+        let q = "what is the acquisition price?";
+        assert!(ask(&c, "alice", q).is_empty());
     }
 
     #[test]
