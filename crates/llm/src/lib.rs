@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod anthropic;
+pub mod ask;
 pub mod openai_compat;
 pub mod report;
 pub mod stub;
