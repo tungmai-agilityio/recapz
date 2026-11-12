@@ -6,9 +6,12 @@ import App from './App'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-function mount(path: string, me: Response, calls: string[] = []) {
+function mount(path: string, me: Response, calls: string[] = [], logoutStatus = 200) {
+  let loggedOut = false
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`)
+    if (url === '/auth/logout') { loggedOut = logoutStatus === 200; return new Response('', { status: logoutStatus }) }
+    if (loggedOut) return new Response('', { status: 401 })
     if (url === '/api/me') return me.clone()
     return me.status === 401 ? new Response('', { status: 401 }) : new Response('[]')
   }))
@@ -28,6 +31,7 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   expect(rail.textContent).toContain('Work')
   expect(screen.getByRole('link', { name: 'Meetings' }).getAttribute('aria-current')).toBe('page')
   expect(screen.getByRole('link', { name: 'Ask' }).getAttribute('aria-current')).toBeNull()
+  expect(screen.getByRole('link', { name: 'Recapz home' }).getAttribute('aria-current')).toBe('page')
   expect(await screen.findByText('ana@example.com')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
 })
@@ -36,13 +40,31 @@ test('the active rail item and breadcrumb follow the route', async () => {
   mount('/ask', signedIn())
   expect((await screen.findByRole('link', { name: 'Ask' })).getAttribute('aria-current')).toBe('page')
   expect(screen.getByRole('link', { name: 'Meetings' }).getAttribute('aria-current')).toBeNull()
+  expect(screen.getByRole('link', { name: 'Recapz home' }).getAttribute('aria-current')).toBeNull()
+  expect(document.querySelector('header')?.textContent).toContain('Ask')
+  expect(document.querySelector('header')?.textContent).not.toContain('Meetings')
 })
 
-test('Sign out posts to /auth/logout', async () => {
+test('Sign out posts to /auth/logout and returns to the sign-in card', async () => {
   const calls: string[] = []
   mount('/', signedIn(), calls)
   fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
   await waitFor(() => expect(calls).toContain('POST /auth/logout'))
+  expect(await screen.findByText('Sign in to Recapz')).toBeTruthy()
+  expect(screen.queryByRole('navigation', { name: 'Screens' })).toBeNull()
+})
+
+test('a failed sign-out keeps the shell and says so', async () => {
+  mount('/', signedIn(), [], 403)
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not sign out.')
+  expect(screen.getByRole('navigation', { name: 'Screens' })).toBeTruthy()
+})
+
+test('the report route shows its breadcrumb', async () => {
+  mount('/meetings/m1', signedIn())
+  await screen.findByRole('navigation', { name: 'Screens' })
+  expect(document.querySelector('header')?.textContent).toContain('Meetings / Meeting report')
 })
 
 test('a 401 shows only the sign-in card, with no rail', async () => {

@@ -30,7 +30,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const { pathname } = useLocation()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
-  const out = useMutation({ mutationFn: logout, onSuccess: () => qc.clear() })
+  const out = useMutation({ mutationFn: logout, onSuccess: () => qc.resetQueries() })
 
   if (me.error instanceof Unauthorized)
     return <div className="mx-auto max-w-xl px-4 py-12"><div className="mb-6 flex items-center gap-2.5"><Glyph /><span className="text-lg font-bold tracking-tight">Recapz</span></div>{children}</div>
@@ -40,7 +40,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="grid min-h-screen grid-cols-[208px_minmax(0,1fr)] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[auto_1fr]">
       <nav aria-label="Screens"
         className="sticky top-0 flex h-screen flex-col gap-5 overflow-y-auto border-r border-hair bg-rail px-2.5 py-4 text-rail-fg max-[900px]:h-auto max-[900px]:flex-row max-[900px]:items-center max-[900px]:gap-1 max-[900px]:overflow-x-auto max-[900px]:border-r-0 max-[900px]:border-b max-[900px]:py-2">
-        <NavLink to="/" aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
+        <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
         {groups.map((g) => (
@@ -61,7 +61,8 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="block truncate text-sm font-semibold text-rail-on">{me.data.name || me.data.email}</span>
               {me.data.name && <span className="block max-w-[120px] truncate text-xs opacity-80">{me.data.email}</span>}
             </span>
-            <Button variant="ghost" className="text-rail-fg" onClick={() => out.mutate()}>Sign out</Button>
+            <Button variant="ghost" className="text-rail-fg! hover:bg-nav-on-bg!" onClick={() => out.mutate()}>Sign out</Button>
+            {out.isError && <span role="alert" className="text-xs text-bad">Could not sign out.</span>}
           </div>
         )}
       </nav>
