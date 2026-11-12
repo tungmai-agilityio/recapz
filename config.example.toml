@@ -18,6 +18,6 @@ provider = ""            # "anthropic" or "openai" (any OpenAI-compatible server
 base_url = ""            # required for "openai", e.g. http://localhost:8000/v1
 api_key = ""
 model = ""
-max_tokens = 2048
+max_tokens = 2048   # reasoning models (gpt-5 family) spend this on thinking first; start at 8192 for them
 price_input = 0          # micro-USD per million input tokens
 price_output = 0         # micro-USD per million output tokens
