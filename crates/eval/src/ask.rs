@@ -2,13 +2,7 @@
 //! through hybrid search and check the right meeting comes back at about the right moment.
 //! Measures retrieval only (no model call), so it runs offline and costs nothing.
 use anyhow::{anyhow, Context, Result};
-use recapz_core::{
-    db::open_tenant,
-    embed::{Embedder, HashEmbedder},
-    index_job,
-    jobs::Job,
-    search::search,
-};
+use recapz_core::{db::open_tenant, embed::HashEmbedder, index_job, jobs::Job, search::search};
 use rusqlite::params;
 use serde_json::Value;
 
@@ -102,7 +96,7 @@ fn run_in(dir: &std::path::Path, set: &Value) -> Result<AskReport> {
     };
     for q in list(set, "questions")? {
         let (question, meeting, at) = (text(q, "q")?, text(q, "meeting")?, num(q, "at_ms")?);
-        let hits = search(&c, "eval", question, &HashEmbedder.embed(question), TOP_K)?;
+        let hits = search(&c, "eval", question, &HashEmbedder, TOP_K)?;
         let ok = hits.iter().any(|h| {
             h.meeting_id == meeting && h.start_ms - SLACK_MS <= at && at <= h.end_ms + SLACK_MS
         });

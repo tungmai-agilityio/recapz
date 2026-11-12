@@ -1,7 +1,7 @@
 //! Hybrid search over chunks for Ask: FTS5 keyword ranking and vector similarity, merged by
 //! reciprocal rank. The meeting access rule is part of every query, so a chunk of a meeting the
 //! member cannot see is never read, ranked or returned.
-use crate::embed::{cosine, from_blob, keywords};
+use crate::embed::{cosine, from_blob, keywords, Embedder};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
@@ -49,30 +49,40 @@ fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<i64>> {
 
 // ponytail: brute-force scan of the member's visible chunks; switch to an index when a workspace
 // holds more than ~100k chunks.
-fn vector_ids(c: &Connection, member: &str, qvec: &[f32]) -> Result<Vec<i64>> {
+fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Result<Vec<i64>> {
+    let qvec = e.embed(query);
+    // Only chunks embedded by this same embedder are comparable; the rest are reached by keyword
+    // until they are re-indexed.
     let sql = format!(
-        "SELECT k.id, k.embedding FROM chunks k JOIN meetings m ON m.id = k.meeting_id WHERE {VISIBLE}"
+        "SELECT k.id, k.embedding FROM chunks k JOIN meetings m ON m.id = k.meeting_id
+         WHERE {VISIBLE} AND k.embedder = ?2"
     );
     let mut st = c.prepare(&sql)?;
     let mut scored: Vec<(i64, f32)> = st
-        .query_map([member], |r| Ok((r.get(0)?, r.get::<_, Vec<u8>>(1)?)))?
-        .map(|r| r.map(|(id, b)| (id, cosine(qvec, &from_blob(&b)))))
+        .query_map(params![member, e.id()], |r| {
+            Ok((r.get(0)?, r.get::<_, Vec<u8>>(1)?))
+        })?
+        .map(|r| r.map(|(id, b)| (id, cosine(&qvec, &from_blob(&b)))))
         .collect::<Result<_, _>>()?;
     scored.retain(|(_, s)| *s >= MIN_SIMILARITY);
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     Ok(scored.into_iter().take(POOL).map(|(id, _)| id).collect())
 }
 
-/// Top `limit` chunks the member may see, best first.
+/// Top `limit` chunks the member may see, best first. `embedder` embeds the query and must be the
+/// one that indexed the chunks for the vector side to see them.
 pub fn search(
     c: &Connection,
     member: &str,
     query: &str,
-    qvec: &[f32],
+    embedder: &dyn Embedder,
     limit: usize,
 ) -> Result<Vec<Hit>> {
     let mut score: HashMap<i64, f32> = HashMap::new();
-    for ids in [keyword_ids(c, member, query)?, vector_ids(c, member, qvec)?] {
+    for ids in [
+        keyword_ids(c, member, query)?,
+        vector_ids(c, member, embedder, query)?,
+    ] {
         for (rank, id) in ids.into_iter().enumerate() {
             *score.entry(id).or_default() += 1.0 / (RRF_K + rank as f32 + 1.0);
         }
@@ -142,7 +152,7 @@ mod tests {
     }
 
     fn ask(c: &Connection, member: &str, q: &str) -> Vec<Hit> {
-        search(c, member, q, &HashEmbedder.embed(q), 5).unwrap()
+        search(c, member, q, &HashEmbedder, 5).unwrap()
     }
 
     #[test]
@@ -219,5 +229,42 @@ mod tests {
         assert_eq!(hits.iter().map(|h| h.start_ms).collect::<Vec<_>>(), [7_000]);
         // A question made only of filler matches nothing.
         assert!(ask(&c, "alice", "Đó là gì?").is_empty());
+    }
+
+    /// Same vector for every text, so only the embedder id decides whether vectors are compared.
+    struct Flat(&'static str);
+    impl Embedder for Flat {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+        fn embed(&self, _: &str) -> Vec<f32> {
+            vec![1.0, 0.0]
+        }
+    }
+
+    #[test]
+    fn vectors_are_only_compared_within_one_embedder() {
+        let (_d, c) = setup();
+        c.execute(
+            "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding, embedder) VALUES ('mine', 0, 1000, 'alpha', ?1, 'flat-2')",
+            params![to_blob(&[1.0, 0.0])],
+        )
+        .unwrap();
+        // No shared word, so only the vector side can find it.
+        let q = "zzz";
+        assert_eq!(search(&c, "alice", q, &Flat("flat-2"), 5).unwrap().len(), 1);
+        assert!(
+            search(&c, "alice", q, &Flat("flat-3"), 5)
+                .unwrap()
+                .is_empty(),
+            "another embedder's vectors are not comparable"
+        );
+        // Keyword search still reaches the chunk under any embedder.
+        assert_eq!(
+            search(&c, "alice", "alpha", &Flat("flat-3"), 5)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

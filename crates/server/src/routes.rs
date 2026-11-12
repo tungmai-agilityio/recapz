@@ -30,6 +30,7 @@ pub struct App {
     control: Arc<Mutex<Connection>>,
     /// Language-model router for Ask; `None` when no provider is configured.
     llm: Option<Arc<recapz_llm::Router>>,
+    embedder: Arc<dyn recapz_core::embed::Embedder>,
     /// When each member last asked, newest last; pruned to the last minute on every check.
     // ponytail: in memory and per process; a restart resets it, which is fine for one server.
     asks: Arc<
@@ -54,7 +55,9 @@ pub fn router_with_llm(
     control: Arc<Mutex<Connection>>,
     llm: Option<Arc<recapz_llm::Router>>,
 ) -> Router {
+    let embedder = crate::embedder::from_config(&cfg.embedder).expect("embedder checked at start");
     let app = App {
+        embedder,
         cfg: Arc::new(cfg),
         control,
         llm,
