@@ -38,7 +38,11 @@ pub fn tenant_dir(data_dir: &Path, tenant_id: &str) -> PathBuf {
 
 /// Opens (and migrates) one tenant database. Migrations are additive only.
 pub fn open_tenant(data_dir: &Path, tenant_id: &str) -> Result<Connection> {
-    let m = Migrations::new(vec![M::up(include_str!("../migrations/tenant_001.sql"))]);
+    let m = Migrations::new(vec![
+        M::up(include_str!("../migrations/tenant_001.sql")),
+        M::up(include_str!("../migrations/tenant_002.sql")),
+        M::up(include_str!("../migrations/tenant_003.sql")),
+    ]);
     open(&tenant_dir(data_dir, tenant_id).join("recapz.sqlite"), &m)
 }
 

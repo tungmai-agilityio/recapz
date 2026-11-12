@@ -20,6 +20,17 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Audio is streamed with single-range support; multi-range requests get 416.
 - The `eval` crate is the speech/WER tool; prompt evaluation (`cargo run -p eval` in CLAUDE.md) will need a subcommand of its own when prompts land.
 - Zoom v1 join path: Meeting SDK bot, proposed in `docs/zoom-join-path.md`; needs the maintainer's confirmation and a Zoom developer account.
+- LLM adapters (#42-#45): `crates/llm` has a `Provider` trait with one non-streaming `complete`; streaming is added with Ask. Prices are micro-USD per million tokens, set per route. One `[llm]` route serves all report tasks (see the report job note).
+- Report prompts are version 1 and written without an eval set; replies are checked by shape only (no ISO-date or range checks).
+- Report job (#48): the model sits behind a `ReportModel` trait in core so core has no network code; `LlmReportModel` in the server runs the four tasks in turn on one `[llm]` route (per-task routing is deferred). A transcribe job queues the report job only when `[llm]` is configured; otherwise a meeting goes straight to `ready` as before.
+- A job that fails for good sets its meeting to `failed` with the error text (first 500 characters).
+- `GET /api/meetings/{id}/report` returns `null` until a report exists; a hidden meeting is 404. The Report page polls every 3 s while the meeting is `reporting`.
+- Notetaker logic is browser-free: `Session` (lobby 10 min, alone 2 min, call ended, opt-out from anyone but the notetaker itself) and `WavWriter`. A driver must feed it participant samples about every 250 ms and send `from_self` correctly on chat events.
+- Opt-out deletion is `purge_meeting` (audio folder first, then rows; search rows go through the chunk delete trigger). It also deletes `llm_usage` and `jobs` rows for that meeting.
+- Calendar sync is Google-only and reads upcoming events in a window; events keep `auto_join` and the booked meeting across re-syncs. The join rule is `manual` by default, `auto` books one notetaker per link.
+- Join links are parsed strictly (Meet and Zoom hosts only) and stored normalised, so the same call is never joined twice by one member.
+- Zoom v1 uses the Meeting SDK bot per the decision doc in #29; it needs Zoom app review, and upload stays the fallback.
+- Report email transport is undecided: assume SMTP behind a trait, nothing is wired yet.
 
 ## Open issues
 - Google sign-in has not been exercised against real Google credentials.
@@ -37,10 +48,34 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The click-to-seek page and the Report page were checked with jsdom tests and a build only, not in a real browser with real audio.
 - Root `Cargo.toml` workspace members will conflict between the speech PR (#33) and the eval PR (#40); keep all crates.
 - The test-runner agent is not allowed to run `pnpm build`; builds were run by hand.
+- Neither LLM adapter has been called against a live API. The OpenAI-compatible adapter records 0 tokens when a local server omits `usage`.
+- `report::generate` returns early with no usage rows if a provider call errors on the retry, so a failed generation's first call is not recorded.
+- Assigning the PR author as assignee/reviewer through the API was denied by the permission classifier, so week 3-5 PRs have no assignee.
+- The report email to attendees is not built (no mail transport chosen; needs a provider decision and attendee emails from calendar sync).
+- Nothing calls `purge_meeting` yet; the driver must call it on `LeaveReason::OptOut`, after checking the caller may delete.
+- Deleted text can stay in SQLite free pages and the WAL until a checkpoint or vacuum; decide whether opt-out must vacuum.
+- `purge_meeting` assumes audio lives in `audio/<meeting id>/`; it never reads `meetings.audio_path`. A recording stored elsewhere would survive a purge.
+- `report::generate` and `generate_report` lose usage rows for calls made before a failure, so spend on failed reports is not tracked.
+- Report prompts have no eval set; add one before any v2 prompt change.
+- `ROLLBACK`/`COMMIT` failures in the job handlers and `purge_meeting` can leave a transaction open on the connection (same pattern everywhere).
+- The report endpoint turns malformed JSON columns into empty lists without a log.
+- The Report page shows nothing for a `failed` meeting without a report and nothing when the report fetch fails.
+- `join_rule` is stored but no sync caller reads it yet, and the settings API for it is deferred.
+- The join API dedupes per member only; two members pasting the same link each get a notetaker. Cross-owner dedupe is not done.
+- A second member who can see a call has no access to the meeting a first member booked until it is shared.
+- Google Calendar responses are not capped in size or page count yet.
 
 ## Blockers
 - `gh pr merge` is denied by the session's permission system even with an allow rule, so PRs are opened as a stack and merged by the maintainer. Week 2 hit the same block ("Merge Without Review") on #33.
 - Week 2 merge order: #33 → #34 → #35 → #36 → #37 → #38 → #39 (stacked, each against the previous branch; after each squash-merge retarget the next to `main`). Independent: #40 (eval), #28 and #29 (docs), this notes PR.
+- Week 3-5 LLM stack: #42 → #43 → #44 → #45 (each against the previous branch); retarget the next to `main` after each squash-merge.
+- Week 3-5 merge order. LLM stack: #42 → #43 → #44 → #45. Week 2 stack: #33 → … → #39, then #48 (report job). Then `chore/integration-wk3` (merges #48, #45 and #47; it is a base branch, not a PR): its PRs are #49 (LLM report model, `[llm]` config) → #50 (queue the report job) → #51 (failed jobs mark the meeting failed) → #52 (report endpoint) → #53 (Report page sections), and independently #54 (notetaker session rules) and #55 (purge). #47 (opt-out and speaker matching) merges to `main` on its own. After the stacks reach `main`, retarget #49, #54 and #55 to `main` (they are based on the integration branch); #50-#53 follow #49 in order.
+- The Chromium notetaker driver is not built: join flow, platform selectors, audio capture script and the join notice in call chat. It needs a real Meet call and the notetaker's Google account to verify, so it is a live-call blocker, not a code gap I could close here. The pieces that need no browser (session rules, WAV writer, opt-out, speaker matching, purge) are built and tested.
+- Zoom Meeting SDK bot needs Zoom app review and an account owner for the app; nothing can join a Zoom call until then.
+- Google Calendar needs an OAuth scope for calendar read-only and somewhere to store refresh tokens per member; sync parsing is tested, the live calls are not.
+- Real Meet and Zoom calls (and so `scripts/smoke-join.sh`) need test calls kept open and a member cookie; the live join path has not run.
+- Report email needs a transport decision (SMTP assumed).
+- Weeks 3-7 (#42-#63) were squash-merged into `main` in stack order once the maintainer allowed `gh pr merge`; each stacked branch was merged with `main` first (no force-push).
 
 ## Questions for review
 - Confirm the Zoom Meeting SDK bot for v1 (#29) and who owns the Zoom developer account.
