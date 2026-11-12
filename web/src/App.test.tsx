@@ -33,7 +33,27 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   expect(screen.getByRole('link', { name: 'Ask' }).getAttribute('aria-current')).toBeNull()
   expect(screen.getByRole('link', { name: 'Recapz home' }).getAttribute('aria-current')).toBe('page')
   expect(await screen.findByText('ana@example.com')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
+  expect(screen.queryByRole('menu')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }))
+  expect(screen.getByRole('menu').textContent).toContain('Admin')
+  expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
+})
+
+test('the top bar has the Ask box, and Cmd+K or Ctrl+K opens Ask with the question focused', async () => {
+  mount('/', signedIn())
+  expect((await screen.findByRole('link', { name: /Ask about any meeting/ })).getAttribute('href')).toBe('/ask')
+  fireEvent.keyDown(document, { key: 'k', metaKey: true })
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Question')))
+  ;(document.activeElement as HTMLElement).blur()
+  fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Question')))
+})
+
+test('plain K does nothing', async () => {
+  mount('/', signedIn())
+  await screen.findByRole('navigation', { name: 'Screens' })
+  fireEvent.keyDown(document, { key: 'k' })
+  expect(screen.queryByLabelText('Question')).toBeNull()
 })
 
 test('the active rail item and breadcrumb follow the route', async () => {
@@ -48,7 +68,8 @@ test('the active rail item and breadcrumb follow the route', async () => {
 test('Sign out posts to /auth/logout and returns to the sign-in card', async () => {
   const calls: string[] = []
   mount('/', signedIn(), calls)
-  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
   await waitFor(() => expect(calls).toContain('POST /auth/logout'))
   expect(await screen.findByText('Sign in to Recapz')).toBeTruthy()
   expect(screen.queryByRole('navigation', { name: 'Screens' })).toBeNull()
@@ -56,7 +77,8 @@ test('Sign out posts to /auth/logout and returns to the sign-in card', async () 
 
 test('a failed sign-out keeps the shell and says so', async () => {
   mount('/', signedIn(), [], 403)
-  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
   expect((await screen.findByRole('alert')).textContent).toBe('Could not sign out.')
   expect(screen.getByRole('navigation', { name: 'Screens' })).toBeTruthy()
 })
