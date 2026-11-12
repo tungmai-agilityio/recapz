@@ -38,6 +38,8 @@ pub struct Config {
     pub llm: Llm,
     /// ggml speech model file used by the transcribe job (needs the `whisper` build feature).
     pub speech_model: PathBuf,
+    /// Questions one member may ask per minute (each one is a paid model call).
+    pub ask_per_minute: u32,
 }
 
 impl Default for Config {
@@ -51,6 +53,7 @@ impl Default for Config {
             google: Google::default(),
             llm: Llm::default(),
             speech_model: "./models/ggml-large-v3-turbo.bin".into(),
+            ask_per_minute: 20,
         }
     }
 }

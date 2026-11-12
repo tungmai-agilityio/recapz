@@ -29,6 +29,11 @@ pub struct App {
     control: Arc<Mutex<Connection>>,
     /// Language-model router for Ask; `None` when no provider is configured.
     llm: Option<Arc<recapz_llm::Router>>,
+    /// When each member last asked, newest last; pruned to the last minute on every check.
+    // ponytail: in memory and per process; a restart resets it, which is fine for one server.
+    asks: Arc<
+        Mutex<std::collections::HashMap<String, std::collections::VecDeque<std::time::Instant>>>,
+    >,
 }
 
 mod ask;
@@ -52,6 +57,7 @@ pub fn router_with_llm(
         cfg: Arc::new(cfg),
         control,
         llm,
+        asks: Default::default(),
     };
     Router::new()
         .route(
@@ -130,6 +136,7 @@ enum ApiError {
     Forbidden,
     NotFound,
     Unavailable(&'static str),
+    TooManyRequests,
     BadRange(u64),
     Internal(anyhow::Error),
 }
@@ -147,6 +154,12 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
             ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
             ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m).into_response(),
+            ApiError::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, "60")],
+                "too many questions, try again in a minute",
+            )
+                .into_response(),
             ApiError::BadRange(len) => (
                 StatusCode::RANGE_NOT_SATISFIABLE,
                 [(header::CONTENT_RANGE, format!("bytes */{len}"))],
@@ -195,6 +208,24 @@ impl App {
     ) -> Res<T> {
         let dir = self.cfg.data_dir.clone();
         Ok(tokio::task::spawn_blocking(move || f(&db::open_tenant(&dir, &tenant_id)?)).await??)
+    }
+
+    /// Counts one Ask for `member`; false when they already used their quota in the last minute.
+    fn allow_ask(&self, member: &str) -> bool {
+        let now = std::time::Instant::now();
+        let mut all = self.asks.lock().unwrap();
+        let q = all.entry(member.to_owned()).or_default();
+        while q
+            .front()
+            .is_some_and(|t| now.duration_since(*t) >= std::time::Duration::from_secs(60))
+        {
+            q.pop_front();
+        }
+        if q.len() >= self.cfg.ask_per_minute as usize {
+            return false;
+        }
+        q.push_back(now);
+        true
     }
 
     async fn current_user(&self, jar: &CookieJar) -> Res<db::User> {
