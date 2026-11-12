@@ -26,12 +26,31 @@ pub struct App {
     cfg: Arc<Config>,
     // ponytail: one shared control connection behind a mutex; fine for one team, pool if it ever contends.
     control: Arc<Mutex<Connection>>,
+    /// Language-model router for Ask; `None` when no provider is configured.
+    llm: Option<Arc<recapz_llm::Router>>,
 }
 
+mod ask;
+
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
+    let llm = crate::report_model::router_from_config(&cfg.llm)
+        .unwrap_or_else(|e| {
+            tracing::error!("llm config: {e:#}");
+            None
+        })
+        .map(Arc::new);
+    router_with_llm(cfg, control, llm)
+}
+
+pub fn router_with_llm(
+    cfg: Config,
+    control: Arc<Mutex<Connection>>,
+    llm: Option<Arc<recapz_llm::Router>>,
+) -> Router {
     let app = App {
         cfg: Arc::new(cfg),
         control,
+        llm,
     };
     Router::new()
         .route(
@@ -51,6 +70,7 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
+        .route("/api/ask", post(ask::ask))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
@@ -64,6 +84,7 @@ enum ApiError {
     BadRequest(&'static str),
     Forbidden,
     NotFound,
+    Unavailable(&'static str),
     BadRange(u64),
     Internal(anyhow::Error),
 }
@@ -80,6 +101,7 @@ impl IntoResponse for ApiError {
             }
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
             ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
+            ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m).into_response(),
             ApiError::BadRange(len) => (
                 StatusCode::RANGE_NOT_SATISFIABLE,
                 [(header::CONTENT_RANGE, format!("bytes */{len}"))],

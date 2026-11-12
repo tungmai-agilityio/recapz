@@ -70,47 +70,53 @@ pub struct LlmReportModel {
     rt: tokio::runtime::Handle,
 }
 
+/// One route shared by every task, including Ask. `None` when no provider is configured.
+pub fn router_from_config(cfg: &Llm) -> Result<Option<Router>> {
+    if cfg.provider.is_empty() {
+        return Ok(None);
+    }
+    let p: Arc<dyn recapz_llm::Provider> = match cfg.provider.as_str() {
+        "anthropic" if cfg.base_url.is_empty() => Arc::new(Anthropic::new(&cfg.api_key)),
+        "anthropic" => Arc::new(Anthropic::with_base_url(&cfg.api_key, &cfg.base_url)),
+        "openai" if !cfg.base_url.is_empty() => {
+            Arc::new(OpenAiCompat::new(&cfg.base_url, &cfg.api_key))
+        }
+        "openai" => return Err(anyhow!("llm.base_url is required for provider 'openai'")),
+        other => return Err(anyhow!("unknown llm.provider '{other}'")),
+    };
+    if cfg.model.is_empty() {
+        return Err(anyhow!("llm.model is required"));
+    }
+    let route = Route {
+        provider: cfg.provider.clone(),
+        model: cfg.model.clone(),
+        max_tokens: if cfg.max_tokens == 0 {
+            2048
+        } else {
+            cfg.max_tokens
+        },
+        price: Price {
+            input: cfg.price_input,
+            output: cfg.price_output,
+        },
+    };
+    let mut router = Router::new().provider(&cfg.provider, p);
+    for t in [
+        Task::Summary,
+        Task::Decisions,
+        Task::Chapters,
+        Task::ActionItems,
+        Task::AskAnswer,
+    ] {
+        router = router.route(t, route.clone());
+    }
+    Ok(Some(router))
+}
+
 impl LlmReportModel {
     /// `None` when no provider is configured.
     pub fn from_config(cfg: &Llm, rt: tokio::runtime::Handle) -> Result<Option<Self>> {
-        if cfg.provider.is_empty() {
-            return Ok(None);
-        }
-        let p: Arc<dyn recapz_llm::Provider> = match cfg.provider.as_str() {
-            "anthropic" if cfg.base_url.is_empty() => Arc::new(Anthropic::new(&cfg.api_key)),
-            "anthropic" => Arc::new(Anthropic::with_base_url(&cfg.api_key, &cfg.base_url)),
-            "openai" if !cfg.base_url.is_empty() => {
-                Arc::new(OpenAiCompat::new(&cfg.base_url, &cfg.api_key))
-            }
-            "openai" => return Err(anyhow!("llm.base_url is required for provider 'openai'")),
-            other => return Err(anyhow!("unknown llm.provider '{other}'")),
-        };
-        if cfg.model.is_empty() {
-            return Err(anyhow!("llm.model is required"));
-        }
-        let route = Route {
-            provider: cfg.provider.clone(),
-            model: cfg.model.clone(),
-            max_tokens: if cfg.max_tokens == 0 {
-                2048
-            } else {
-                cfg.max_tokens
-            },
-            price: Price {
-                input: cfg.price_input,
-                output: cfg.price_output,
-            },
-        };
-        let mut router = Router::new().provider(&cfg.provider, p);
-        for t in [
-            Task::Summary,
-            Task::Decisions,
-            Task::Chapters,
-            Task::ActionItems,
-        ] {
-            router = router.route(t, route.clone());
-        }
-        Ok(Some(Self {
+        Ok(router_from_config(cfg)?.map(|router| Self {
             router,
             model: cfg.model.clone(),
             rt,
