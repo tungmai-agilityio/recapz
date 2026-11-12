@@ -23,7 +23,7 @@ function DevLogin({ onDone }: { onDone: () => void }) {
           placeholder="bootstrap_admin_email" className="flex-1 rounded-lg border border-hair px-3 py-2 text-sm" />
         <button className="rounded-lg border border-hair px-4 py-2 text-sm font-medium">Sign in</button>
       </div>
-      {failed && <p role="alert" className="mt-2 text-sm text-red-700">Rejected. Set dev_login = true and use the bootstrap admin email.</p>}
+      {failed && <p role="alert" className="mt-2 text-sm text-bad">Rejected. Set dev_login = true and use the bootstrap admin email.</p>}
     </form>
   )
 }
@@ -45,7 +45,7 @@ export function Meetings() {
       <div className="rounded-xl border border-hair bg-sheet p-8">
         <h1 className="text-xl font-semibold">Sign in to Recapz</h1>
         <p className="mt-2 text-mute">Access is by invitation. Use the Google account you were invited with.</p>
-        <a href="/auth/google" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-white">
+        <a href="/auth/google" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-primary-fg">
           Sign in with Google
         </a>
         {import.meta.env.DEV && <DevLogin onDone={() => qc.invalidateQueries({ queryKey: ['meetings'] })} />}
@@ -56,7 +56,7 @@ export function Meetings() {
     <section>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Meetings</h1>
-        <label className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white">
+        <label className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg">
           {upload.isPending ? 'Uploading…' : 'Upload recording'}
           <input
             type="file"
@@ -66,9 +66,9 @@ export function Meetings() {
           />
         </label>
       </div>
-      {upload.isError && <p className="mt-3 text-sm text-red-700">Upload failed. Try again.</p>}
+      {upload.isError && <p className="mt-3 text-sm text-bad">Upload failed. Try again.</p>}
       {isLoading && <p className="mt-6 text-mute">Loading…</p>}
-      {error && !(error instanceof Unauthorized) && <p className="mt-6 text-red-700">Could not load meetings.</p>}
+      {error && !(error instanceof Unauthorized) && <p className="mt-6 text-bad">Could not load meetings.</p>}
       {data?.length === 0 && <p className="mt-6 text-mute">No meetings yet. Upload a recording to get started.</p>}
       <ul className="mt-6 divide-y divide-hair overflow-hidden rounded-xl border border-hair bg-sheet">
         {data?.map((m) => (

@@ -1,25 +1,53 @@
 @import 'tailwindcss';
 
-/* Daylight skin. Amber `signal` is only for the playhead, recording state and focus rings. */
+/* Two skins (Daylight default, Ink) x two modes (light default, dark). theme.ts always sets data-skin and
+   data-theme on <html>, resolving "Auto" to light or dark, so each combination is one block.
+   Amber `signal` is only for the playhead, recording state and focus rings. */
 :root {
-  --paper: #f2f4f7; --sheet: #ffffff; --ink: #18212f; --mute: #677489; --hair: #d6dce5;
-  --primary: #2f63d8; --signal: #e39a2d;
-  --speaker-1: #3c6fb0; --speaker-2: #c4573f; --speaker-3: #2f9583; --speaker-4: #8b5aa6;
+  --paper: #f2f4f7; --sheet: #ffffff; --wash: #e7eefc;
+  --ink: #18212f; --ink-2: #3b475a; --mute: #677489; --hair: #d6dce5; --hair-2: #eef1f5;
+  --rail: #ffffff; --rail-fg: #4a5568; --rail-on: #18212f;
+  --primary: #2f63d8; --primary-fg: #ffffff;
+  --signal: #e39a2d; --signal-ink: #7a4a05; --signal-wash: #fbefd9;
+  --good: #2f7d4f; --good-wash: #e3f1e8; --bad: #b4412f; --bad-wash: #f7e3df;
+  --speaker-1: #3c6fb0; --speaker-2: #c4573f; --speaker-3: #2f9583; --speaker-4: #8b5aa6; --speaker-5: #a88b2c;
+  --radius: 6px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #161c27; --sheet: #1d2532; --ink: #e6ebf2; --mute: #919db0; --hair: #323d4e;
-    --primary: #79a1ff; --signal: #f0ac44;
-    --speaker-1: #7ea6e0; --speaker-2: #e98a72; --speaker-3: #5cc4b1; --speaker-4: #bd94d6;
-  }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #161c27; --sheet: #1d2532; --wash: #26365a;
+  --ink: #e6ebf2; --ink-2: #c3cbd8; --mute: #919db0; --hair: #323d4e; --hair-2: #26303f;
+  --rail: #1d2532; --rail-fg: #a8b3c3; --rail-on: #ffffff;
+  --primary: #79a1ff; --primary-fg: #111722;
+  --signal: #f0ac44; --signal-ink: #f6c77c; --signal-wash: #33260f;
+  --good: #6cc790; --good-wash: #16301f; --bad: #ec8a78; --bad-wash: #3a1d17;
+  --speaker-1: #7ea6e0; --speaker-2: #e98a72; --speaker-3: #5cc4b1; --speaker-4: #bd94d6; --speaker-5: #d6bb5c;
+}
+:root[data-skin='ink'] {
+  --paper: #f7f7f4; --wash: #efefea;
+  --ink: #141414; --ink-2: #3d3d3a; --mute: #76766f; --hair: #e4e4de; --hair-2: #efefea;
+  --rail: #141414; --rail-fg: #c9c9c2; --rail-on: #ffffff;
+  --primary: #141414; --primary-fg: #ffffff;
+}
+:root[data-skin='ink'][data-theme='dark'] {
+  --paper: #111110; --sheet: #181817; --wash: #222220;
+  --ink: #ededE8; --ink-2: #c8c8c1; --mute: #8f8f87; --hair: #2a2a27; --hair-2: #222220;
+  --rail: #0b0b0a; --rail-fg: #9a9a92; --rail-on: #ffffff;
+  --primary: #ededE8; --primary-fg: #111110;
 }
 
 @theme inline {
-  --color-paper: var(--paper); --color-sheet: var(--sheet); --color-ink: var(--ink);
-  --color-mute: var(--mute); --color-hair: var(--hair); --color-primary: var(--primary);
-  --color-signal: var(--signal);
+  --color-paper: var(--paper); --color-sheet: var(--sheet); --color-wash: var(--wash);
+  --color-ink: var(--ink); --color-ink-2: var(--ink-2); --color-mute: var(--mute);
+  --color-hair: var(--hair); --color-hair-2: var(--hair-2);
+  --color-rail: var(--rail); --color-rail-fg: var(--rail-fg); --color-rail-on: var(--rail-on);
+  --color-primary: var(--primary); --color-primary-fg: var(--primary-fg);
+  --color-signal: var(--signal); --color-signal-ink: var(--signal-ink); --color-signal-wash: var(--signal-wash);
+  --color-good: var(--good); --color-good-wash: var(--good-wash);
+  --color-bad: var(--bad); --color-bad-wash: var(--bad-wash);
   --color-speaker-1: var(--speaker-1); --color-speaker-2: var(--speaker-2);
-  --color-speaker-3: var(--speaker-3); --color-speaker-4: var(--speaker-4);
+  --color-speaker-3: var(--speaker-3); --color-speaker-4: var(--speaker-4); --color-speaker-5: var(--speaker-5);
+  --radius-md: var(--radius);
   --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }

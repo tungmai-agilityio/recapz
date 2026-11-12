@@ -51,7 +51,7 @@ export function Report() {
       <Link to="/" className="text-sm text-mute hover:text-primary">← Meetings</Link>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{m.title}</h1>
       <p className="font-mono text-xs text-mute">{m.platform} · {m.status}</p>
-      {m.error && <p className="mt-3 text-sm text-red-700">{m.error}</p>}
+      {m.error && <p className="mt-3 text-sm text-bad">{m.error}</p>}
 
       <audio
         ref={audio}
@@ -70,7 +70,7 @@ export function Report() {
 
       <h2 className="mt-8 text-lg font-semibold">Transcript</h2>
       {transcript.isLoading && <p className="mt-3 text-mute">Loading…</p>}
-      {transcript.isError && <p className="mt-3 text-red-700">Could not load the transcript.</p>}
+      {transcript.isError && <p className="mt-3 text-bad">Could not load the transcript.</p>}
       {transcript.data?.length === 0 && (
         <p className="mt-3 text-mute">
           {m.status === 'ready' ? 'No speech was found.' : 'The transcript will appear when processing finishes.'}
