@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use recapz_core::{db, jobs};
+use recapz_core::{db, jobs, purge::purge_meeting};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -77,7 +77,10 @@ pub fn router_with_llm(
         .route("/api/meetings/upcoming", get(calendar::upcoming))
         .route("/api/meetings/join", post(calendar::join_link))
         .route("/api/calendar-events/{id}", patch(calendar::set_join))
-        .route("/api/meetings/{id}", get(meeting_detail))
+        .route(
+            "/api/meetings/{id}",
+            get(meeting_detail).delete(delete_meeting),
+        )
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
@@ -142,6 +145,8 @@ enum ApiError {
     Unauthorized,
     BadRequest(&'static str),
     Forbidden,
+    Denied(&'static str),
+    Conflict(&'static str),
     NotFound,
     Unavailable(&'static str),
     TooManyRequests,
@@ -160,6 +165,8 @@ impl IntoResponse for ApiError {
                 (StatusCode::UNAUTHORIZED, "sign in required").into_response()
             }
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
+            ApiError::Denied(m) => (StatusCode::FORBIDDEN, m).into_response(),
+            ApiError::Conflict(m) => (StatusCode::CONFLICT, m).into_response(),
             ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
             ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m).into_response(),
             ApiError::TooManyRequests => (
@@ -509,6 +516,43 @@ async fn meeting_detail(
         })
         .await?;
     Ok(Json(m.ok_or(ApiError::NotFound)?))
+}
+
+/// Hard delete. Owner or admin only, and not while the meeting is still being captured or processed.
+async fn delete_meeting(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    let u = app.current_user(&jar).await?;
+    let (dir, tenant) = (app.cfg.data_dir.clone(), u.tenant_id.clone());
+    app.tenant(tenant.clone(), move |c| {
+        ensure_member(c, &u)?;
+        let Some(m) = visible_meeting(c, &u.id, &id)? else {
+            return Ok(Err(ApiError::NotFound));
+        };
+        let owner: Option<String> =
+            c.query_row("SELECT owner_id FROM meetings WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })?;
+        if owner.as_deref() != Some(u.id.as_str()) && u.role != "admin" {
+            return Ok(Err(ApiError::Denied(
+                "only the owner or an admin can delete",
+            )));
+        }
+        if matches!(
+            m.status.as_str(),
+            "joining" | "recording" | "transcribing" | "reporting"
+        ) {
+            return Ok(Err(ApiError::Conflict("meeting is still processing")));
+        }
+        if purge_meeting(c, &dir, &tenant, &id)? {
+            tracing::info!(tenant = %tenant, meeting = %id, member = %u.id, "meeting deleted");
+        }
+        Ok(Ok(()))
+    })
+    .await??;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Serialize)]

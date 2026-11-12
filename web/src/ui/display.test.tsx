@@ -79,3 +79,11 @@ test('Toast firing the same message again restarts the 3 second window', () => {
   act(() => { vi.advanceTimersByTime(1000) })
   expect(screen.getByRole('status').textContent).toBe('')
 })
+
+test('Menu side="below" opens downward, the default stays above', () => {
+  render(<><Menu label="Down" side="below" trigger="D"><MenuItem>x</MenuItem></Menu><Menu label="Up" trigger="U"><MenuItem>y</MenuItem></Menu></>)
+  fireEvent.click(screen.getByRole('button', { name: 'Down' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Up' }))
+  expect(screen.getByRole('menu', { name: 'Down' }).className).toContain('top-full')
+  expect(screen.getByRole('menu', { name: 'Up' }).className).toContain('bottom-full')
+})
