@@ -73,7 +73,16 @@ pub fn finish(c: &Connection, id: i64, result: std::result::Result<(), String>) 
             c.execute(
                 "UPDATE jobs SET state=?2, last_error=?3, run_after=?4, locked_until=NULL WHERE id=?1",
                 params![id, state, e, backoff],
-            )?
+            )?;
+            if state == "failed" {
+                // Don't leave the meeting stuck in a working state.
+                c.execute(
+                    "UPDATE meetings SET status='failed', error=?2
+                     WHERE id = (SELECT meeting_id FROM jobs WHERE id=?1)",
+                    params![id, e.chars().take(500).collect::<String>()],
+                )?;
+            }
+            1
         }
     };
     Ok(())
@@ -125,5 +134,41 @@ mod tests {
         let bad = enqueue(&c, "boom", None, None).unwrap();
         run_once(&c, &["boom"], |_, _| anyhow::bail!("nope")).unwrap();
         assert_eq!(state(&c, bad).unwrap().unwrap(), ("queued".into(), 1));
+    }
+    #[test]
+    fn final_failure_marks_the_meeting_failed_but_a_retry_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, status) VALUES ('m1','t','upload','reporting')",
+            [],
+        )
+        .unwrap();
+        let status = |c: &Connection| -> (String, Option<String>) {
+            c.query_row(
+                "SELECT status, error FROM meetings WHERE id='m1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap()
+        };
+        let id = enqueue(&c, "boom", Some("m1"), None).unwrap();
+        run_once(&c, &["boom"], |_, _| anyhow::bail!("first")).unwrap();
+        assert_eq!(
+            status(&c),
+            ("reporting".to_string(), None),
+            "retry keeps the status"
+        );
+        c.execute(
+            "UPDATE jobs SET attempts=?2, run_after=0 WHERE id=?1",
+            params![id, MAX_ATTEMPTS - 1],
+        )
+        .unwrap();
+        run_once(&c, &["boom"], |_, _| anyhow::bail!("gave up")).unwrap();
+        assert_eq!(state(&c, id).unwrap().unwrap().0, "failed");
+        assert_eq!(
+            status(&c),
+            ("failed".to_string(), Some("gave up".to_string()))
+        );
     }
 }

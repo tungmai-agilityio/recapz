@@ -3,5 +3,7 @@ pub mod calendar;
 pub mod chunk;
 pub mod db;
 pub mod jobs;
+pub mod purge;
 pub mod report_job;
+pub mod settings;
 pub mod transcribe_job;
