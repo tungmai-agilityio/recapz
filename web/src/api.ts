@@ -39,6 +39,8 @@ export interface ReportData {
 
 export class Unauthorized extends Error {}
 
+export interface Me { email: string; name: string | null; role: string }
+
 /** Echoes the csrf cookie in a header on state-changing requests. */
 const csrf = () => ({ 'x-csrf-token': /(?:^|; )recapz_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' })
 
@@ -47,6 +49,8 @@ async function check(res: Response) {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
   return res
 }
+
+export const getMe = async (): Promise<Me> => (await check(await fetch('/api/me'))).json()
 
 export const getMeetings = async (): Promise<Meeting[]> =>
   (await check(await fetch('/api/meetings'))).json()
@@ -78,7 +82,7 @@ export async function devLogin(email: string) {
   )
 }
 
-export const logout = async () => { await fetch('/auth/logout', { method: 'POST', headers: csrf() }) }
+export const logout = async () => { await check(await fetch('/auth/logout', { method: 'POST', headers: csrf() })) }
 
 export interface Citation {
   meeting_id: string
