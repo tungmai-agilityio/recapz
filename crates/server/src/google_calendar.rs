@@ -6,6 +6,19 @@ use serde_json::Value;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 const MAX_ID: usize = 1024;
+/// Largest response body that is parsed. A page is at most 250 events; the fetch must stop reading
+/// at this size too, so a bad or hostile reply cannot fill memory.
+pub const MAX_BODY_BYTES: usize = 4 * 1024 * 1024;
+/// Events taken from one page (the page size asked for in `list_query`).
+const MAX_EVENTS: usize = 250;
+/// Characters of a location or notes field searched for a join link.
+const MAX_TEXT: usize = 10_000;
+const MAX_URL: usize = 2048;
+const MAX_PAGE_TOKEN: usize = 2048;
+
+fn head(s: &str) -> &str {
+    s.char_indices().nth(MAX_TEXT).map_or(s, |(i, _)| &s[..i])
+}
 
 pub struct Page {
     pub events: Vec<NewEvent>,
@@ -36,17 +49,23 @@ fn join_link(e: &Value) -> Option<links::Link> {
         .or_else(|| {
             e.get("location")
                 .and_then(Value::as_str)
-                .and_then(links::find_in_text)
+                .and_then(|t| links::find_in_text(head(t)))
         })
         .or_else(|| {
             e.get("description")
                 .and_then(Value::as_str)
-                .and_then(links::find_in_text)
+                .and_then(|t| links::find_in_text(head(t)))
         })
 }
 
 /// Cancelled events, all-day events and events without a start and end time are skipped.
-pub fn parse_page(body: &str) -> Result<Page, serde_json::Error> {
+/// Bodies over `MAX_BODY_BYTES` are refused, at most `MAX_EVENTS` items are read, and oversized
+/// links and page tokens are dropped.
+pub fn parse_page(body: &str) -> anyhow::Result<Page> {
+    anyhow::ensure!(
+        body.len() <= MAX_BODY_BYTES,
+        "calendar response over {MAX_BODY_BYTES} bytes"
+    );
     let v: Value = serde_json::from_str(body)?;
     let mut events = Vec::new();
     for e in v
@@ -54,6 +73,7 @@ pub fn parse_page(body: &str) -> Result<Page, serde_json::Error> {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
+        .take(MAX_EVENTS)
     {
         if e.get("status").and_then(Value::as_str) == Some("cancelled") {
             continue;
@@ -74,7 +94,7 @@ pub fn parse_page(body: &str) -> Result<Page, serde_json::Error> {
         if kind != "default" || id.len() > MAX_ID || end < start {
             continue;
         }
-        let link = join_link(e);
+        let link = join_link(e).filter(|l| l.url().len() <= MAX_URL);
         events.push(NewEvent {
             external_id: id.to_string(),
             title: e
@@ -94,6 +114,7 @@ pub fn parse_page(body: &str) -> Result<Page, serde_json::Error> {
         next_page_token: v
             .get("nextPageToken")
             .and_then(Value::as_str)
+            .filter(|t| t.len() <= MAX_PAGE_TOKEN)
             .map(str::to_string),
     })
 }
@@ -273,5 +294,55 @@ mod tests {
             (p.events[0].title.len(), p.events[1].title.as_str()),
             (200, "(No title)")
         );
+    }
+
+    fn item(id: usize, extra: &str) -> String {
+        format!(
+            r#"{{"id":"e{id}","start":{{"dateTime":"2026-11-12T09:00:00Z"}},"end":{{"dateTime":"2026-11-12T10:00:00Z"}}{extra}}}"#
+        )
+    }
+
+    #[test]
+    fn a_response_over_the_size_cap_is_refused_before_parsing() {
+        let pad = "x".repeat(MAX_BODY_BYTES);
+        let body = format!(r#"{{"items":[],"pad":"{pad}"}}"#);
+        let e = parse_page(&body).err().unwrap().to_string();
+        assert!(e.starts_with("calendar response over"), "{e}");
+        assert!(parse_page(r#"{"items":[]}"#).is_ok());
+    }
+
+    #[test]
+    fn only_the_first_page_worth_of_events_is_read() {
+        let items: Vec<String> = (0..MAX_EVENTS + 40).map(|i| item(i, "")).collect();
+        let body = format!(r#"{{"items":[{}]}}"#, items.join(","));
+        let p = parse_page(&body).unwrap();
+        assert_eq!(p.events.len(), MAX_EVENTS);
+        assert_eq!(
+            p.events.last().unwrap().external_id,
+            format!("e{}", MAX_EVENTS - 1)
+        );
+    }
+
+    #[test]
+    fn links_are_searched_only_in_the_start_of_long_notes_and_page_tokens_are_bounded() {
+        let link = "https://meet.google.com/aaa-bbbb-ccc";
+        let near = format!(r#","description":"{link} {}""#, "n".repeat(MAX_TEXT * 2));
+        let far = format!(r#","description":"{} {link}""#, "n".repeat(MAX_TEXT + 1));
+        let first = |extra: &str| {
+            let body = format!(r#"{{"items":[{}]}}"#, item(0, extra));
+            parse_page(&body).unwrap().events.remove(0).join_url
+        };
+        assert_eq!(first(&near).as_deref(), Some(link));
+        assert_eq!(first(&far), None, "a link past the cap is not searched for");
+        let body = format!(
+            r#"{{"items":[],"nextPageToken":"{}"}}"#,
+            "t".repeat(MAX_PAGE_TOKEN + 1)
+        );
+        assert_eq!(parse_page(&body).unwrap().next_page_token, None);
+        let body = format!(
+            r#"{{"items":[],"nextPageToken":"{}"}}"#,
+            "t".repeat(MAX_PAGE_TOKEN)
+        );
+        assert!(parse_page(&body).unwrap().next_page_token.is_some());
     }
 }
