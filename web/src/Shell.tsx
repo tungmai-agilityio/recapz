@@ -83,7 +83,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <div className="mb-1 flex flex-col gap-0.5 border-b border-hair px-2.5 pt-2.5 pb-2">
                 <b>{me.data.name || me.data.email}</b>
                 <small className="text-mute">{me.data.email}</small>
-                <span className="mt-1.5 self-start"><Badge>{me.data.role[0].toUpperCase() + me.data.role.slice(1)}</Badge></span>
+                <span className="mt-1.5 self-start"><Badge>{me.data.role.charAt(0).toUpperCase() + me.data.role.slice(1)}</Badge></span>
               </div>
               <MenuItem onClick={() => out.mutate()}>Sign out</MenuItem>
             </Menu>
