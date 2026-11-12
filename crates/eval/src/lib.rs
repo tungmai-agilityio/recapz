@@ -1,6 +1,8 @@
 //! Word and character error rates for comparing speech models (see docs/speech-model-comparison.md).
 use unicode_normalization::UnicodeNormalization;
 
+pub mod ask;
+
 /// NFC, lowercase, punctuation removed, whitespace collapsed.
 /// ponytail: tone-mark placement (`hoà` vs `hòa`) is not unified; add if it shows up in real diffs.
 pub fn normalize(s: &str) -> String {

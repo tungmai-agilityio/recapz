@@ -1,0 +1,324 @@
+{
+ "meetings": [
+  {
+   "id": "m1",
+   "title": "Product sync",
+   "segments": [
+    {
+     "start_ms": 0,
+     "end_ms": 10000,
+     "text": "Let's review the pricing page launch."
+    },
+    {
+     "start_ms": 10000,
+     "end_ms": 20000,
+     "text": "The pricing page ships on Friday after design signs off."
+    },
+    {
+     "start_ms": 20000,
+     "end_ms": 30000,
+     "text": "Marketing wants the annual discount to be twenty percent."
+    },
+    {
+     "start_ms": 30000,
+     "end_ms": 40000,
+     "text": "Finance asked us to keep the free tier limited to three seats."
+    },
+    {
+     "start_ms": 40000,
+     "end_ms": 50000,
+     "text": "Next topic is hiring for the support team."
+    },
+    {
+     "start_ms": 50000,
+     "end_ms": 60000,
+     "text": "We agreed to open two support engineer roles in March."
+    },
+    {
+     "start_ms": 60000,
+     "end_ms": 70000,
+     "text": "The interview panel will include Linh and Minh."
+    },
+    {
+     "start_ms": 70000,
+     "end_ms": 80000,
+     "text": "Budget for the roles was approved by finance already."
+    },
+    {
+     "start_ms": 80000,
+     "end_ms": 90000,
+     "text": "Now the onboarding emails."
+    },
+    {
+     "start_ms": 90000,
+     "end_ms": 100000,
+     "text": "The welcome email gets rewritten by Hoa this week."
+    },
+    {
+     "start_ms": 100000,
+     "end_ms": 110000,
+     "text": "We will test two subject lines against each other."
+    },
+    {
+     "start_ms": 110000,
+     "end_ms": 120000,
+     "text": "The winning subject line is chosen after five hundred sends."
+    },
+    {
+     "start_ms": 120000,
+     "end_ms": 130000,
+     "text": "Unsubscribe rates must stay under one percent."
+    },
+    {
+     "start_ms": 130000,
+     "end_ms": 140000,
+     "text": "Open rate target is forty percent for the first email."
+    },
+    {
+     "start_ms": 140000,
+     "end_ms": 150000,
+     "text": "Next review of the onboarding emails is in two weeks."
+    },
+    {
+     "start_ms": 150000,
+     "end_ms": 160000,
+     "text": "Anything else about emails, no, let's move on."
+    }
+   ]
+  },
+  {
+   "id": "m2",
+   "title": "Infra review",
+   "segments": [
+    {
+     "start_ms": 0,
+     "end_ms": 10000,
+     "text": "Quarterly infrastructure review starts now."
+    },
+    {
+     "start_ms": 10000,
+     "end_ms": 20000,
+     "text": "The database migration to the new cluster happened last weekend."
+    },
+    {
+     "start_ms": 20000,
+     "end_ms": 30000,
+     "text": "Downtime was eleven minutes, below the planned thirty."
+    },
+    {
+     "start_ms": 30000,
+     "end_ms": 40000,
+     "text": "The backup restore drill failed on the staging replica."
+    },
+    {
+     "start_ms": 40000,
+     "end_ms": 50000,
+     "text": "Duc will rerun the restore drill before the end of the month."
+    },
+    {
+     "start_ms": 50000,
+     "end_ms": 60000,
+     "text": "We are moving log storage to cheaper object storage."
+    },
+    {
+     "start_ms": 60000,
+     "end_ms": 70000,
+     "text": "That change saves about four hundred dollars each month."
+    },
+    {
+     "start_ms": 70000,
+     "end_ms": 80000,
+     "text": "Alerting thresholds for disk usage will be lowered to eighty percent."
+    },
+    {
+     "start_ms": 80000,
+     "end_ms": 90000,
+     "text": "Security topics are next."
+    },
+    {
+     "start_ms": 90000,
+     "end_ms": 100000,
+     "text": "All engineers must enable hardware keys by October."
+    },
+    {
+     "start_ms": 100000,
+     "end_ms": 110000,
+     "text": "The password manager rollout is already complete."
+    },
+    {
+     "start_ms": 110000,
+     "end_ms": 120000,
+     "text": "A penetration test is booked for the second week of November."
+    },
+    {
+     "start_ms": 120000,
+     "end_ms": 130000,
+     "text": "Findings will be triaged within three business days."
+    },
+    {
+     "start_ms": 130000,
+     "end_ms": 140000,
+     "text": "Vendor access reviews will happen every quarter."
+    },
+    {
+     "start_ms": 140000,
+     "end_ms": 150000,
+     "text": "Linh owns the access review checklist."
+    },
+    {
+     "start_ms": 150000,
+     "end_ms": 160000,
+     "text": "That wraps up the infrastructure review."
+    }
+   ]
+  },
+  {
+   "id": "m3",
+   "title": "Mobile planning",
+   "segments": [
+    {
+     "start_ms": 0,
+     "end_ms": 10000,
+     "text": "Welcome to the planning session for the mobile app."
+    },
+    {
+     "start_ms": 10000,
+     "end_ms": 20000,
+     "text": "The first release targets iOS and Android together."
+    },
+    {
+     "start_ms": 20000,
+     "end_ms": 30000,
+     "text": "Offline mode is the top requested feature from customers."
+    },
+    {
+     "start_ms": 30000,
+     "end_ms": 40000,
+     "text": "Push notifications come second in the priority list."
+    },
+    {
+     "start_ms": 40000,
+     "end_ms": 50000,
+     "text": "The design team will deliver the new navigation by the twentieth."
+    },
+    {
+     "start_ms": 50000,
+     "end_ms": 60000,
+     "text": "Tablet layouts are postponed to the next quarter."
+    },
+    {
+     "start_ms": 60000,
+     "end_ms": 70000,
+     "text": "Beta testers will be recruited from the existing customer list."
+    },
+    {
+     "start_ms": 70000,
+     "end_ms": 80000,
+     "text": "The beta runs for three weeks before public launch."
+    },
+    {
+     "start_ms": 80000,
+     "end_ms": 90000,
+     "text": "Let's discuss analytics for the app."
+    },
+    {
+     "start_ms": 90000,
+     "end_ms": 100000,
+     "text": "We track screen views and crash reports only."
+    },
+    {
+     "start_ms": 100000,
+     "end_ms": 110000,
+     "text": "No personal data is collected by the analytics events."
+    },
+    {
+     "start_ms": 110000,
+     "end_ms": 120000,
+     "text": "Crash reports go to the engineering channel automatically."
+    },
+    {
+     "start_ms": 120000,
+     "end_ms": 130000,
+     "text": "The dashboard will be built by Minh next sprint."
+    },
+    {
+     "start_ms": 130000,
+     "end_ms": 140000,
+     "text": "We need an app store listing with screenshots."
+    },
+    {
+     "start_ms": 140000,
+     "end_ms": 150000,
+     "text": "Hoa will write the store description in both languages."
+    },
+    {
+     "start_ms": 150000,
+     "end_ms": 160000,
+     "text": "The release date will be decided after the beta feedback."
+    }
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "q": "When does the pricing page ship?",
+   "meeting": "m1",
+   "at_ms": 10000
+  },
+  {
+   "q": "What discount did marketing want for the annual plan?",
+   "meeting": "m1",
+   "at_ms": 20000
+  },
+  {
+   "q": "How many support engineer roles will be opened?",
+   "meeting": "m1",
+   "at_ms": 50000
+  },
+  {
+   "q": "Who writes the welcome email?",
+   "meeting": "m1",
+   "at_ms": 90000
+  },
+  {
+   "q": "How long was the database migration downtime?",
+   "meeting": "m2",
+   "at_ms": 20000
+  },
+  {
+   "q": "Who will rerun the backup restore drill?",
+   "meeting": "m2",
+   "at_ms": 40000
+  },
+  {
+   "q": "When is the penetration test booked?",
+   "meeting": "m2",
+   "at_ms": 110000
+  },
+  {
+   "q": "Which hardware keys deadline did we set for engineers?",
+   "meeting": "m2",
+   "at_ms": 90000
+  },
+  {
+   "q": "What is the top requested feature for the mobile app?",
+   "meeting": "m3",
+   "at_ms": 20000
+  },
+  {
+   "q": "How long does the beta run?",
+   "meeting": "m3",
+   "at_ms": 70000
+  },
+  {
+   "q": "Who builds the analytics dashboard?",
+   "meeting": "m3",
+   "at_ms": 120000
+  },
+  {
+   "q": "Who writes the app store description?",
+   "meeting": "m3",
+   "at_ms": 140000
+  }
+ ]
+}
