@@ -27,7 +27,7 @@ The caller gives the working folder path and what to run; `cd` there first. Run 
 Commands (logs go to `/tmp/recapz-tests/<working folder name>/`, typed out literally; `mkdir -p` it first. One folder per working folder, so another folder's old logs are never read. Never reuse a log you did not write in this run):
 - Rust: `cargo test -p <crate>` or `cargo test --workspace > <dir>/rust.log 2>&1`. Plain `make test` runs Rust and web together.
 - Rust checks, when asked: `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
-- Web: `pnpm -C web test > <dir>/web.log 2>&1` and `pnpm -C web lint`.
+- Web: `pnpm -C web test > <dir>/web.log 2>&1`, `pnpm -C web lint` and, when asked, `pnpm -C web exec tsc --noEmit`.
 - Everything the CI runs: `make lint` then `make test`.
 Chain independent commands in one Bash call (`a; b; c`) to save turns.
 
