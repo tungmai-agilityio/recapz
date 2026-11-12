@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { clock } from '../clock'
+import { ToastProvider } from '../ui/Toast'
 import { Report } from './Report'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -10,9 +11,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const show = (path = '/meetings/m1') =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes><Route path="/meetings/:id" element={<Report />} /></Routes>
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/meetings/:id" element={<Report />} />
+            <Route path="/" element={<p>Meetings home</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   )
 
@@ -99,4 +105,46 @@ test('tells the member the report is on its way while the meeting is being repor
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m))))
   show()
   expect(await screen.findByText('The report will appear when processing finishes.')).toBeTruthy()
+})
+
+const deleteSetup = (del: () => Response) => {
+  const f = vi.fn(async (u: string, init?: RequestInit) =>
+    init?.method === 'DELETE' ? del() : new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : meeting)))
+  vi.stubGlobal('fetch', f)
+  const deletes = () => f.mock.calls.filter(([, i]) => i?.method === 'DELETE')
+  show()
+  return deletes
+}
+const openDialog = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+  return screen.getByRole('alertdialog', { name: 'Delete this meeting?' })
+}
+
+test('Cancel closes the delete dialog without calling the API', async () => {
+  const deletes = deleteSetup(() => new Response(null, { status: 204 }))
+  await openDialog()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+  expect(deletes()).toHaveLength(0)
+})
+
+test('confirming deletes that meeting, shows a toast and leaves the page', async () => {
+  const deletes = deleteSetup(() => new Response(null, { status: 204 }))
+  await openDialog()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete meeting' }))
+  expect(await screen.findByText('Meetings home')).toBeTruthy()
+  expect(screen.getByRole('status').textContent).toBe('Meeting deleted')
+  expect(deletes()).toHaveLength(1)
+  expect(deletes()[0][0]).toBe('/api/meetings/m1')
+})
+
+test('a failed delete keeps the dialog open and shows the server message in it', async () => {
+  const deletes = deleteSetup(() => new Response('meeting is still processing', { status: 409 }))
+  const d = await openDialog()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete meeting' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('meeting is still processing')
+  expect(d.isConnected).toBe(true)
+  expect(deletes()).toHaveLength(1)
+  expect(screen.queryByText('Meetings home')).toBeNull()
 })

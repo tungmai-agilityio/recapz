@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Button } from './Button'
+import { ConfirmDialog } from './ConfirmDialog'
 import { Choice } from './Choice'
 import { Field } from './Field'
 import { Switch } from './Switch'
@@ -63,4 +64,19 @@ test('Tabs mark the selected tab and move with the arrow keys', () => {
   expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Transcript' }))
   fireEvent.keyDown(screen.getByRole('tab', { name: 'Transcript' }), { key: 'ArrowRight' })
   expect(screen.getByRole('tab', { name: 'Summary' }).getAttribute('aria-selected')).toBe('true')
+})
+
+test('ConfirmDialog is a labelled alertdialog, focuses Cancel, closes on Esc, confirms and shows an error', () => {
+  const [ok, no] = [vi.fn(), vi.fn()]
+  render(<ConfirmDialog title="Delete this?" confirmLabel="Delete" error="boom" onConfirm={ok} onCancel={no}>Gone for good.</ConfirmDialog>)
+  const d = screen.getByRole('alertdialog', { name: 'Delete this?' })
+  expect(d.getAttribute('aria-describedby')).toBeTruthy()
+  expect(document.getElementById(d.getAttribute('aria-describedby')!)!.textContent).toBe('Gone for good.')
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByRole('alert').textContent).toBe('boom')
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+  expect([ok.mock.calls.length, no.mock.calls.length]).toEqual([1, 0])
+  fireEvent.keyDown(document, { key: 'Escape' })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect([ok.mock.calls.length, no.mock.calls.length]).toEqual([1, 2])
 })
