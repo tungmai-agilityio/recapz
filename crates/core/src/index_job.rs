@@ -27,14 +27,31 @@ pub fn handle(c: &Connection, job: &Job, embedder: &dyn Embedder) -> Result<()> 
         c.execute("DELETE FROM chunks WHERE meeting_id=?1", [mid])?;
         for k in chunk(&segments) {
             c.execute(
-                "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![mid, k.start_ms, k.end_ms, k.text, to_blob(&embedder.embed(&k.text))],
+                "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding, embedder) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![mid, k.start_ms, k.end_ms, k.text, to_blob(&embedder.embed(&k.text)), embedder.id()],
             )?;
         }
         Ok(())
     })();
     c.execute_batch(if stored.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
     stored
+}
+
+/// Queues an `index` job for every meeting that still has chunks from another embedder (after the
+/// embedder in use changed), unless one is already waiting. Returns how many were queued.
+pub fn enqueue_stale(c: &Connection, embedder_id: &str) -> Result<usize> {
+    let ids: Vec<String> = c
+        .prepare(
+            "SELECT DISTINCT k.meeting_id FROM chunks k WHERE k.embedder <> ?1 AND NOT EXISTS
+               (SELECT 1 FROM jobs j WHERE j.kind = ?2 AND j.meeting_id = k.meeting_id
+                  AND j.state IN ('queued','running'))",
+        )?
+        .query_map(params![embedder_id, KIND], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    for id in &ids {
+        crate::jobs::enqueue(c, KIND, Some(id), None)?;
+    }
+    Ok(ids.len())
 }
 
 #[cfg(test)]
@@ -96,5 +113,35 @@ mod tests {
         let (_d, c, job) = setup(&[]);
         handle(&c, &job, &HashEmbedder).unwrap();
         assert_eq!(count(&c, "SELECT COUNT(*) FROM chunks"), 0);
+    }
+
+    #[test]
+    fn chunks_from_another_embedder_are_requeued_once_and_replaced() {
+        let (_d, c, job) = setup(&["alpha beta"]);
+        handle(&c, &job, &HashEmbedder).unwrap();
+        assert_eq!(enqueue_stale(&c, HashEmbedder.id()).unwrap(), 0);
+        c.execute("UPDATE chunks SET embedder = 'old-1'", [])
+            .unwrap();
+        c.execute("UPDATE jobs SET state = 'done'", []).unwrap();
+        assert_eq!(enqueue_stale(&c, HashEmbedder.id()).unwrap(), 1);
+        assert_eq!(
+            enqueue_stale(&c, HashEmbedder.id()).unwrap(),
+            0,
+            "already queued"
+        );
+        handle(&c, &job, &HashEmbedder).unwrap();
+        c.execute("UPDATE jobs SET state = 'done'", []).unwrap();
+        assert_eq!(
+            enqueue_stale(&c, HashEmbedder.id()).unwrap(),
+            0,
+            "replaced chunks are current"
+        );
+        assert_eq!(
+            count(
+                &c,
+                "SELECT COUNT(*) FROM chunks WHERE embedder = 'hash-256'"
+            ),
+            1
+        );
     }
 }

@@ -40,6 +40,8 @@ pub struct Config {
     pub speech_model: PathBuf,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
+    /// Text embedder for Ask search: `hash` (built in). Changing it re-indexes meetings at start.
+    pub embedder: String,
 }
 
 impl Default for Config {
@@ -54,6 +56,7 @@ impl Default for Config {
             llm: Llm::default(),
             speech_model: "./models/ggml-large-v3-turbo.bin".into(),
             ask_per_minute: 20,
+            embedder: "hash".into(),
         }
     }
 }

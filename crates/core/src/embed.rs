@@ -24,7 +24,11 @@ pub fn is_stop(word: &str) -> bool {
     STOP.contains(&word.to_lowercase().as_str())
 }
 
+/// The seam for a real model. `id` names the model and its output size (for example
+/// `hash-256`); it is stored with every vector, because vectors from different embedders cannot
+/// be compared. Change `id` whenever the output would change.
 pub trait Embedder: Send + Sync {
+    fn id(&self) -> &'static str;
     fn embed(&self, text: &str) -> Vec<f32>;
 }
 
@@ -42,6 +46,10 @@ fn bucket(s: &str) -> usize {
 }
 
 impl Embedder for HashEmbedder {
+    fn id(&self) -> &'static str {
+        "hash-256"
+    }
+
     fn embed(&self, text: &str) -> Vec<f32> {
         let words: Vec<String> = keywords(text).map(|w| w.to_lowercase()).collect();
         let mut v = vec![0f32; HASH_DIM];
