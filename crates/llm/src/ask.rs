@@ -14,7 +14,6 @@ pub const NOT_FOUND: &str = "I could not find that in the meetings you can see."
 
 #[derive(Debug, Clone)]
 pub struct Excerpt {
-    pub title: String,
     pub start_ms: i64,
     pub text: String,
 }
@@ -43,13 +42,7 @@ fn build(question: &str, excerpts: &[Excerpt]) -> (String, usize) {
     let mut body = String::new();
     let mut used = 0;
     for (i, e) in excerpts.iter().enumerate() {
-        let line = format!(
-            "[{}] ({}, {}) {}\n",
-            i + 1,
-            e.title,
-            clock(e.start_ms),
-            e.text
-        );
+        let line = format!("[{}] ({}) {}\n", i + 1, clock(e.start_ms), e.text);
         if used > 0 && body.chars().count() + line.chars().count() > MAX_CONTEXT_CHARS {
             break;
         }
@@ -109,9 +102,8 @@ mod tests {
         )
     }
 
-    fn ex(title: &str, ms: i64, text: &str) -> Excerpt {
+    fn ex(ms: i64, text: &str) -> Excerpt {
         Excerpt {
-            title: title.into(),
             start_ms: ms,
             text: text.into(),
         }
@@ -122,15 +114,16 @@ mod tests {
         let stub = Arc::new(Stub::texts(&[
             r#"{"answer":"Friday.","citations":[2,2,9,0,1]}"#,
         ]));
-        let ex = [ex("Weekly", 65_000, "ships Friday"), ex("Sync", 0, "ok")];
+        let ex = [ex(65_000, "ships Friday"), ex(0, "ok")];
         let g = answer(&router(stub.clone()), "when?", &ex).await.unwrap();
         assert_eq!(g.value.answer, "Friday.");
         assert_eq!(g.value.cited, vec![1, 0]);
         let sent = stub.requests();
         assert_eq!(sent[0].system, ASK);
+        assert!(!sent[0].prompt.contains("Weekly"), "titles are not sent");
         assert!(sent[0]
             .prompt
-            .starts_with("[1] (Weekly, 01:05) ships Friday\n[2] (Sync, 00:00) ok\n"));
+            .starts_with("[1] (01:05) ships Friday\n[2] (00:00) ok\n"));
         assert!(sent[0].prompt.ends_with("Question: when?"));
     }
 
@@ -146,7 +139,7 @@ mod tests {
     #[tokio::test]
     async fn context_is_capped_and_late_excerpts_cannot_be_cited() {
         let big = "x".repeat(MAX_CONTEXT_CHARS - 100);
-        let ex = [ex("A", 0, &big), ex("B", 0, &big)];
+        let ex = [ex(0, &big), ex(0, &big)];
         let stub = Arc::new(Stub::texts(&[r#"{"answer":"a","citations":[1,2]}"#]));
         let g = answer(&router(stub.clone()), "q", &ex).await.unwrap();
         assert_eq!(g.value.cited, vec![0], "second excerpt was cut by the cap");

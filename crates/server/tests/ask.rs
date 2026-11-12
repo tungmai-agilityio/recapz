@@ -166,6 +166,10 @@ async fn ask_never_reads_or_sends_another_members_private_meeting() {
     assert_eq!(sent.len(), 1);
     assert!(sent[0].prompt.contains("launch date moved to May"));
     assert!(!sent[0].prompt.contains("nine million"));
+    assert!(
+        !sent[0].prompt.contains("shared"),
+        "meeting titles are not sent to the model"
+    );
     assert_eq!(answer_text(&body), "May.");
     assert!(body.contains(r#""meeting_id":"shared""#), "{body}");
     assert!(body.contains(r#""start_ms":90000"#), "{body}");
