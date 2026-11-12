@@ -41,7 +41,7 @@ test('Sign out posts to /auth/logout with the csrf header and returns to the sig
 
 test('a failed logout keeps the session and shows an error', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/auth/logout') return new Response('', { status: 500 })
+    if (url === '/auth/logout') return new Response('bad csrf token', { status: 403 })
     return url === '/api/me' ? new Response('{"email":"a@b.c","name":null,"role":"admin"}') : new Response('[]')
   }))
   render(
@@ -50,7 +50,7 @@ test('a failed logout keeps the session and shows an error', async () => {
     </QueryClientProvider>,
   )
   fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
-  expect((await screen.findByRole('alert')).textContent).toBe('Could not sign out. Try again.')
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not sign out (403 bad csrf token). Try again.')
   expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
   expect(screen.queryByText('Sign in to Recapz')).toBeNull()
 })

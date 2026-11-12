@@ -11,10 +11,10 @@ import { Button } from './ui/Button'
 export default function App() {
   const qc = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
-  const [signOutFailed, setSignOutFailed] = useState(false)
+  const [signOutFailed, setSignOutFailed] = useState('')
   const signOut = async () => {
-    try { await logout() } catch { setSignOutFailed(true); return }
-    setSignOutFailed(false)
+    try { await logout() } catch (e) { setSignOutFailed(e instanceof Error ? e.message : 'network error'); return }
+    setSignOutFailed('')
     await qc.resetQueries()
   }
   return (
@@ -33,7 +33,7 @@ export default function App() {
         </nav>
         <ThemeSwitch />
         {me.data && <Button variant="ghost" onClick={signOut}>Sign out</Button>}
-        {signOutFailed && <span role="alert" className="text-sm text-bad">Could not sign out. Try again.</span>}
+        {signOutFailed && <span role="alert" className="text-sm text-bad">Could not sign out ({signOutFailed.slice(0, 80)}). Try again.</span>}
       </header>
       <main>
         <Routes>
