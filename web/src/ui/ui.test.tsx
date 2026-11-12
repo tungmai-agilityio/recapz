@@ -80,3 +80,11 @@ test('ConfirmDialog is a labelled alertdialog, focuses Cancel, closes on Esc, co
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect([ok.mock.calls.length, no.mock.calls.length]).toEqual([1, 2])
 })
+
+test('ConfirmDialog keeps focus where the user put it when the parent re-renders', () => {
+  const view = render(<ConfirmDialog title="T" confirmLabel="Go" onConfirm={() => {}} onCancel={() => {}}>x</ConfirmDialog>)
+  const go = screen.getByRole('button', { name: 'Go' })
+  go.focus()
+  view.rerender(<ConfirmDialog title="T" confirmLabel="Go" onConfirm={() => {}} onCancel={() => {}}>x</ConfirmDialog>)
+  expect(document.activeElement).toBe(go)
+})

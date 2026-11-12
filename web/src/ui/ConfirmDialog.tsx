@@ -13,12 +13,15 @@ export function ConfirmDialog({ title, children, confirmLabel, busy, error, onCo
 }) {
   const [tid, did] = [useId(), useId()]
   const cancel = useRef<HTMLButtonElement>(null)
+  const close = useRef(onCancel)
+  // Latest handler without re-running the focus effect on every render.
+  useEffect(() => { close.current = onCancel })
   useEffect(() => {
     cancel.current?.focus()
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
-  }, [onCancel])
+  }, [])
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
       <div role="alertdialog" aria-modal="true" aria-labelledby={tid} aria-describedby={did}

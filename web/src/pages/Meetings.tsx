@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { useState } from 'react'
-import { devLogin, getMeetings, Unauthorized, uploadFile } from '../api'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Button } from '../ui/Button'
+import { useToast } from '../ui/toast-context'
+import { deleteMeeting, devLogin, getMeetings, Unauthorized, uploadFile } from '../api'
 
 const when = (ms: number) => new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -38,6 +41,16 @@ export function Meetings() {
   const upload = useMutation({
     mutationFn: uploadFile,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
+  })
+  const toast = useToast()
+  const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null)
+  const del = useMutation({
+    mutationFn: deleteMeeting,
+    onSuccess: () => {
+      toast('Meeting deleted')
+      setDeleting(null)
+      return qc.invalidateQueries({ queryKey: ['meetings'] })
+    },
   })
 
   if (error instanceof Unauthorized)
@@ -77,10 +90,20 @@ export function Meetings() {
               <Link to={`/meetings/${m.id}`} className="block truncate font-medium hover:text-primary">{m.title}</Link>
               <p className="font-mono text-xs text-mute">{when(m.started_at ?? m.created_at)} · {m.platform}</p>
             </div>
-            <span className="rounded-full border border-hair px-2.5 py-0.5 font-mono text-xs text-mute">{m.status}</span>
+            <div className="flex shrink-0 items-center gap-3">
+              <span className="rounded-full border border-hair px-2.5 py-0.5 font-mono text-xs text-mute">{m.status}</span>
+              <Button variant="danger" aria-label={`Delete ${m.title}`} onClick={() => { del.reset(); setDeleting(m) }}>Delete</Button>
+            </div>
           </li>
         ))}
       </ul>
+      {deleting && (
+        <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}
+          error={del.error ? del.error.message.replace(/^\d+ /, '') : undefined}
+          onConfirm={() => del.mutate(deleting.id)} onCancel={() => setDeleting(null)}>
+          “{deleting.title}”: the audio, transcript, report and Ask search entries are removed permanently. This cannot be undone.
+        </ConfirmDialog>
+      )}
     </section>
   )
 }

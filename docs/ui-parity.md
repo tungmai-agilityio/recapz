@@ -48,6 +48,10 @@ definition of done for every web PR.
 - [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
 - [ ] Empty, loading and error states
 
+S2 stays unticked: the list is still the plain first version. A per-row Delete with confirm is done, shown on
+every row because the list API has no owner info (a refusal appears in the dialog). Hide it for non-owners
+once the list returns the owner.
+
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
       (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
