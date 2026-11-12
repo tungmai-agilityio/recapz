@@ -1,4 +1,5 @@
-//! `transcribe` job: decode the meeting audio, recognize speech, store segments, mark the meeting ready.
+//! `transcribe` job: decode the meeting audio, recognize speech, store segments, then either queue the
+//! `report` job or mark the meeting ready.
 use crate::{db::tenant_dir, jobs::Job};
 use anyhow::{anyhow, Context, Result};
 use recapz_speech::{decode::decode_to_16k_mono, transcribe::Transcriber};
@@ -7,13 +8,15 @@ use std::path::Path;
 
 pub const KIND: &str = "transcribe";
 
-/// Safe to retry: segments are replaced, not appended.
+/// With `then_report`, the meeting moves to `reporting` and a `report` job is queued in the same
+/// transaction; otherwise it is ready. Safe to retry: segments are replaced, not appended.
 pub fn handle(
     c: &Connection,
     job: &Job,
     data_dir: &Path,
     tenant_id: &str,
     tx: &dyn Transcriber,
+    then_report: bool,
 ) -> Result<()> {
     let mid = job
         .meeting_id
@@ -43,9 +46,24 @@ pub fn handle(
                 params![mid, s.start_ms, s.end_ms, s.text],
             )?;
         }
+        if then_report {
+            c.execute(
+                "UPDATE meetings SET status='reporting', error=NULL WHERE id=?1",
+                [mid],
+            )?;
+            crate::jobs::enqueue(c, crate::report_job::KIND, Some(mid), None)?;
+        } else {
+            c.execute(
+                "UPDATE meetings SET status='ready', error=NULL WHERE id=?1",
+                [mid],
+            )?;
+        }
+        // Ask search is built from the stored segments, in its own retryable job.
         c.execute(
-            "UPDATE meetings SET status='ready', error=NULL WHERE id=?1",
-            [mid],
+            "INSERT INTO jobs (kind, meeting_id, run_after)
+             SELECT ?1, ?2, ?3 WHERE NOT EXISTS
+               (SELECT 1 FROM jobs WHERE kind=?1 AND meeting_id=?2 AND state='queued')",
+            params![crate::index_job::KIND, mid, crate::db::now_ms()],
         )?;
         Ok(())
     })();
@@ -101,7 +119,7 @@ mod tests {
         let wav = wav_1s();
         let (dir, c, job) = setup(Some(&wav));
         for _ in 0..2 {
-            handle(&c, &job, dir.path(), "t1", &StubTranscriber).unwrap();
+            handle(&c, &job, dir.path(), "t1", &StubTranscriber, false).unwrap();
         }
         let rows: Vec<(i64, i64, String)> = c
             .prepare("SELECT start_ms, end_ms, text FROM segments WHERE meeting_id='m1' ORDER BY start_ms")
@@ -118,12 +136,44 @@ mod tests {
             })
             .unwrap();
         assert_eq!(st, "ready");
+        let queued: i64 = c
+            .query_row(
+                "SELECT count(*) FROM jobs WHERE kind='index' AND meeting_id='m1' AND state='queued'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(queued, 1, "one index job, even after a rerun");
+    }
+
+    #[test]
+    fn then_report_queues_report_job_and_is_not_ready_yet() {
+        let wav = wav_1s();
+        let (dir, c, job) = setup(Some(&wav));
+        for _ in 0..2 {
+            handle(&c, &job, dir.path(), "t1", &StubTranscriber, true).unwrap();
+        }
+        let st: String = c
+            .query_row("SELECT status FROM meetings WHERE id='m1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(st, "reporting");
+        // A retried transcribe queues a second report job; the report job itself is idempotent.
+        let n: i64 = c
+            .query_row(
+                "SELECT count(*) FROM jobs WHERE kind='report' AND meeting_id='m1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 2);
     }
 
     #[test]
     fn undecodable_audio_fails_and_leaves_no_segments() {
         let (dir, c, job) = setup(Some(b"junk"));
-        assert!(handle(&c, &job, dir.path(), "t1", &StubTranscriber).is_err());
+        assert!(handle(&c, &job, dir.path(), "t1", &StubTranscriber, false).is_err());
         let n: i64 = c
             .query_row("SELECT count(*) FROM segments", [], |r| r.get(0))
             .unwrap();
