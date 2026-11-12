@@ -49,3 +49,38 @@ test('dev login says so when the server rejects it', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('dev_login = true'))
 })
+
+test('deleting from the list asks first, then calls DELETE for that row and refreshes', async () => {
+  let rows = [
+    { id: '1', title: 'Weekly sync', platform: 'upload', status: 'ready', started_at: null, created_at: 1 },
+    { id: '2', title: 'Design review', platform: 'upload', status: 'ready', started_at: null, created_at: 2 },
+  ]
+  const f = vi.fn(async (_u: string, init?: RequestInit) => {
+    if (init?.method === 'DELETE') { rows = rows.filter((r) => r.id !== '2'); return new Response(null, { status: 204 }) }
+    return new Response(JSON.stringify(rows))
+  })
+  vi.stubGlobal('fetch', f)
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete Design review' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(f.mock.calls.filter(([, i]) => i?.method === 'DELETE')).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Design review' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete meeting' }))
+  await waitFor(() => expect(screen.queryByText('Design review')).toBeNull())
+  const dels = f.mock.calls.filter(([, i]) => i?.method === 'DELETE')
+  expect(dels).toHaveLength(1)
+  expect(dels[0][0]).toBe('/api/meetings/2')
+  expect(screen.getByText('Weekly sync')).toBeTruthy()
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('a refused delete keeps the dialog open with the server message', async () => {
+  const rows = [{ id: '1', title: 'Weekly sync', platform: 'upload', status: 'ready', started_at: null, created_at: 1 }]
+  vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) =>
+    init?.method === 'DELETE' ? new Response('only the owner or an admin can delete', { status: 403 }) : new Response(JSON.stringify(rows))))
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete Weekly sync' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete meeting' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('only the owner or an admin can delete')
+  expect(screen.getByRole('alertdialog')).toBeTruthy()
+})
