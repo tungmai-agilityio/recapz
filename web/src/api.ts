@@ -65,3 +65,48 @@ export async function uploadFile(file: File) {
 }
 
 export const logout = async () => { await fetch('/auth/logout', { method: 'POST' }) }
+
+export interface Citation {
+  meeting_id: string
+  title: string
+  start_ms: number
+  quote: string
+}
+
+/** Pulls `event:`/`data:` pairs out of a server-sent-event text, leaving any unfinished tail. */
+export function parseEvents(buf: string): { events: { name: string; data: unknown }[]; rest: string } {
+  const parts = buf.split('\n\n')
+  const rest = parts.pop() ?? ''
+  const events = parts.map((p) => {
+    const name = /^event: (.*)$/m.exec(p)?.[1] ?? ''
+    const data = JSON.parse(/^data: (.*)$/m.exec(p)?.[1] ?? 'null')
+    return { name, data }
+  })
+  return { events, rest }
+}
+
+/** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
+export async function ask(question: string, onToken: (t: string) => void): Promise<Citation[]> {
+  const res = await check(
+    await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    }),
+  )
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let citations: Citation[] = []
+  for (;;) {
+    const { done, value } = await reader.read()
+    buf += decoder.decode(value, { stream: !done })
+    const { events, rest } = parseEvents(done ? buf + '\n\n' : buf)
+    buf = rest
+    for (const e of events) {
+      if (e.name === 'token') onToken((e.data as { text: string }).text)
+      if (e.name === 'citations') citations = e.data as Citation[]
+    }
+    if (done) return citations
+  }
+}
