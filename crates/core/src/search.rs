@@ -1,7 +1,7 @@
 //! Hybrid search over chunks for Ask: FTS5 keyword ranking and vector similarity, merged by
 //! reciprocal rank. The meeting access rule is part of every query, so a chunk of a meeting the
 //! member cannot see is never read, ranked or returned.
-use crate::embed::{cosine, from_blob, is_stop};
+use crate::embed::{cosine, from_blob, keywords};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
@@ -27,11 +27,7 @@ pub struct Hit {
 
 /// Words only, each quoted, so user text can never be read as FTS syntax.
 fn fts_query(q: &str) -> Option<String> {
-    let words: Vec<String> = q
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty() && !is_stop(w))
-        .map(|w| format!("\"{w}\""))
-        .collect();
+    let words: Vec<String> = keywords(q).map(|w| format!("\"{w}\"")).collect();
     (!words.is_empty()).then(|| words.join(" OR "))
 }
 
@@ -199,5 +195,29 @@ mod tests {
         add(&c, "mine", 0, "plain text");
         assert!(ask(&c, "alice", "\"; DROP TABLE chunks; --").is_empty());
         assert!(ask(&c, "alice", "   ").is_empty());
+    }
+
+    #[test]
+    fn vietnamese_questions_match_with_or_without_marks_and_ignore_filler() {
+        let (_d, c) = setup();
+        add(
+            &c,
+            "mine",
+            7_000,
+            "Đội đã thống nhất ra mắt trang giá vào thứ Sáu",
+        );
+        add(&c, "mine", 9_000, "Bữa trưa có phở và trà");
+        // Filler words are dropped; the content words find the chunk.
+        let hits = ask(&c, "alice", "Khi nào ra mắt trang giá?");
+        assert_eq!(hits.iter().map(|h| h.start_ms).collect::<Vec<_>>(), [7_000]);
+        // Typed without marks, the keyword side still matches (marks are folded by the index).
+        let hits = ask(&c, "alice", "ra mat trang gia");
+        assert_eq!(hits.iter().map(|h| h.start_ms).collect::<Vec<_>>(), [7_000]);
+        // Decomposed Unicode (base letter + combining mark) is one word, not several.
+        let nfd = "ma\u{0306}\u{0301}t"; // only this word can match
+        let hits = ask(&c, "alice", nfd);
+        assert_eq!(hits.iter().map(|h| h.start_ms).collect::<Vec<_>>(), [7_000]);
+        // A question made only of filler matches nothing.
+        assert!(ask(&c, "alice", "Đó là gì?").is_empty());
     }
 }
