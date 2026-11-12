@@ -27,6 +27,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `GET /api/meetings/{id}/report` returns `null` until a report exists; a hidden meeting is 404. The Report page polls every 3 s while the meeting is `reporting`.
 - Notetaker logic is browser-free: `Session` (lobby 10 min, alone 2 min, call ended, opt-out from anyone but the notetaker itself) and `WavWriter`. A driver must feed it participant samples about every 250 ms and send `from_self` correctly on chat events.
 - Opt-out deletion is `purge_meeting` (audio folder first, then rows; search rows go through the chunk delete trigger). It also deletes `llm_usage` and `jobs` rows for that meeting.
+- Calendar sync is Google-only and reads upcoming events in a window; events keep `auto_join` and the booked meeting across re-syncs. The join rule is `manual` by default, `auto` books one notetaker per link.
+- Join links are parsed strictly (Meet and Zoom hosts only) and stored normalised, so the same call is never joined twice by one member.
+- Zoom v1 uses the Meeting SDK bot per the decision doc in #29; it needs Zoom app review, and upload stays the fallback.
+- Report email transport is undecided: assume SMTP behind a trait, nothing is wired yet.
 
 ## Open issues
 - Google sign-in has not been exercised against real Google credentials.
@@ -56,6 +60,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `ROLLBACK`/`COMMIT` failures in the job handlers and `purge_meeting` can leave a transaction open on the connection (same pattern everywhere).
 - The report endpoint turns malformed JSON columns into empty lists without a log.
 - The Report page shows nothing for a `failed` meeting without a report and nothing when the report fetch fails.
+- `join_rule` is stored but no sync caller reads it yet, and the settings API for it is deferred.
+- The join API dedupes per member only; two members pasting the same link each get a notetaker. Cross-owner dedupe is not done.
+- A second member who can see a call has no access to the meeting a first member booked until it is shared.
+- Google Calendar responses are not capped in size or page count yet.
 
 ## Blockers
 - `gh pr merge` is denied by the session's permission system even with an allow rule, so PRs are opened as a stack and merged by the maintainer. Week 2 hit the same block ("Merge Without Review") on #33.
@@ -63,6 +71,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Week 3-5 LLM stack: #42 → #43 → #44 → #45 (each against the previous branch); retarget the next to `main` after each squash-merge.
 - Week 3-5 merge order. LLM stack: #42 → #43 → #44 → #45. Week 2 stack: #33 → … → #39, then #48 (report job). Then `chore/integration-wk3` (merges #48, #45 and #47; it is a base branch, not a PR): its PRs are #49 (LLM report model, `[llm]` config) → #50 (queue the report job) → #51 (failed jobs mark the meeting failed) → #52 (report endpoint) → #53 (Report page sections), and independently #54 (notetaker session rules) and #55 (purge). #47 (opt-out and speaker matching) merges to `main` on its own. After the stacks reach `main`, retarget #49, #54 and #55 to `main` (they are based on the integration branch); #50-#53 follow #49 in order.
 - The Chromium notetaker driver is not built: join flow, platform selectors, audio capture script and the join notice in call chat. It needs a real Meet call and the notetaker's Google account to verify, so it is a live-call blocker, not a code gap I could close here. The pieces that need no browser (session rules, WAV writer, opt-out, speaker matching, purge) are built and tested.
+- Zoom Meeting SDK bot needs Zoom app review and an account owner for the app; nothing can join a Zoom call until then.
+- Google Calendar needs an OAuth scope for calendar read-only and somewhere to store refresh tokens per member; sync parsing is tested, the live calls are not.
+- Real Meet and Zoom calls (and so `scripts/smoke-join.sh`) need test calls kept open and a member cookie; the live join path has not run.
+- Report email needs a transport decision (SMTP assumed).
+- Weeks 3-7 (#42-#63) were squash-merged into `main` in stack order once the maintainer allowed `gh pr merge`; each stacked branch was merged with `main` first (no force-push).
 
 ## Questions for review
 - Confirm the Zoom Meeting SDK bot for v1 (#29) and who owns the Zoom developer account.
