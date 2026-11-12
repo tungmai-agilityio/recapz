@@ -47,7 +47,7 @@ pub struct Generated<T> {
 }
 
 /// Models often wrap JSON in a code fence; take the outermost `{...}`.
-fn json_slice(text: &str) -> &str {
+pub(crate) fn json_slice(text: &str) -> &str {
     match (text.find('{'), text.rfind('}')) {
         (Some(a), Some(b)) if a < b => &text[a..=b],
         _ => text,

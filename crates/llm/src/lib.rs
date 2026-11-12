@@ -45,9 +45,24 @@ pub enum LlmError {
     Provider(String),
 }
 
+/// Receives reply text pieces as they arrive.
+pub type OnDelta<'a> = &'a mut (dyn for<'x> FnMut(&'x str) + Send);
+
 #[async_trait]
 pub trait Provider: Send + Sync {
     async fn complete(&self, req: CompletionRequest) -> Result<Completion, LlmError>;
+
+    /// Like `complete`, but hands each piece of reply text to `on_delta` as it arrives. The default
+    /// has no incremental source, so it delivers the whole reply as one piece.
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        on_delta: OnDelta<'_>,
+    ) -> Result<Completion, LlmError> {
+        let c = self.complete(req).await?;
+        on_delta(&c.text);
+        Ok(c)
+    }
 }
 
 /// Price in micro-USD per one million tokens.
@@ -96,19 +111,42 @@ impl Router {
     }
 
     pub async fn run(&self, task: Task, system: &str, prompt: &str) -> Result<Routed, LlmError> {
+        self.run_with(task, system, prompt, None).await
+    }
+
+    /// `run`, with reply text passed to `on_delta` while it is produced.
+    pub async fn run_stream(
+        &self,
+        task: Task,
+        system: &str,
+        prompt: &str,
+        on_delta: OnDelta<'_>,
+    ) -> Result<Routed, LlmError> {
+        self.run_with(task, system, prompt, Some(on_delta)).await
+    }
+
+    async fn run_with(
+        &self,
+        task: Task,
+        system: &str,
+        prompt: &str,
+        on_delta: Option<OnDelta<'_>>,
+    ) -> Result<Routed, LlmError> {
         let route = self.routes.get(&task).ok_or(LlmError::NoRoute(task))?;
         let p = self
             .providers
             .get(&route.provider)
             .ok_or_else(|| LlmError::UnknownProvider(route.provider.clone()))?;
-        let completion = p
-            .complete(CompletionRequest {
-                model: route.model.clone(),
-                max_tokens: route.max_tokens,
-                system: system.to_string(),
-                prompt: prompt.to_string(),
-            })
-            .await?;
+        let req = CompletionRequest {
+            model: route.model.clone(),
+            max_tokens: route.max_tokens,
+            system: system.to_string(),
+            prompt: prompt.to_string(),
+        };
+        let completion = match on_delta {
+            Some(f) => p.stream(req, f).await?,
+            None => p.complete(req).await?,
+        };
         let cost_micro_usd = cost(route.price, &completion);
         Ok(Routed {
             completion,
