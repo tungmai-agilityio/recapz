@@ -1,8 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { getMeetings, Unauthorized, uploadFile } from '../api'
+import { useState } from 'react'
+import { devLogin, getMeetings, Unauthorized, uploadFile } from '../api'
 
 const when = (ms: number) => new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+
+/** Shown only by the Vite dev server (`import.meta.env.DEV`), never in a production build. */
+function DevLogin({ onDone }: { onDone: () => void }) {
+  const [email, setEmail] = useState('')
+  const [failed, setFailed] = useState(false)
+  return (
+    <form
+      className="mt-6 border-t border-hair pt-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+        devLogin(email.trim()).then(onDone, () => setFailed(true))
+      }}
+    >
+      <label className="text-sm text-mute" htmlFor="dev-email">Dev login (local only)</label>
+      <div className="mt-1 flex gap-2">
+        <input id="dev-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="bootstrap_admin_email" className="flex-1 rounded-lg border border-hair px-3 py-2 text-sm" />
+        <button className="rounded-lg border border-hair px-4 py-2 text-sm font-medium">Sign in</button>
+      </div>
+      {failed && <p role="alert" className="mt-2 text-sm text-red-700">Rejected. Set dev_login = true and use the bootstrap admin email.</p>}
+    </form>
+  )
+}
 
 export function Meetings() {
   const qc = useQueryClient()
@@ -24,6 +48,7 @@ export function Meetings() {
         <a href="/auth/google" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-white">
           Sign in with Google
         </a>
+        {import.meta.env.DEV && <DevLogin onDone={() => qc.invalidateQueries({ queryKey: ['meetings'] })} />}
       </div>
     )
 
