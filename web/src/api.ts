@@ -81,7 +81,7 @@ export async function devLogin(email: string) {
 export const getMe = async (): Promise<{ email: string; name: string | null; role: string }> =>
   (await check(await fetch('/api/me'))).json()
 
-export const logout = async () => { await fetch('/auth/logout', { method: 'POST', headers: csrf() }) }
+export const logout = async () => { await check(await fetch('/auth/logout', { method: 'POST', headers: csrf() })) }
 
 export interface Citation {
   meeting_id: string

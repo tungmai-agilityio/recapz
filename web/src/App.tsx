@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Route, Routes } from 'react-router'
 import { getMe, logout, Unauthorized } from './api'
@@ -10,7 +11,12 @@ import { Button } from './ui/Button'
 export default function App() {
   const qc = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
-  const signOut = async () => { await logout(); await qc.resetQueries() }
+  const [signOutFailed, setSignOutFailed] = useState(false)
+  const signOut = async () => {
+    try { await logout() } catch { setSignOutFailed(true); return }
+    setSignOutFailed(false)
+    await qc.resetQueries()
+  }
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <header className="mb-8 flex flex-wrap items-center gap-3">
@@ -27,6 +33,7 @@ export default function App() {
         </nav>
         <ThemeSwitch />
         {me.data && <Button variant="ghost" onClick={signOut}>Sign out</Button>}
+        {signOutFailed && <span role="alert" className="text-sm text-bad">Could not sign out. Try again.</span>}
       </header>
       <main>
         <Routes>
