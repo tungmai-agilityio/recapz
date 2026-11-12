@@ -27,7 +27,7 @@ impl OpenAiCompat {
 fn body(req: &CompletionRequest) -> Value {
     json!({
         "model": req.model,
-        "max_tokens": req.max_tokens,
+        "max_completion_tokens": req.max_tokens,
         "messages": [
             {"role": "system", "content": req.system},
             {"role": "user", "content": req.prompt},
@@ -116,7 +116,7 @@ mod tests {
         });
         assert_eq!(
             b,
-            json!({"model":"m","max_tokens":50,"messages":[
+            json!({"model":"m","max_completion_tokens":50,"messages":[
                 {"role":"system","content":"be brief"},{"role":"user","content":"hi"}]})
         );
     }
