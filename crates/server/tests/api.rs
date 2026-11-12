@@ -231,3 +231,61 @@ async fn meeting_detail_and_transcript_follow_the_access_rule() {
     let (s, ..) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &amy)).await;
     assert_eq!(s, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn audio_supports_ranges_and_follows_the_access_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await; // stored bytes: "RIFFdata"
+
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let path = format!("/api/meetings/{id}/audio");
+    let ranged = |range: &str| {
+        Request::get(&path)
+            .header(header::COOKIE, &boss)
+            .header(header::RANGE, range)
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    let res = app.clone().oneshot(get(&path, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::ACCEPT_RANGES], "bytes");
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "audio/wav");
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&body[..], b"RIFFdata");
+
+    let res = app.clone().oneshot(ranged("bytes=4-6")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes 4-6/8");
+    assert_eq!(
+        &res.into_body().collect().await.unwrap().to_bytes()[..],
+        b"dat"
+    );
+
+    let res = app.clone().oneshot(ranged("bytes=-2")).await.unwrap();
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes 6-7/8");
+    let res = app.clone().oneshot(ranged("bytes=99-")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes */8");
+
+    let (s, ..) = send(&app, get(&path, &amy)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(&app, get(&path, "recapz_session=nope")).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
