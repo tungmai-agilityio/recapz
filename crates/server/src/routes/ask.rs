@@ -47,7 +47,6 @@ pub async fn ask(
     let excerpts: Vec<Excerpt> = hits
         .iter()
         .map(|h| Excerpt {
-            title: h.title.clone(),
             start_ms: h.start_ms,
             text: h.text.clone(),
         })
