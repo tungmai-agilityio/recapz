@@ -2,12 +2,23 @@
 //! built-in baseline: hashed word and word-pair counts, L2-normalised. It needs no model download
 //! and matches shared words, not meaning (FTS covers the lexical side of Ask either way).
 
-/// Question filler that would match almost every chunk. English only for now (see review notes).
+/// Question filler that would match almost every chunk: English, then Vietnamese (with marks;
+/// a word typed without marks may be a content word, so it is kept).
 const STOP: &[&str] = &[
-    "a", "an", "the", "is", "are", "was", "were", "be", "to", "of", "in", "on", "at", "for", "and",
-    "or", "do", "did", "does", "what", "when", "where", "who", "why", "how", "which", "we", "i",
-    "you", "it", "that", "this", "with", "about", "from", "by", "as",
+    "là", "của", "và", "các", "những", "một", "có", "không", "được", "trong", "cho", "với", "này",
+    "đó", "gì", "nào", "khi", "thế", "sao", "ai", "đâu", "bao", "nhiêu", "tôi", "chúng", "ta",
+    "mình", "đã", "sẽ", "đang", "ở", "để", "về", "từ", "như", "a", "an", "the", "is", "are", "was",
+    "were", "be", "to", "of", "in", "on", "at", "for", "and", "or", "do", "did", "does", "what",
+    "when", "where", "who", "why", "how", "which", "we", "i", "you", "it", "that", "this", "with",
+    "about", "from", "by", "as",
 ];
+
+/// Words of `text` without filler. Combining marks stay inside their word, so a Vietnamese
+/// word typed with separate marks (decomposed Unicode) is not cut into pieces.
+pub fn keywords(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !(c.is_alphanumeric() || ('\u{300}'..='\u{36f}').contains(&c)))
+        .filter(|w| !w.is_empty() && !is_stop(w))
+}
 
 pub fn is_stop(word: &str) -> bool {
     STOP.contains(&word.to_lowercase().as_str())
@@ -32,11 +43,7 @@ fn bucket(s: &str) -> usize {
 
 impl Embedder for HashEmbedder {
     fn embed(&self, text: &str) -> Vec<f32> {
-        let words: Vec<String> = text
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|w| !w.is_empty() && !is_stop(w))
-            .map(|w| w.to_lowercase())
-            .collect();
+        let words: Vec<String> = keywords(text).map(|w| w.to_lowercase()).collect();
         let mut v = vec![0f32; HASH_DIM];
         for (i, w) in words.iter().enumerate() {
             v[bucket(w)] += 1.0;
