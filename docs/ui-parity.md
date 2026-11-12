@@ -50,6 +50,8 @@ definition of done for every web PR.
 
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
+      (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
+      the date, duration and faces on the header redesign)
 - [ ] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
       clicking the ribbon seeks; Space toggles
 - [ ] Tabs Summary and Transcript (`role=tablist`)
