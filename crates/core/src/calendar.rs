@@ -2,7 +2,7 @@
 //! Every query is limited to one member, so nobody sees another member's calendar.
 use crate::db::new_id;
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 pub struct NewEvent {
     pub external_id: String,
@@ -36,7 +36,7 @@ pub fn sync(
     to: i64,
     default_auto_join: bool,
 ) -> Result<()> {
-    c.execute_batch("BEGIN")?;
+    c.execute_batch("BEGIN IMMEDIATE")?;
     let done = (|| -> Result<()> {
         for e in events {
             c.execute(
@@ -111,6 +111,64 @@ pub fn set_auto_join(c: &Connection, member_id: &str, event_id: &str, on: bool) 
          WHERE id = ?1 AND member_id = ?2 AND join_url IS NOT NULL",
         params![event_id, member_id, on as i64],
     )? > 0)
+}
+
+/// Creates a `scheduled` meeting (private to its owner) for every switched-on event that has a join
+/// link, no meeting yet, and starts within `lead_ms` from `now` or is already running. An active
+/// meeting on the same link (any owner) is reused, so one call gets one notetaker; its owner is the
+/// first member to book it and the others get no access to it. Returns the new meeting ids.
+pub fn book_due(c: &Connection, now: i64, lead_ms: i64) -> Result<Vec<String>> {
+    c.execute_batch("BEGIN IMMEDIATE")?;
+    let done = (|| -> Result<Vec<String>> {
+        let mut q = c.prepare(
+            "SELECT id, member_id, title, join_url, platform FROM calendar_events
+             WHERE auto_join = 1 AND join_url IS NOT NULL AND meeting_id IS NULL
+               AND starts_at <= ?1 AND ends_at > ?2 ORDER BY starts_at, id",
+        )?;
+        let due = q
+            .query_map(params![now + lead_ms, now], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, Option<String>>(4)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut created = Vec::new();
+        for (event_id, member, title, url, platform) in due {
+            // One notetaker per call: an active meeting on this link is reused whoever owns it.
+            let existing: Option<String> = c
+                .query_row(
+                    "SELECT id FROM meetings WHERE join_url = ?1
+                       AND status IN ('scheduled','joining','recording') ORDER BY created_at, id LIMIT 1",
+                    params![url],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let meeting = match existing {
+                Some(id) => id,
+                None => {
+                    let id = new_id();
+                    c.execute(
+                        "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, created_at)
+                         VALUES (?1, ?2, ?3, ?4, 'scheduled', ?5, ?6)",
+                        params![id, title, platform.unwrap_or_default(), url, member, now],
+                    )?;
+                    created.push(id.clone());
+                    id
+                }
+            };
+            c.execute(
+                "UPDATE calendar_events SET meeting_id = ?2 WHERE id = ?1",
+                params![event_id, meeting],
+            )?;
+        }
+        Ok(created)
+    })();
+    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+    done
 }
 
 #[cfg(test)]
@@ -363,5 +421,175 @@ mod tests {
         // The event moves outside the sync window: it is updated, not deleted.
         sync(&c, "u1", &[ev("a", 50_000, None)], 0, 10_000, false).unwrap();
         assert_eq!(upcoming(&c, "u1", 0, 10).unwrap()[0].starts_at, 50_000);
+    }
+
+    fn switched_on(c: &Connection, member: &str, ext: &str, start: i64, url: &str) {
+        sync(c, member, &[ev(ext, start, Some(url))], 0, 1_000_000, true).unwrap();
+    }
+
+    fn meetings(c: &Connection) -> Vec<(String, String, String, String)> {
+        c.prepare("SELECT title, platform, status, owner_id FROM meetings ORDER BY title")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn books_a_private_scheduled_meeting_once_within_the_lead_time() {
+        let (_d, c) = db();
+        let url = "https://meet.google.com/abc-defg-hij";
+        switched_on(&c, "u1", "a", 10_000, url); // runs 10_000..10_100
+        assert!(
+            book_due(&c, 4_000, 5_000).unwrap().is_empty(),
+            "starts in 6 s, lead is 5 s"
+        );
+        let ids = book_due(&c, 5_000, 5_000).unwrap();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(
+            meetings(&c),
+            vec![(
+                "title a".to_string(),
+                "meet".to_string(),
+                "scheduled".to_string(),
+                "u1".to_string()
+            )]
+        );
+        let share: String = c
+            .query_row("SELECT share FROM meetings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(share, "attendees", "private to the owner unless shared");
+        assert!(
+            book_due(&c, 6_000, 5_000).unwrap().is_empty(),
+            "booked events are not booked again"
+        );
+        assert_eq!(meetings(&c).len(), 1);
+        let linked: Option<String> = c
+            .query_row("SELECT meeting_id FROM calendar_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(linked.as_deref(), Some(ids[0].as_str()));
+    }
+
+    #[test]
+    fn only_switched_on_events_with_a_link_that_have_not_ended_are_booked() {
+        let (_d, c) = db();
+        let url = "https://zoom.us/j/123456789";
+        sync(
+            &c,
+            "u1",
+            &[
+                ev("off", 1000, Some(url)),
+                ev("nolink", 1000, None),
+                ev("past", 0, Some(url)),
+                ev("on", 1050, Some(url)),
+            ],
+            0,
+            10_000,
+            false,
+        )
+        .unwrap();
+        let on_id = upcoming(&c, "u1", 0, 10)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.title == "title on")
+            .unwrap()
+            .id;
+        set_auto_join(&c, "u1", &on_id, true).unwrap();
+        let past_id: String = c
+            .query_row(
+                "SELECT id FROM calendar_events WHERE external_id='past'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        c.execute(
+            "UPDATE calendar_events SET auto_join = 1 WHERE id = ?1",
+            [past_id],
+        )
+        .unwrap(); // ended at 100
+        let ids = book_due(&c, 1060, 0).unwrap();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(
+            meetings(&c)[0].0,
+            "title on",
+            "a running event is still joined"
+        );
+    }
+
+    #[test]
+    fn a_meeting_the_member_already_queued_for_the_link_is_reused() {
+        let (_d, c) = db();
+        let url = "https://meet.google.com/abc-defg-hij";
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, join_url, status, owner_id) VALUES ('m1','pasted','meet',?1,'scheduled','u1')",
+            [url],
+        )
+        .unwrap();
+        switched_on(&c, "u1", "a", 1000, url);
+        assert!(
+            book_due(&c, 1000, 0).unwrap().is_empty(),
+            "nothing new is created"
+        );
+        assert_eq!(meetings(&c).len(), 1);
+        let linked: Option<String> = c
+            .query_row("SELECT meeting_id FROM calendar_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(linked.as_deref(), Some("m1"));
+    }
+
+    #[test]
+    fn one_call_gets_one_meeting_even_when_several_members_switch_it_on() {
+        let (_d, c) = db();
+        let url = "https://meet.google.com/abc-defg-hij";
+        switched_on(&c, "u1", "a", 1000, url);
+        switched_on(&c, "u2", "a", 1000, url);
+        assert_eq!(book_due(&c, 1000, 0).unwrap().len(), 1);
+        let all = meetings(&c);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].3, "u1", "the first member to book owns it");
+        let linked: Vec<Option<String>> = c
+            .prepare("SELECT meeting_id FROM calendar_events ORDER BY member_id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(linked.len(), 2);
+        assert!(
+            linked.iter().all(|m| m == &linked[0] && m.is_some()),
+            "both events point at the one meeting"
+        );
+    }
+
+    #[test]
+    fn two_events_on_one_link_in_one_run_make_one_meeting() {
+        let (_d, c) = db();
+        let url = "https://zoom.us/j/123456789";
+        sync(
+            &c,
+            "u1",
+            &[ev("a", 1000, Some(url)), ev("b", 1000, Some(url))],
+            0,
+            10_000,
+            true,
+        )
+        .unwrap();
+        assert_eq!(book_due(&c, 1000, 0).unwrap().len(), 1);
+        assert_eq!(meetings(&c).len(), 1);
+    }
+
+    #[test]
+    fn a_finished_meeting_on_the_link_does_not_block_a_new_booking() {
+        let (_d, c) = db();
+        let url = "https://meet.google.com/abc-defg-hij";
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, join_url, status, owner_id) VALUES ('old','old','meet',?1,'ready','u2')",
+            [url],
+        )
+        .unwrap();
+        switched_on(&c, "u1", "a", 1000, url);
+        assert_eq!(book_due(&c, 1000, 0).unwrap().len(), 1);
+        assert_eq!(meetings(&c).len(), 2);
     }
 }
