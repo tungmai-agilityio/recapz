@@ -16,7 +16,7 @@ recapz-speech = { path = "../speech" }
 axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
-time = "0.3"
+time = { version = "0.3", features = ["parsing", "formatting"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
