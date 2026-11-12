@@ -44,8 +44,10 @@ async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Option<String>, 
     let status = res.status();
     let cookie = res
         .headers()
-        .get(header::SET_COOKIE)
-        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_string());
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_string())
+        .find(|c| c.starts_with("recapz_session="));
     let body = res.into_body().collect().await.unwrap().to_bytes();
     (status, cookie, String::from_utf8_lossy(&body).into())
 }
@@ -60,7 +62,8 @@ fn login(email: &str) -> Request<Body> {
 fn ask(cookie: &str, question: &str) -> Request<Body> {
     Request::post("/api/ask")
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .body(Body::from(
             serde_json::json!({ "question": question }).to_string(),
         ))
