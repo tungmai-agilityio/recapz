@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import { getMeetings, Unauthorized, uploadFile } from '../api'
 
 const when = (ms: number) => new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
@@ -48,7 +49,7 @@ export function Meetings() {
         {data?.map((m) => (
           <li key={m.id} className="flex items-center justify-between gap-4 px-5 py-4">
             <div className="min-w-0">
-              <p className="truncate font-medium">{m.title}</p>
+              <Link to={`/meetings/${m.id}`} className="block truncate font-medium hover:text-primary">{m.title}</Link>
               <p className="font-mono text-xs text-mute">{when(m.started_at ?? m.created_at)} · {m.platform}</p>
             </div>
             <span className="rounded-full border border-hair px-2.5 py-0.5 font-mono text-xs text-mute">{m.status}</span>

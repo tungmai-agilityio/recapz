@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from 'react-router'
 import { Meetings } from './pages/Meetings'
+import { Report } from './pages/Report'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Meetings />} />
+          <Route path="/meetings/:id" element={<Report />} />
         </Routes>
       </main>
     </div>
