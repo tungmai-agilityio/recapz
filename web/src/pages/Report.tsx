@@ -1,8 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
-import { getMeeting, getReport, getTranscript, Unauthorized, type ReportData } from '../api'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Menu, MenuItem } from '../ui/Menu'
+import { useToast } from '../ui/toast-context'
+import { deleteMeeting, getMeeting, getReport, getTranscript, Unauthorized, type ReportData } from '../api'
 
 export function Report() {
   const { id = '' } = useParams()
@@ -13,6 +16,18 @@ export function Report() {
     queryFn: () => getMeeting(id),
     // The report is written in the background; keep checking until the meeting leaves `reporting`.
     refetchInterval: (q) => (q.state.data?.status === 'reporting' ? 3000 : false),
+  })
+  const [confirming, setConfirming] = useState(false)
+  const toast = useToast()
+  const nav = useNavigate()
+  const qc = useQueryClient()
+  const del = useMutation({
+    mutationFn: () => deleteMeeting(id),
+    onSuccess: () => {
+      toast('Meeting deleted')
+      void qc.invalidateQueries({ queryKey: ['meetings'] })
+      nav('/')
+    },
   })
   const audio = useRef<HTMLAudioElement>(null)
   const [now, setNow] = useState(params.has('t') && Number.isFinite(at) ? at : 0) // playhead, ms
@@ -48,10 +63,23 @@ export function Report() {
 
   return (
     <article>
-      <Link to="/" className="text-sm text-mute hover:text-primary">← Meetings</Link>
+      <div className="flex items-center justify-between">
+        <Link to="/" className="text-sm text-mute hover:text-primary">← Meetings</Link>
+        <Menu label="Meeting actions" side="below" trigger="⋯">
+          <MenuItem className="text-bad" onClick={() => { del.reset(); setConfirming(true) }}>Delete</MenuItem>
+        </Menu>
+      </div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{m.title}</h1>
       <p className="font-mono text-xs text-mute">{m.platform} · {m.status}</p>
       {m.error && <p className="mt-3 text-sm text-bad">{m.error}</p>}
+
+      {confirming && (
+        <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}
+          error={del.error ? del.error.message.replace(/^\d+ /, '') : undefined}
+          onConfirm={() => del.mutate()} onCancel={() => setConfirming(false)}>
+          The audio, transcript, report and Ask search entries are removed permanently. This cannot be undone.
+        </ConfirmDialog>
+      )}
 
       <audio
         ref={audio}

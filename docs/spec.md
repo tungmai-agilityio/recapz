@@ -65,4 +65,5 @@ backend cannot serve yet is hidden, never faked.
 
 Invite-only Google sign-in, no passwords. Cookies `HttpOnly`, `SameSite=Lax` (`Secure` behind HTTPS).
 Permission checks in every query. Secrets never logged. Logs hold IDs, not transcript text.
-Deletes are hard deletes, including search rows and audio files.
+Deletes are hard deletes, including search rows and audio files. A meeting can be deleted by its owner or
+by an admin, and not while it is joining, recording or processing.

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, Ref } from 'react'
 
 const base = 'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium whitespace-nowrap disabled:opacity-50'
 const variants = {
@@ -9,6 +9,6 @@ const variants = {
 }
 
 export function Button({ variant = 'default', className = '', type = 'button', ...rest }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof variants }) {
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof variants; ref?: Ref<HTMLButtonElement> }) {
   return <button type={type} className={`${base} ${variants[variant]} ${className}`} {...rest} />
 }

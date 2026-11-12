@@ -33,8 +33,6 @@ definition of done for every web PR.
       blue marker (Daylight)
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
-      Reason unticked: only Sign out exists, as a header button (`/api/me` must succeed). The menu needs the rail,
-      members and privacy screens; `ui/Menu` opens upward for the rail, so it moves into the menu with them.
 - [ ] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
       mode switch (group label "Light or dark mode"; Light, Dark, Auto)
 - [ ] Signed-out state shows the sign-in card; a 401 returns to it
@@ -52,6 +50,8 @@ definition of done for every web PR.
 
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
+      (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
+      the date, duration and faces on the header redesign)
 - [ ] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
       clicking the ribbon seeks; Space toggles
 - [ ] Tabs Summary and Transcript (`role=tablist`)
