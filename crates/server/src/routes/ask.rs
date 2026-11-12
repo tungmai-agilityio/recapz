@@ -2,10 +2,7 @@
 //! The reply is a server-sent event stream: `token` events with the answer text, one `citations`
 //! event with the moments used, then `done`. Retrieval applies the access rule inside the query.
 use super::*;
-use recapz_core::{
-    embed::{Embedder, HashEmbedder},
-    search,
-};
+use recapz_core::search;
 use recapz_llm::ask::{answer_stream, Excerpt};
 use tokio::io::AsyncWriteExt;
 
@@ -43,10 +40,11 @@ pub async fn ask(
     ))?;
 
     let (uid, q, tenant) = (u.id.clone(), question.clone(), u.tenant_id.clone());
+    let embedder = app.embedder.clone();
     let hits = app
         .tenant(tenant.clone(), move |c| {
             ensure_member(c, &u)?;
-            search::search(c, &uid, &q, &HashEmbedder.embed(&q), TOP_K)
+            search::search(c, &uid, &q, embedder.as_ref(), TOP_K)
         })
         .await?;
     let excerpts: Vec<Excerpt> = hits

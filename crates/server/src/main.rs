@@ -25,7 +25,14 @@ async fn main() -> anyhow::Result<()> {
             "no [llm] provider configured: meetings stop after transcription, no reports"
         );
     }
-    runner::spawn(cfg.data_dir.clone(), cfg.speech_model.clone(), report);
+
+    let embedder = recapz_server::embedder::from_config(&cfg.embedder)?; // fail fast on a bad name
+    runner::spawn(
+        cfg.data_dir.clone(),
+        cfg.speech_model.clone(),
+        report,
+        embedder,
+    );
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on {}", cfg.bind);
     axum::serve(listener, routes::router(cfg, Arc::new(Mutex::new(control)))).await?;

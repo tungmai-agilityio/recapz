@@ -1,4 +1,5 @@
 pub mod config;
+pub mod embedder;
 pub mod google_calendar;
 pub mod report_model;
 pub mod routes;
