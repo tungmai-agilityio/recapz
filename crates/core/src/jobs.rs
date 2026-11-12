@@ -97,7 +97,7 @@ pub fn run_once(
     let Some(job) = claim(c, kinds)? else {
         return Ok(false);
     };
-    let res = handler(c, &job).map_err(|e| e.to_string());
+    let res = handler(c, &job).map_err(|e| format!("{e:#}"));
     finish(c, job.id, res)?;
     Ok(true)
 }
@@ -164,11 +164,17 @@ mod tests {
             params![id, MAX_ATTEMPTS - 1],
         )
         .unwrap();
-        run_once(&c, &["boom"], |_, _| anyhow::bail!("gave up")).unwrap();
+        run_once(&c, &["boom"], |_, _| {
+            Err(anyhow::anyhow!("provider said no").context("report model"))
+        })
+        .unwrap();
         assert_eq!(state(&c, id).unwrap().unwrap().0, "failed");
         assert_eq!(
             status(&c),
-            ("failed".to_string(), Some("gave up".to_string()))
+            (
+                "failed".to_string(),
+                Some("report model: provider said no".to_string())
+            )
         );
     }
 }
