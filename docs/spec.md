@@ -56,6 +56,11 @@ React + Vite + TypeScript + Tailwind. Daylight (default) and Ink skins, each lig
 for text, JetBrains Mono for times. Amber `signal` is only for the playhead, recording state and focus
 rings; speakers own all other colour.
 
+The prototype is the visual spec. Match it first: for each screen, start from the prototype state (layout,
+components, mobile layout under 900 px, both skins), build or reuse the shared primitives in `web/src/ui/`,
+then wire real data. A screen is not done while its rows in `docs/ui-parity.md` are unticked. Anything the
+backend cannot serve yet is hidden, never faked.
+
 ## Security
 
 Invite-only Google sign-in, no passwords. Cookies `HttpOnly`, `SameSite=Lax` (`Secure` behind HTTPS).
