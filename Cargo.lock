@@ -1092,6 +1092,7 @@ name = "recapz-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "recapz-speech",
  "rusqlite",
  "rusqlite_migration",
  "tempfile",
@@ -1107,6 +1108,7 @@ dependencies = [
  "axum-extra",
  "http-body-util",
  "recapz-core",
+ "recapz-speech",
  "reqwest",
  "rusqlite",
  "serde",

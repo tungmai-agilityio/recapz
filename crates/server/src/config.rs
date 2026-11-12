@@ -19,6 +19,8 @@ pub struct Config {
     /// Enables POST /auth/dev-login (local development only).
     pub dev_login: bool,
     pub google: Google,
+    /// ggml speech model file used by the transcribe job (needs the `whisper` build feature).
+    pub speech_model: PathBuf,
 }
 
 impl Default for Config {
@@ -30,6 +32,7 @@ impl Default for Config {
             bootstrap_admin_email: String::new(),
             dev_login: false,
             google: Google::default(),
+            speech_model: "./models/ggml-large-v3-turbo.bin".into(),
         }
     }
 }
