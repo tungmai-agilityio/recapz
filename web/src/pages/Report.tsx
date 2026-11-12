@@ -1,19 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
 import { getMeeting, getTranscript, Unauthorized } from '../api'
 
 export function Report() {
   const { id = '' } = useParams()
+  const [params] = useSearchParams()
+  const at = Number(params.get('t')) // ms, set by Ask citation cards
   const meeting = useQuery({ queryKey: ['meeting', id], queryFn: () => getMeeting(id) })
   const audio = useRef<HTMLAudioElement>(null)
-  const [now, setNow] = useState(0) // playhead, ms
+  const [now, setNow] = useState(params.has('t') && Number.isFinite(at) ? at : 0) // playhead, ms
   const transcript = useQuery({
     queryKey: ['transcript', id],
     queryFn: () => getTranscript(id),
     enabled: meeting.isSuccess,
   })
+
+  // Open at the cited moment once the transcript is on screen.
+  useEffect(() => {
+    if (!transcript.data || !params.has('t') || !Number.isFinite(at)) return
+    if (audio.current) audio.current.currentTime = at / 1000
+    document.querySelector('[aria-current]')?.scrollIntoView?.({ block: 'center' })
+  }, [transcript.data, at, params])
 
   if (meeting.error instanceof Unauthorized) return <Link to="/" className="text-primary">Sign in</Link>
   if (meeting.isError) return <p className="text-mute">Meeting not found.</p>
