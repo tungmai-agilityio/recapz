@@ -1,9 +1,7 @@
-use recapz_core::{db, embed::HashEmbedder, index_job, jobs, transcribe_job};
+use crate::report_model::LlmReportModel;
+use recapz_core::{db, embed::HashEmbedder, index_job, jobs, report_job, transcribe_job};
 use recapz_speech::transcribe::Transcriber;
-use std::{path::PathBuf, time::Duration};
-
-/// Job kinds this binary can run; other kinds stay queued.
-pub const KINDS: &[&str] = &[transcribe_job::KIND, index_job::KIND];
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 /// Loads the recognizer once. Without the `whisper` feature or a model file, transcribe jobs fail
 /// with a clear error (and retry) instead of storing made-up text.
@@ -19,15 +17,28 @@ fn load_transcriber(model: &std::path::Path) -> Option<Box<dyn Transcriber>> {
     None
 }
 
-fn run_pending(data_dir: &std::path::Path, tx: Option<&dyn Transcriber>) -> anyhow::Result<bool> {
+/// Report jobs run only when a language model is configured; otherwise they stay queued.
+fn run_pending(
+    data_dir: &std::path::Path,
+    tx: Option<&dyn Transcriber>,
+    report: Option<&LlmReportModel>,
+) -> anyhow::Result<bool> {
+    let kinds: &[&str] = if report.is_some() {
+        &[transcribe_job::KIND, index_job::KIND, report_job::KIND]
+    } else {
+        &[transcribe_job::KIND, index_job::KIND]
+    };
     let control = db::open_control(data_dir)?;
     let mut ran = false;
     for tenant in db::tenant_ids(&control)? {
         let conn = db::open_tenant(data_dir, &tenant)?;
-        ran |= jobs::run_once(&conn, KINDS, |c, j| match (j.kind.as_str(), tx) {
-            (transcribe_job::KIND, Some(tx)) => transcribe_job::handle(c, j, data_dir, &tenant, tx),
-            (transcribe_job::KIND, None) => anyhow::bail!("no speech model configured"),
-            (index_job::KIND, _) => index_job::handle(c, j, &HashEmbedder),
+        ran |= jobs::run_once(&conn, kinds, |c, j| match (j.kind.as_str(), tx, report) {
+            (transcribe_job::KIND, Some(tx), r) => {
+                transcribe_job::handle(c, j, data_dir, &tenant, tx, r.is_some())
+            }
+            (transcribe_job::KIND, None, _) => anyhow::bail!("no speech model configured"),
+            (report_job::KIND, _, Some(m)) => report_job::handle(c, j, m),
+            (index_job::KIND, _, _) => index_job::handle(c, j, &HashEmbedder),
             _ => anyhow::bail!("no handler for {}", j.kind),
         })?;
     }
@@ -35,12 +46,14 @@ fn run_pending(data_dir: &std::path::Path, tx: Option<&dyn Transcriber>) -> anyh
 }
 
 /// Polls every tenant's queue once a second, draining while work remains.
-pub fn spawn(data_dir: PathBuf, model: PathBuf) {
+pub fn spawn(data_dir: PathBuf, model: PathBuf, report: Option<Arc<LlmReportModel>>) {
     tokio::spawn(async move {
         let tx: Option<std::sync::Arc<dyn Transcriber>> = load_transcriber(&model).map(Into::into);
         loop {
-            let (d, t) = (data_dir.clone(), tx.clone());
-            match tokio::task::spawn_blocking(move || run_pending(&d, t.as_deref())).await {
+            let (d, t, r) = (data_dir.clone(), tx.clone(), report.clone());
+            match tokio::task::spawn_blocking(move || run_pending(&d, t.as_deref(), r.as_deref()))
+                .await
+            {
                 Ok(Ok(true)) => continue,
                 Ok(Ok(false)) => {}
                 Ok(Err(e)) => tracing::error!("job runner: {e:#}"),
@@ -49,4 +62,28 @@ pub fn spawn(data_dir: PathBuf, model: PathBuf) {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_job_stays_queued_without_a_language_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let control = db::open_control(dir.path()).unwrap();
+        db::bootstrap_admin(&control, "boss@example.com").unwrap();
+        let tenants = db::tenant_ids(&control).unwrap();
+        assert_eq!(tenants.len(), 1);
+        let conn = db::open_tenant(dir.path(), &tenants[0]).unwrap();
+        let id = jobs::enqueue(&conn, report_job::KIND, Some("m1"), None).unwrap();
+        assert!(
+            !run_pending(dir.path(), None, None).unwrap(),
+            "no job should run"
+        );
+        assert_eq!(
+            jobs::state(&conn, id).unwrap(),
+            Some(("queued".to_string(), 0))
+        );
+    }
 }
