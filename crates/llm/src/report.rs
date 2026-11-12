@@ -3,12 +3,12 @@ use crate::{LlmError, Routed, Router, Task};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-pub const PROMPT_VERSION: u32 = 1;
+pub const PROMPT_VERSION: u32 = 2;
 
 pub const SUMMARY: &str = include_str!("../prompts/summary.v1.txt");
 pub const DECISIONS: &str = include_str!("../prompts/decisions.v1.txt");
 pub const CHAPTERS: &str = include_str!("../prompts/chapters.v1.txt");
-pub const ACTION_ITEMS: &str = include_str!("../prompts/action_items.v1.txt");
+pub const ACTION_ITEMS: &str = include_str!("../prompts/action_items.v2.txt");
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Summary {
