@@ -1,9 +1,9 @@
-use recapz_core::{db, jobs, transcribe_job};
+use recapz_core::{db, embed::HashEmbedder, index_job, jobs, transcribe_job};
 use recapz_speech::transcribe::Transcriber;
 use std::{path::PathBuf, time::Duration};
 
 /// Job kinds this binary can run; other kinds stay queued.
-pub const KINDS: &[&str] = &[transcribe_job::KIND];
+pub const KINDS: &[&str] = &[transcribe_job::KIND, index_job::KIND];
 
 /// Loads the recognizer once. Without the `whisper` feature or a model file, transcribe jobs fail
 /// with a clear error (and retry) instead of storing made-up text.
@@ -27,6 +27,7 @@ fn run_pending(data_dir: &std::path::Path, tx: Option<&dyn Transcriber>) -> anyh
         ran |= jobs::run_once(&conn, KINDS, |c, j| match (j.kind.as_str(), tx) {
             (transcribe_job::KIND, Some(tx)) => transcribe_job::handle(c, j, data_dir, &tenant, tx),
             (transcribe_job::KIND, None) => anyhow::bail!("no speech model configured"),
+            (index_job::KIND, _) => index_job::handle(c, j, &HashEmbedder),
             _ => anyhow::bail!("no handler for {}", j.kind),
         })?;
     }

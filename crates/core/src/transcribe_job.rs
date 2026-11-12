@@ -47,6 +47,13 @@ pub fn handle(
             "UPDATE meetings SET status='ready', error=NULL WHERE id=?1",
             [mid],
         )?;
+        // Ask search is built from the stored segments, in its own retryable job.
+        c.execute(
+            "INSERT INTO jobs (kind, meeting_id, run_after)
+             SELECT ?1, ?2, ?3 WHERE NOT EXISTS
+               (SELECT 1 FROM jobs WHERE kind=?1 AND meeting_id=?2 AND state='queued')",
+            params![crate::index_job::KIND, mid, crate::db::now_ms()],
+        )?;
         Ok(())
     })();
     c.execute_batch(if stored.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
@@ -118,6 +125,14 @@ mod tests {
             })
             .unwrap();
         assert_eq!(st, "ready");
+        let queued: i64 = c
+            .query_row(
+                "SELECT count(*) FROM jobs WHERE kind='index' AND meeting_id='m1' AND state='queued'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(queued, 1, "one index job, even after a rerun");
     }
 
     #[test]
