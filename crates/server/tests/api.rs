@@ -165,3 +165,127 @@ async fn upload_creates_a_meeting_and_a_job_visible_only_to_its_owner() {
     let (s, ..) = send(&app, upload("recapz_session=nope", "x")).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn meeting_detail_and_transcript_follow_the_access_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await;
+
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    t.execute_batch(&format!(
+        "INSERT INTO segments (meeting_id, start_ms, end_ms, text) VALUES
+           ('{id}', 2000, 3000, 'second'), ('{id}', 0, 2000, 'first')"
+    ))
+    .unwrap();
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+
+    // Owner: detail plus segments in time order.
+    let (s, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(body.contains(r#""title":"Weekly sync""#), "{body}");
+    let (s, _, body) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    let segs: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(segs.as_array().unwrap().len(), 2);
+    assert_eq!(
+        (segs[0]["text"].as_str(), segs[1]["text"].as_str()),
+        (Some("first"), Some("second"))
+    );
+
+    // Another member gets 404 for both, as if it did not exist.
+    for path in [
+        format!("/api/meetings/{id}"),
+        format!("/api/meetings/{id}/transcript"),
+    ] {
+        let (s, ..) = send(&app, get(&path, &amy)).await;
+        assert_eq!(s, StatusCode::NOT_FOUND, "{path}");
+    }
+    // Unknown id and signed-out requests.
+    let (s, ..) = send(&app, get("/api/meetings/nope", &boss)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(
+        &app,
+        get(&format!("/api/meetings/{id}"), "recapz_session=nope"),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // Sharing with the workspace opens it up.
+    t.execute("UPDATE meetings SET share='workspace'", [])
+        .unwrap();
+    let (s, ..) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &amy)).await;
+    assert_eq!(s, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn audio_supports_ranges_and_follows_the_access_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await; // stored bytes: "RIFFdata"
+
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let path = format!("/api/meetings/{id}/audio");
+    let ranged = |range: &str| {
+        Request::get(&path)
+            .header(header::COOKIE, &boss)
+            .header(header::RANGE, range)
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    let res = app.clone().oneshot(get(&path, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::ACCEPT_RANGES], "bytes");
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "audio/wav");
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&body[..], b"RIFFdata");
+
+    let res = app.clone().oneshot(ranged("bytes=4-6")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes 4-6/8");
+    assert_eq!(
+        &res.into_body().collect().await.unwrap().to_bytes()[..],
+        b"dat"
+    );
+
+    let res = app.clone().oneshot(ranged("bytes=-2")).await.unwrap();
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes 6-7/8");
+    let res = app.clone().oneshot(ranged("bytes=99-")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes */8");
+
+    let (s, ..) = send(&app, get(&path, &amy)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(&app, get(&path, "recapz_session=nope")).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
