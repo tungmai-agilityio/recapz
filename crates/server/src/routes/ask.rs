@@ -33,6 +33,10 @@ pub async fn ask(
             "question must be 1 to 1000 characters",
         ));
     }
+    // After validation so a malformed request does not burn quota; before any retrieval or model call.
+    if !app.allow_ask(&u.id) {
+        return Err(ApiError::TooManyRequests);
+    }
     let router = app.llm.clone().ok_or(ApiError::Unavailable(
         "Ask needs a language model; set [llm] in config",
     ))?;

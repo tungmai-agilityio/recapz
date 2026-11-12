@@ -230,3 +230,49 @@ async fn ask_without_a_language_model_is_unavailable() {
     let (s, ..) = send(&app, ask(&boss.unwrap(), "anything")).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
 }
+
+#[tokio::test]
+async fn ask_is_rate_limited_per_member_before_any_model_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let ans = r#"{"answer":"May.","citations":[1]}"#;
+    let stub = Arc::new(Stub::texts(&[ans, ans, ans]));
+    let cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        ask_per_minute: 2,
+        ..Config::default()
+    };
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let llm = Arc::new(Llm::new().provider("p", stub.clone()).route(
+        Task::AskAnswer,
+        Route {
+            provider: "p".into(),
+            model: "m".into(),
+            max_tokens: 10,
+            price: Price {
+                input: 0,
+                output: 0,
+            },
+        },
+    ));
+    let app = routes::router_with_llm(cfg, Arc::new(Mutex::new(control)), Some(llm));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    seed(dir.path());
+
+    // A rejected request does not use quota.
+    let (s, ..) = send(&app, ask(&boss, "  ")).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    for _ in 0..2 {
+        let (s, ..) = send(&app, ask(&boss, "when is the launch date?")).await;
+        assert_eq!(s, StatusCode::OK);
+    }
+    let (s, _, body) = send(&app, ask(&boss, "when is the launch date?")).await;
+    assert_eq!(s, StatusCode::TOO_MANY_REQUESTS, "{body}");
+    assert_eq!(
+        stub.requests().len(),
+        2,
+        "the limited ask never reached the model"
+    );
+}
