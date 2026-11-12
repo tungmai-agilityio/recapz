@@ -27,13 +27,7 @@ Open http://localhost:5173. Without `[llm]` the app still transcribes but writes
 
 ## Sign in (dev login)
 
-There is no dev-login button. In the browser devtools console on http://localhost:5173:
-
-```js
-fetch('/auth/dev-login', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({email: 'you@example.com'})}).then(() => location.reload())
-```
-
-The email must be the `bootstrap_admin_email`.
+Open http://localhost:5173. On the sign-in screen the dev server shows a "Dev login (local only)" form: enter the `bootstrap_admin_email` and press Sign in. The form is not in production builds. If it says rejected, `dev_login = true` is missing from the `config.toml` the server loaded (restart `make local` after editing).
 
 ## Try it with a sample recording
 
