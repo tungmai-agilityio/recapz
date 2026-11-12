@@ -1,0 +1,7 @@
+[Unit]
+Description=Recapz backup
+
+[Service]
+Type=oneshot
+User=recapz
+ExecStart=/usr/local/bin/recapz-backup /var/lib/recapz /var/backups/recapz
