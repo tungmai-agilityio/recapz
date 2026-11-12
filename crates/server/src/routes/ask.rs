@@ -6,7 +6,8 @@ use recapz_core::{
     embed::{Embedder, HashEmbedder},
     search,
 };
-use recapz_llm::ask::{answer, Excerpt};
+use recapz_llm::ask::{answer_stream, Excerpt};
+use tokio::io::AsyncWriteExt;
 
 const TOP_K: usize = 6;
 const QUOTE_CHARS: usize = 240;
@@ -55,58 +56,87 @@ pub async fn ask(
             text: h.text.clone(),
         })
         .collect();
-    let out = answer(&router, &question, &excerpts)
-        .await
-        .map_err(|e| ApiError::Internal(e.into()))?;
 
-    let calls = out.calls;
-    app.tenant(tenant, move |c| {
-        for k in &calls {
-            c.execute(
-                "INSERT INTO llm_usage (task, provider, model, input_tokens, output_tokens, cost_micro_usd, at)
-                 VALUES ('ask_answer', ?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    k.provider,
-                    k.model,
-                    k.completion.input_tokens as i64,
-                    k.completion.output_tokens as i64,
-                    k.cost_micro_usd as i64,
-                    db::now_ms()
-                ],
-            )?;
-        }
-        Ok(())
-    })
-    .await?;
-
-    let mut sse = String::new();
-    // ponytail: the model reply is complete before it is sent, so tokens are word-sized slices of it;
-    // switch to provider streaming when answer latency matters.
-    for word in out.value.answer.split_inclusive(' ') {
-        sse.push_str(&event("token", serde_json::json!({ "text": word })));
-    }
-    let citations: Vec<_> = out
-        .value
-        .cited
-        .iter()
-        .map(|&i| {
-            let h = &hits[i];
-            serde_json::json!({
-                "meeting_id": h.meeting_id,
-                "title": h.title,
-                "start_ms": h.start_ms,
-                "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
+    // Everything that can fail with a proper status is done; from here the reply is a stream.
+    // A task writes events into a pipe the response reads from. If the reader goes away the model
+    // call still finishes, so its cost is recorded.
+    let (mut tx_pipe, rx_pipe) = tokio::io::duplex(8 * 1024);
+    tokio::spawn(async move {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let produce = async {
+            answer_stream(&router, &question, &excerpts, &mut move |t| {
+                let _ = tx.send(event("token", serde_json::json!({ "text": t })));
             })
-        })
-        .collect();
-    sse.push_str(&event("citations", serde_json::Value::Array(citations)));
-    sse.push_str(&event("done", serde_json::json!({})));
+            .await
+        };
+        let consume = async {
+            while let Some(e) = rx.recv().await {
+                if tx_pipe.write_all(e.as_bytes()).await.is_err() {
+                    break;
+                }
+            }
+        };
+        let (res, ()) = tokio::join!(produce, consume);
+        let tail = match res {
+            Ok(out) => {
+                let calls = out.calls;
+                if let Err(ApiError::Internal(e)) = app
+                    .tenant(tenant, move |c| {
+                        for k in &calls {
+                            c.execute(
+                                "INSERT INTO llm_usage (task, provider, model, input_tokens, output_tokens, cost_micro_usd, at)
+                                 VALUES ('ask_answer', ?1, ?2, ?3, ?4, ?5, ?6)",
+                                params![
+                                    k.provider,
+                                    k.model,
+                                    k.completion.input_tokens as i64,
+                                    k.completion.output_tokens as i64,
+                                    k.cost_micro_usd as i64,
+                                    db::now_ms()
+                                ],
+                            )?;
+                        }
+                        Ok(())
+                    })
+                    .await
+                {
+                    tracing::error!("ask usage not recorded: {e:#}");
+                }
+                let citations: Vec<_> = out
+                    .value
+                    .cited
+                    .iter()
+                    .map(|&i| {
+                        let h = &hits[i];
+                        serde_json::json!({
+                            "meeting_id": h.meeting_id,
+                            "title": h.title,
+                            "start_ms": h.start_ms,
+                            "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
+                        })
+                    })
+                    .collect();
+                event("citations", serde_json::Value::Array(citations))
+                    + &event("done", serde_json::json!({}))
+            }
+            Err(e) => {
+                tracing::error!("ask failed: {e}");
+                event(
+                    "error",
+                    serde_json::json!({ "message": "the answer could not be completed" }),
+                )
+            }
+        };
+        let _ = tx_pipe.write_all(tail.as_bytes()).await;
+    });
     Ok((
         [
             (header::CONTENT_TYPE, "text/event-stream"),
             (header::CACHE_CONTROL, "no-cache"),
+            // Tells a reverse proxy not to hold the stream back.
+            (header::HeaderName::from_static("x-accel-buffering"), "no"),
         ],
-        sse,
+        Body::from_stream(ReaderStream::new(rx_pipe)),
     )
         .into_response())
 }

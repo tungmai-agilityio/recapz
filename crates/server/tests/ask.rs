@@ -276,3 +276,115 @@ async fn ask_is_rate_limited_per_member_before_any_model_call() {
         "the limited ask never reached the model"
     );
 }
+
+/// Streams its reply in small pieces, or fails part way, like a real provider.
+struct Pieces {
+    pieces: Vec<&'static str>,
+    fail_after: bool,
+}
+
+#[async_trait::async_trait]
+impl recapz_llm::Provider for Pieces {
+    async fn complete(
+        &self,
+        _: recapz_llm::CompletionRequest,
+    ) -> Result<Completion, recapz_llm::LlmError> {
+        unreachable!("Ask streams")
+    }
+    async fn stream(
+        &self,
+        _: recapz_llm::CompletionRequest,
+        on_delta: recapz_llm::OnDelta<'_>,
+    ) -> Result<Completion, recapz_llm::LlmError> {
+        for p in &self.pieces {
+            on_delta(p);
+        }
+        if self.fail_after {
+            return Err(recapz_llm::LlmError::Provider("http 500".into()));
+        }
+        Ok(Completion {
+            text: self.pieces.concat(),
+            input_tokens: 100,
+            output_tokens: 5,
+        })
+    }
+}
+
+fn streaming_app(dir: &std::path::Path, p: Pieces) -> Router {
+    let cfg = Config {
+        data_dir: dir.into(),
+        dev_login: true,
+        ..Config::default()
+    };
+    let control = db::open_control(dir).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let llm = Arc::new(Llm::new().provider("p", Arc::new(p)).route(
+        Task::AskAnswer,
+        Route {
+            provider: "p".into(),
+            model: "m".into(),
+            max_tokens: 10,
+            price: Price {
+                input: 1_000_000,
+                output: 0,
+            },
+        },
+    ));
+    routes::router_with_llm(cfg, Arc::new(Mutex::new(control)), Some(llm))
+}
+
+#[tokio::test]
+async fn ask_sends_one_token_event_per_text_piece_then_citations_and_done() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = streaming_app(
+        dir.path(),
+        Pieces {
+            pieces: vec![
+                r#"{"answer":"Ra m"#,
+                r#"ắt tháng "#,
+                r#"5.","citations":[1]}"#,
+            ],
+            fail_after: false,
+        },
+    );
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let (tid, _) = seed(dir.path());
+    let (s, _, sse) = send(&app, ask(&boss.unwrap(), "when is the launch date?")).await;
+    assert_eq!(s, StatusCode::OK);
+    let names: Vec<&str> = sse
+        .lines()
+        .filter_map(|l| l.strip_prefix("event: "))
+        .collect();
+    assert_eq!(
+        names,
+        ["token", "token", "token", "citations", "done"],
+        "{sse}"
+    );
+    assert_eq!(answer_text(&sse), "Ra mắt tháng 5.");
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let n: i64 = t
+        .query_row("SELECT COUNT(*) FROM llm_usage", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 1, "usage is recorded once the stream ends");
+}
+
+#[tokio::test]
+async fn ask_reports_a_failure_after_streaming_started_as_an_error_event() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = streaming_app(
+        dir.path(),
+        Pieces {
+            pieces: vec![r#"{"answer":"Half"#],
+            fail_after: true,
+        },
+    );
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    seed(dir.path());
+    let (s, _, sse) = send(&app, ask(&boss.unwrap(), "when is the launch date?")).await;
+    assert_eq!(s, StatusCode::OK, "the status was sent before the failure");
+    assert!(sse.contains("event: error"), "{sse}");
+    assert!(
+        !sse.contains("event: citations") && !sse.contains("http 500"),
+        "{sse}"
+    );
+}
