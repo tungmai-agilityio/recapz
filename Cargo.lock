@@ -1154,6 +1154,7 @@ dependencies = [
  "http-body-util",
  "recapz-core",
  "recapz-llm",
+ "recapz-notetaker",
  "recapz-speech",
  "reqwest",
  "rusqlite",
