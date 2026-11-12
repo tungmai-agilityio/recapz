@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Meetings } from './Meetings'
 
@@ -8,7 +9,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const show = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <Meetings />
+      <MemoryRouter><Meetings /></MemoryRouter>
     </QueryClientProvider>,
   )
 
