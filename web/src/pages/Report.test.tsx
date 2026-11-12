@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { clock } from '../clock'
@@ -39,4 +39,22 @@ test('says so when the meeting is not found', async () => {
 
 test('formats clock times', () => {
   expect([clock(0), clock(59_999), clock(3_725_000)]).toEqual(['0:00', '0:59', '1:02:05'])
+})
+
+test('clicking a transcript line seeks the audio and the playhead marks the current line', async () => {
+  const segs = [
+    { id: 1, speaker_id: null, start_ms: 0, end_ms: 65000, text: 'Xin chào' },
+    { id: 2, speaker_id: null, start_ms: 65000, end_ms: 70000, text: 'Next topic' },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : meeting))))
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+  const { container } = show()
+  fireEvent.click(await screen.findByText('Next topic'))
+  const audio = container.querySelector('audio')!
+  expect(audio.getAttribute('src')).toBe('/api/meetings/m1/audio')
+  expect(audio.currentTime).toBe(65)
+  expect(play).toHaveBeenCalledTimes(1)
+  expect(screen.getByText('Next topic').closest('button')?.getAttribute('aria-current')).toBe('true')
+  expect(screen.getByText('Xin chào').closest('button')?.getAttribute('aria-current')).toBeNull()
+  play.mockRestore()
 })
