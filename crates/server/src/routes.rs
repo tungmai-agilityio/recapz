@@ -16,6 +16,8 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 const SESSION_COOKIE: &str = "recapz_session";
+const CSRF_COOKIE: &str = "recapz_csrf";
+const CSRF_HEADER: &str = "x-csrf-token";
 const OAUTH_STATE_COOKIE: &str = "recapz_oauth_state";
 const SESSION_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
 const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
@@ -70,8 +72,56 @@ pub fn router_with_llm(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            app.clone(),
+            csrf_guard,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(app)
+}
+
+/// Double-submit CSRF check on every state-changing request that carries a session: the
+/// `x-csrf-token` header must equal the `recapz_csrf` cookie, and a browser `Origin`, when sent,
+/// must be this site. Requests without a session cookie have nothing to forge and fall through
+/// to the usual 401 (sign-in itself is one of them).
+// ponytail: the token is a random cookie value, not bound to the session id; bind it if sibling
+// subdomains ever share this cookie jar.
+async fn csrf_guard(
+    State(app): State<App>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    use axum::http::Method;
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    let jar = CookieJar::from_headers(req.headers());
+    if jar.get(SESSION_COOKIE).is_none() {
+        return next.run(req).await;
+    }
+    let header_tok = req.headers().get(CSRF_HEADER).and_then(|v| v.to_str().ok());
+    let token_ok = matches!((header_tok, jar.get(CSRF_COOKIE)),
+        (Some(h), Some(c)) if !h.is_empty() && h == c.value());
+    let origin_ok = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .is_none_or(|o| o == app.cfg.base_url.trim_end_matches('/'));
+    if token_ok && origin_ok {
+        next.run(req).await
+    } else {
+        (StatusCode::FORBIDDEN, "bad csrf token").into_response()
+    }
+}
+
+/// Readable by the page script (not HttpOnly) so it can echo the value in `x-csrf-token`.
+fn csrf_cookie(secure: bool) -> Cookie<'static> {
+    Cookie::build((CSRF_COOKIE, db::new_id()))
+        .path("/")
+        .secure(secure)
+        .same_site(SameSite::Lax)
+        .max_age(time_secs(SESSION_TTL_MS))
+        .build()
 }
 
 enum ApiError {
@@ -169,7 +219,9 @@ impl App {
             })
             .await?
             .ok_or(ApiError::Forbidden)?;
-        Ok(jar.add(session_cookie(sid, secure)))
+        Ok(jar
+            .add(session_cookie(sid, secure))
+            .add(csrf_cookie(secure)))
     }
 }
 
@@ -287,7 +339,9 @@ async fn logout(State(app): State<App>, jar: CookieJar) -> Res<CookieJar> {
         let sid = c.value().to_owned();
         app.control(move |c| db::delete_session(c, &sid)).await?;
     }
-    Ok(jar.remove(Cookie::build(SESSION_COOKIE).path("/").build()))
+    Ok(jar
+        .remove(Cookie::build(SESSION_COOKIE).path("/").build())
+        .remove(Cookie::build(CSRF_COOKIE).path("/").build()))
 }
 
 // ---- api ----
@@ -299,13 +353,22 @@ struct Me {
     role: String,
 }
 
-async fn me(State(app): State<App>, jar: CookieJar) -> Res<Json<Me>> {
+async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
     let u = app.current_user(&jar).await?;
-    Ok(Json(Me {
-        email: u.email,
-        name: u.name,
-        role: u.role,
-    }))
+    // Sessions that began before CSRF tokens existed get theirs on the next page load.
+    let jar = if jar.get(CSRF_COOKIE).is_none() {
+        jar.add(csrf_cookie(app.secure()))
+    } else {
+        jar
+    };
+    Ok((
+        jar,
+        Json(Me {
+            email: u.email,
+            name: u.name,
+            role: u.role,
+        }),
+    ))
 }
 
 /// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).

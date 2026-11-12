@@ -25,8 +25,10 @@ async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Option<String>, 
     let status = res.status();
     let cookie = res
         .headers()
-        .get(header::SET_COOKIE)
-        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned());
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned())
+        .find(|c| c.starts_with("recapz_session="));
     let body =
         String::from_utf8(res.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
     (status, cookie, body)
@@ -74,7 +76,8 @@ async fn sign_in_is_invite_only_and_sessions_end_on_logout() {
     assert!(body.contains(r#""email":"boss@example.com""#) && body.contains(r#""role":"admin""#));
 
     let logout = Request::post("/auth/logout")
-        .header(header::COOKIE, &cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .body(Body::empty())
         .unwrap();
     send(&app, logout).await;
@@ -98,7 +101,8 @@ async fn dev_login_is_off_by_default() {
 
 fn get(path: &str, cookie: &str) -> Request<Body> {
     Request::get(path)
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .body(Body::empty())
         .unwrap()
 }
@@ -109,7 +113,8 @@ fn upload(cookie: &str, title: &str) -> Request<Body> {
         "--{b}\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\n{title}\r\n--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFFdata\r\n--{b}--\r\n"
     );
     Request::post("/api/uploads")
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .header(
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={b}"),
