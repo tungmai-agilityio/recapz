@@ -1,12 +1,14 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { ToastContext } from './toast-context'
 
 /** Shows the latest message in a polite live region for 3 seconds. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [msg, setMsg] = useState('')
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const show = useCallback((m: string) => {
+    clearTimeout(timer.current)
     setMsg(m)
-    setTimeout(() => setMsg((cur) => (cur === m ? '' : cur)), 3000)
+    timer.current = setTimeout(() => setMsg(''), 3000)
   }, [])
   return (
     <ToastContext.Provider value={show}>

@@ -67,3 +67,15 @@ test('Toast announces the message and clears it after 3 seconds', () => {
   act(() => { vi.advanceTimersByTime(3000) })
   expect(screen.getByRole('status').textContent).toBe('')
 })
+
+test('Toast firing the same message again restarts the 3 second window', () => {
+  vi.useFakeTimers()
+  render(<ToastProvider><Fire /></ToastProvider>)
+  fireEvent.click(screen.getByText('go'))
+  act(() => { vi.advanceTimersByTime(2000) })
+  fireEvent.click(screen.getByText('go'))
+  act(() => { vi.advanceTimersByTime(2000) })
+  expect(screen.getByRole('status').textContent).toBe('Saved')
+  act(() => { vi.advanceTimersByTime(1000) })
+  expect(screen.getByRole('status').textContent).toBe('')
+})
