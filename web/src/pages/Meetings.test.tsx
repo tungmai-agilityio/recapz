@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
+import { ToastProvider } from '../ui/Toast'
 import { Meetings } from './Meetings'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -9,7 +10,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const show = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter><Meetings /></MemoryRouter>
+      <ToastProvider><MemoryRouter><Meetings /></MemoryRouter></ToastProvider>
     </QueryClientProvider>,
   )
 
@@ -72,6 +73,7 @@ test('deleting from the list asks first, then calls DELETE for that row and refr
   expect(dels[0][0]).toBe('/api/meetings/2')
   expect(screen.getByText('Weekly sync')).toBeTruthy()
   expect(screen.queryByRole('alertdialog')).toBeNull()
+  expect(screen.getByRole('status').textContent).toBe('Meeting deleted')
 })
 
 test('a refused delete keeps the dialog open with the server message', async () => {
