@@ -17,6 +17,8 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 const SESSION_COOKIE: &str = "recapz_session";
+const CSRF_COOKIE: &str = "recapz_csrf";
+const CSRF_HEADER: &str = "x-csrf-token";
 const OAUTH_STATE_COOKIE: &str = "recapz_oauth_state";
 const SESSION_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
 const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
@@ -26,12 +28,40 @@ pub struct App {
     cfg: Arc<Config>,
     // ponytail: one shared control connection behind a mutex; fine for one team, pool if it ever contends.
     control: Arc<Mutex<Connection>>,
+    /// Language-model router for Ask; `None` when no provider is configured.
+    llm: Option<Arc<recapz_llm::Router>>,
+    embedder: Arc<dyn recapz_core::embed::Embedder>,
+    /// When each member last asked, newest last; pruned to the last minute on every check.
+    // ponytail: in memory and per process; a restart resets it, which is fine for one server.
+    asks: Arc<
+        Mutex<std::collections::HashMap<String, std::collections::VecDeque<std::time::Instant>>>,
+    >,
 }
 
+mod ask;
+
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
+    let llm = crate::report_model::router_from_config(&cfg.llm)
+        .unwrap_or_else(|e| {
+            tracing::error!("llm config: {e:#}");
+            None
+        })
+        .map(Arc::new);
+    router_with_llm(cfg, control, llm)
+}
+
+pub fn router_with_llm(
+    cfg: Config,
+    control: Arc<Mutex<Connection>>,
+    llm: Option<Arc<recapz_llm::Router>>,
+) -> Router {
+    let embedder = crate::embedder::from_config(&cfg.embedder).expect("embedder checked at start");
     let app = App {
+        embedder,
         cfg: Arc::new(cfg),
         control,
+        llm,
+        asks: Default::default(),
     };
     Router::new()
         .route(
@@ -49,13 +79,63 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/api/calendar-events/{id}", patch(calendar::set_join))
         .route("/api/meetings/{id}", get(meeting_detail))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
+        .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
+        .route("/api/ask", post(ask::ask))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            app.clone(),
+            csrf_guard,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(app)
+}
+
+/// Double-submit CSRF check on every state-changing request that carries a session: the
+/// `x-csrf-token` header must equal the `recapz_csrf` cookie, and a browser `Origin`, when sent,
+/// must be this site. Requests without a session cookie have nothing to forge and fall through
+/// to the usual 401 (sign-in itself is one of them).
+// ponytail: the token is a random cookie value, not bound to the session id; bind it if sibling
+// subdomains ever share this cookie jar.
+async fn csrf_guard(
+    State(app): State<App>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    use axum::http::Method;
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    let jar = CookieJar::from_headers(req.headers());
+    if jar.get(SESSION_COOKIE).is_none() {
+        return next.run(req).await;
+    }
+    let header_tok = req.headers().get(CSRF_HEADER).and_then(|v| v.to_str().ok());
+    let token_ok = matches!((header_tok, jar.get(CSRF_COOKIE)),
+        (Some(h), Some(c)) if !h.is_empty() && h == c.value());
+    let origin_ok = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .is_none_or(|o| o == app.cfg.base_url.trim_end_matches('/'));
+    if token_ok && origin_ok {
+        next.run(req).await
+    } else {
+        (StatusCode::FORBIDDEN, "bad csrf token").into_response()
+    }
+}
+
+/// Readable by the page script (not HttpOnly) so it can echo the value in `x-csrf-token`.
+fn csrf_cookie(secure: bool) -> Cookie<'static> {
+    Cookie::build((CSRF_COOKIE, db::new_id()))
+        .path("/")
+        .secure(secure)
+        .same_site(SameSite::Lax)
+        .max_age(time_secs(SESSION_TTL_MS))
+        .build()
 }
 
 enum ApiError {
@@ -63,6 +143,8 @@ enum ApiError {
     BadRequest(&'static str),
     Forbidden,
     NotFound,
+    Unavailable(&'static str),
+    TooManyRequests,
     BadRange(u64),
     Internal(anyhow::Error),
 }
@@ -79,6 +161,13 @@ impl IntoResponse for ApiError {
             }
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
             ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
+            ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m).into_response(),
+            ApiError::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, "60")],
+                "too many questions, try again in a minute",
+            )
+                .into_response(),
             ApiError::BadRange(len) => (
                 StatusCode::RANGE_NOT_SATISFIABLE,
                 [(header::CONTENT_RANGE, format!("bytes */{len}"))],
@@ -129,6 +218,24 @@ impl App {
         Ok(tokio::task::spawn_blocking(move || f(&db::open_tenant(&dir, &tenant_id)?)).await??)
     }
 
+    /// Counts one Ask for `member`; false when they already used their quota in the last minute.
+    fn allow_ask(&self, member: &str) -> bool {
+        let now = std::time::Instant::now();
+        let mut all = self.asks.lock().unwrap();
+        let q = all.entry(member.to_owned()).or_default();
+        while q
+            .front()
+            .is_some_and(|t| now.duration_since(*t) >= std::time::Duration::from_secs(60))
+        {
+            q.pop_front();
+        }
+        if q.len() >= self.cfg.ask_per_minute as usize {
+            return false;
+        }
+        q.push_back(now);
+        true
+    }
+
     async fn current_user(&self, jar: &CookieJar) -> Res<db::User> {
         let sid = jar
             .get(SESSION_COOKIE)
@@ -151,7 +258,9 @@ impl App {
             })
             .await?
             .ok_or(ApiError::Forbidden)?;
-        Ok(jar.add(session_cookie(sid, secure)))
+        Ok(jar
+            .add(session_cookie(sid, secure))
+            .add(csrf_cookie(secure)))
     }
 }
 
@@ -269,7 +378,9 @@ async fn logout(State(app): State<App>, jar: CookieJar) -> Res<CookieJar> {
         let sid = c.value().to_owned();
         app.control(move |c| db::delete_session(c, &sid)).await?;
     }
-    Ok(jar.remove(Cookie::build(SESSION_COOKIE).path("/").build()))
+    Ok(jar
+        .remove(Cookie::build(SESSION_COOKIE).path("/").build())
+        .remove(Cookie::build(CSRF_COOKIE).path("/").build()))
 }
 
 // ---- api ----
@@ -281,13 +392,22 @@ struct Me {
     role: String,
 }
 
-async fn me(State(app): State<App>, jar: CookieJar) -> Res<Json<Me>> {
+async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
     let u = app.current_user(&jar).await?;
-    Ok(Json(Me {
-        email: u.email,
-        name: u.name,
-        role: u.role,
-    }))
+    // Sessions that began before CSRF tokens existed get theirs on the next page load.
+    let jar = if jar.get(CSRF_COOKIE).is_none() {
+        jar.add(csrf_cookie(app.secure()))
+    } else {
+        jar
+    };
+    Ok((
+        jar,
+        Json(Me {
+            email: u.email,
+            name: u.name,
+            role: u.role,
+        }),
+    ))
 }
 
 /// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).
@@ -431,6 +551,94 @@ async fn meeting_transcript(
         })
         .await?;
     Ok(Json(rows.ok_or(ApiError::NotFound)?))
+}
+
+#[derive(Serialize)]
+struct ReportOut {
+    summary: String,
+    decisions: Vec<String>,
+    open_questions: Vec<String>,
+    chapters: Vec<serde_json::Value>,
+    action_items: Vec<ActionItemOut>,
+    model: Option<String>,
+    created_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ActionItemOut {
+    id: String,
+    text: String,
+    due_date: Option<String>,
+    done: bool,
+    source_ms: Option<i64>,
+}
+
+fn json_list<T: serde::de::DeserializeOwned>(raw: Option<String>) -> Vec<T> {
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// The meeting report, or `null` while it has not been written yet.
+async fn meeting_report(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Option<ReportOut>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let out = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            let report = c
+                .query_row(
+                    "SELECT summary, decisions_json, questions_json, chapters_json, model, created_at
+                     FROM reports WHERE meeting_id = ?1",
+                    [&id],
+                    |r| {
+                        Ok((
+                            r.get::<_, Option<String>>(0)?,
+                            r.get::<_, Option<String>>(1)?,
+                            r.get::<_, Option<String>>(2)?,
+                            r.get::<_, Option<String>>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, Option<i64>>(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            let Some((summary, dec, q, ch, model, created_at)) = report else {
+                return Ok(Some(None));
+            };
+            let mut s = c.prepare(
+                "SELECT id, text, due_date, done, source_ms FROM action_items
+                 WHERE meeting_id = ?1 ORDER BY source_ms, id",
+            )?;
+            let action_items = s
+                .query_map([&id], |r| {
+                    Ok(ActionItemOut {
+                        id: r.get(0)?,
+                        text: r.get(1)?,
+                        due_date: r.get(2)?,
+                        done: r.get::<_, i64>(3)? != 0,
+                        source_ms: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(Some(ReportOut {
+                summary: summary.unwrap_or_default(),
+                decisions: json_list(dec),
+                open_questions: json_list(q),
+                chapters: json_list(ch),
+                action_items,
+                model,
+                created_at,
+            })))
+        })
+        .await?;
+    Ok(Json(out.ok_or(ApiError::NotFound)?))
 }
 
 /// One `bytes=start-end`, `bytes=start-` or `bytes=-suffix` range, clamped to the file.

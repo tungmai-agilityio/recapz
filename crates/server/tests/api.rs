@@ -25,8 +25,10 @@ async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Option<String>, 
     let status = res.status();
     let cookie = res
         .headers()
-        .get(header::SET_COOKIE)
-        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned());
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned())
+        .find(|c| c.starts_with("recapz_session="));
     let body =
         String::from_utf8(res.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
     (status, cookie, body)
@@ -74,7 +76,8 @@ async fn sign_in_is_invite_only_and_sessions_end_on_logout() {
     assert!(body.contains(r#""email":"boss@example.com""#) && body.contains(r#""role":"admin""#));
 
     let logout = Request::post("/auth/logout")
-        .header(header::COOKIE, &cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .body(Body::empty())
         .unwrap();
     send(&app, logout).await;
@@ -98,7 +101,8 @@ async fn dev_login_is_off_by_default() {
 
 fn get(path: &str, cookie: &str) -> Request<Body> {
     Request::get(path)
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .body(Body::empty())
         .unwrap()
 }
@@ -109,7 +113,8 @@ fn upload(cookie: &str, title: &str) -> Request<Body> {
         "--{b}\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\n{title}\r\n--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFFdata\r\n--{b}--\r\n"
     );
     Request::post("/api/uploads")
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .header(
             header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={b}"),
@@ -290,11 +295,80 @@ async fn audio_supports_ranges_and_follows_the_access_rule() {
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]
+async fn report_is_null_until_written_and_follows_the_access_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await;
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let path = format!("/api/meetings/{id}/report");
+
+    let (s, _, body) = send(&app, get(&path, &boss)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, "null"));
+
+    t.execute_batch(&format!(
+        "INSERT INTO reports (meeting_id, summary, decisions_json, questions_json, chapters_json, model, created_at)
+           VALUES ('{id}', 'Sum', '[\"d1\"]', '[]', '[{{\"start_ms\":5,\"title\":\"Intro\"}}]', 'm', 9);
+         INSERT INTO action_items (id, meeting_id, text, due_date, source_ms) VALUES
+           ('a2', '{id}', 'later', NULL, 90000), ('a1', '{id}', 'first', '2026-12-01', 1000);"
+    ))
+    .unwrap();
+    let (s, _, body) = send(&app, get(&path, &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    let r: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(r["summary"], "Sum");
+    assert_eq!(r["decisions"], serde_json::json!(["d1"]));
+    assert_eq!(
+        r["chapters"],
+        serde_json::json!([{"start_ms": 5, "title": "Intro"}])
+    );
+    let items = r["action_items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(
+        (
+            items[0]["text"].as_str(),
+            items[0]["due_date"].as_str(),
+            items[0]["done"].as_bool()
+        ),
+        (Some("first"), Some("2026-12-01"), Some(false))
+    );
+    assert_eq!(items[1]["text"], "later");
+
+    let (s, ..) = send(&app, get(&path, &amy)).await;
+    assert_eq!(
+        s,
+        StatusCode::NOT_FOUND,
+        "private meeting must not leak its report"
+    );
+    t.execute("UPDATE meetings SET share='workspace'", [])
+        .unwrap();
+    let (s, ..) = send(&app, get(&path, &amy)).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, ..) = send(&app, get(&path, "recapz_session=nope")).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
+
 fn json_req(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(path)
-        .header(header::COOKIE, cookie)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap()

@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router'
+import { Ask } from './pages/Ask'
 import { Meetings } from './pages/Meetings'
 import { Report } from './pages/Report'
 
@@ -15,11 +16,13 @@ export default function App() {
         <span className="text-lg font-bold tracking-tight">Recapz</span>
         <nav className="ml-6 text-sm">
           <NavLink to="/" className="font-medium text-primary">Meetings</NavLink>
+          <NavLink to="/ask" className="ml-4 font-medium text-primary">Ask</NavLink>
         </nav>
       </header>
       <main>
         <Routes>
           <Route path="/" element={<Meetings />} />
+          <Route path="/ask" element={<Ask />} />
           <Route path="/meetings/:id" element={<Report />} />
         </Routes>
       </main>
