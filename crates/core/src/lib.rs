@@ -6,4 +6,5 @@ pub mod embed;
 pub mod index_job;
 pub mod jobs;
 pub mod report_job;
+pub mod search;
 pub mod transcribe_job;
