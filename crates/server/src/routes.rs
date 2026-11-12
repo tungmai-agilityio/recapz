@@ -1,16 +1,20 @@
 use crate::config::Config;
+mod calendar;
 use axum::{
-    extract::{DefaultBodyLimit, Multipart, State},
-    http::StatusCode,
+    body::Body,
+    extract::{DefaultBodyLimit, Multipart, Path, State},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use recapz_core::{db, jobs};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_util::io::ReaderStream;
 
 const SESSION_COOKIE: &str = "recapz_session";
 const OAUTH_STATE_COOKIE: &str = "recapz_oauth_state";
@@ -40,6 +44,13 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
         .route("/api/meetings", get(list_meetings))
+        .route("/api/meetings/upcoming", get(calendar::upcoming))
+        .route("/api/meetings/join", post(calendar::join_link))
+        .route("/api/calendar-events/{id}", patch(calendar::set_join))
+        .route("/api/meetings/{id}", get(meeting_detail))
+        .route("/api/meetings/{id}/transcript", get(meeting_transcript))
+        .route("/api/meetings/{id}/report", get(meeting_report))
+        .route("/api/meetings/{id}/audio", get(meeting_audio))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
@@ -52,6 +63,8 @@ enum ApiError {
     Unauthorized,
     BadRequest(&'static str),
     Forbidden,
+    NotFound,
+    BadRange(u64),
     Internal(anyhow::Error),
 }
 impl<E: Into<anyhow::Error>> From<E> for ApiError {
@@ -66,6 +79,12 @@ impl IntoResponse for ApiError {
                 (StatusCode::UNAUTHORIZED, "sign in required").into_response()
             }
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not invited").into_response(),
+            ApiError::NotFound => StatusCode::NOT_FOUND.into_response(),
+            ApiError::BadRange(len) => (
+                StatusCode::RANGE_NOT_SATISFIABLE,
+                [(header::CONTENT_RANGE, format!("bytes */{len}"))],
+            )
+                .into_response(),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m).into_response(),
             ApiError::Internal(e) => {
                 tracing::error!("{e:#}");
@@ -318,6 +337,278 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
         })
         .await?;
     Ok(Json(rows))
+}
+
+#[derive(Serialize)]
+struct MeetingDetail {
+    id: String,
+    title: String,
+    platform: String,
+    status: String,
+    language: String,
+    started_at: Option<i64>,
+    ended_at: Option<i64>,
+    created_at: i64,
+    error: Option<String>,
+}
+
+/// The one meeting access rule: the owner, or anyone when shared with the workspace.
+/// A meeting the member may not see is reported as missing, so its existence does not leak.
+fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option<MeetingDetail>> {
+    Ok(c.query_row(
+        "SELECT id, title, platform, status, language, started_at, ended_at, created_at, error
+         FROM meetings WHERE id = ?1 AND (owner_id = ?2 OR share = 'workspace')",
+        params![id, uid],
+        |r| {
+            Ok(MeetingDetail {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                platform: r.get(2)?,
+                status: r.get(3)?,
+                language: r.get(4)?,
+                started_at: r.get(5)?,
+                ended_at: r.get(6)?,
+                created_at: r.get(7)?,
+                error: r.get(8)?,
+            })
+        },
+    )
+    .optional()?)
+}
+
+async fn meeting_detail(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<MeetingDetail>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let m = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            visible_meeting(c, &uid, &id)
+        })
+        .await?;
+    Ok(Json(m.ok_or(ApiError::NotFound)?))
+}
+
+#[derive(Serialize)]
+struct SegmentRow {
+    id: i64,
+    speaker_id: Option<String>,
+    start_ms: i64,
+    end_ms: i64,
+    text: String,
+}
+
+async fn meeting_transcript(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Vec<SegmentRow>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let rows = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            let mut s = c.prepare(
+                "SELECT id, speaker_id, start_ms, end_ms, text FROM segments WHERE meeting_id = ?1 ORDER BY start_ms, id",
+            )?;
+            let rows = s
+                .query_map([&id], |r| {
+                    Ok(SegmentRow {
+                        id: r.get(0)?,
+                        speaker_id: r.get(1)?,
+                        start_ms: r.get(2)?,
+                        end_ms: r.get(3)?,
+                        text: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(rows))
+        })
+        .await?;
+    Ok(Json(rows.ok_or(ApiError::NotFound)?))
+}
+
+#[derive(Serialize)]
+struct ReportOut {
+    summary: String,
+    decisions: Vec<String>,
+    open_questions: Vec<String>,
+    chapters: Vec<serde_json::Value>,
+    action_items: Vec<ActionItemOut>,
+    model: Option<String>,
+    created_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ActionItemOut {
+    id: String,
+    text: String,
+    due_date: Option<String>,
+    done: bool,
+    source_ms: Option<i64>,
+}
+
+fn json_list<T: serde::de::DeserializeOwned>(raw: Option<String>) -> Vec<T> {
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// The meeting report, or `null` while it has not been written yet.
+async fn meeting_report(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Option<ReportOut>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let out = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            let report = c
+                .query_row(
+                    "SELECT summary, decisions_json, questions_json, chapters_json, model, created_at
+                     FROM reports WHERE meeting_id = ?1",
+                    [&id],
+                    |r| {
+                        Ok((
+                            r.get::<_, Option<String>>(0)?,
+                            r.get::<_, Option<String>>(1)?,
+                            r.get::<_, Option<String>>(2)?,
+                            r.get::<_, Option<String>>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, Option<i64>>(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            let Some((summary, dec, q, ch, model, created_at)) = report else {
+                return Ok(Some(None));
+            };
+            let mut s = c.prepare(
+                "SELECT id, text, due_date, done, source_ms FROM action_items
+                 WHERE meeting_id = ?1 ORDER BY source_ms, id",
+            )?;
+            let action_items = s
+                .query_map([&id], |r| {
+                    Ok(ActionItemOut {
+                        id: r.get(0)?,
+                        text: r.get(1)?,
+                        due_date: r.get(2)?,
+                        done: r.get::<_, i64>(3)? != 0,
+                        source_ms: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(Some(ReportOut {
+                summary: summary.unwrap_or_default(),
+                decisions: json_list(dec),
+                open_questions: json_list(q),
+                chapters: json_list(ch),
+                action_items,
+                model,
+                created_at,
+            })))
+        })
+        .await?;
+    Ok(Json(out.ok_or(ApiError::NotFound)?))
+}
+
+/// One `bytes=start-end`, `bytes=start-` or `bytes=-suffix` range, clamped to the file.
+/// ponytail: multi-range requests are treated as unsatisfiable; players only send one.
+fn parse_range(h: &str, len: u64) -> Option<(u64, u64)> {
+    let (a, b) = h.strip_prefix("bytes=")?.split_once('-')?;
+    let (start, end) = match (a.trim(), b.trim()) {
+        ("", n) => (len.checked_sub(n.parse().ok()?)?, len.checked_sub(1)?),
+        (a, "") => (a.parse().ok()?, len.checked_sub(1)?),
+        (a, b) => (
+            a.parse().ok()?,
+            b.parse::<u64>().ok()?.min(len.checked_sub(1)?),
+        ),
+    };
+    (start <= end && end < len).then_some((start, end))
+}
+
+fn audio_type(path: &str) -> &'static str {
+    match path
+        .rsplit('.')
+        .next()
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("wav") => "audio/wav",
+        Some("mp3") => "audio/mpeg",
+        Some("m4a" | "mp4") => "audio/mp4",
+        Some("ogg") => "audio/ogg",
+        Some("flac") => "audio/flac",
+        Some("webm") => "audio/webm",
+        _ => "application/octet-stream",
+    }
+}
+
+async fn meeting_audio(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Res<Response> {
+    let u = app.current_user(&jar).await?;
+    let (uid, tenant) = (u.id.clone(), u.tenant_id.clone());
+    let rel = app
+        .tenant(tenant.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            Ok(c.query_row(
+                "SELECT audio_path FROM meetings WHERE id = ?1",
+                [&id],
+                |r| r.get::<_, Option<String>>(0),
+            )?)
+        })
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let mut f = tokio::fs::File::open(db::tenant_dir(&app.cfg.data_dir, &tenant).join(&rel))
+        .await
+        .map_err(|_| ApiError::NotFound)?;
+    let len = f.metadata().await?.len();
+    let range = match headers.get(header::RANGE).and_then(|v| v.to_str().ok()) {
+        None => None,
+        Some(h) => Some(parse_range(h, len).ok_or(ApiError::BadRange(len))?),
+    };
+    let (start, end) = range.unwrap_or((0, len.saturating_sub(1)));
+    f.seek(std::io::SeekFrom::Start(start)).await?;
+    // Streamed, so a multi-gigabyte recording is never held in memory.
+    let n = if len == 0 { 0 } else { end - start + 1 };
+    let body = Body::from_stream(ReaderStream::new(f.take(n)));
+    let mut res = (
+        if range.is_some() {
+            StatusCode::PARTIAL_CONTENT
+        } else {
+            StatusCode::OK
+        },
+        [
+            (header::CONTENT_TYPE, audio_type(&rel).to_string()),
+            (header::ACCEPT_RANGES, "bytes".to_string()),
+        ],
+        body,
+    )
+        .into_response();
+    if range.is_some() {
+        res.headers_mut().insert(
+            header::CONTENT_RANGE,
+            format!("bytes {start}-{end}/{len}").parse().unwrap(),
+        );
+    }
+    Ok(res)
 }
 
 #[derive(Serialize)]

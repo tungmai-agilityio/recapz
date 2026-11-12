@@ -1,5 +1,5 @@
 use recapz_core::db;
-use recapz_server::{config::Config, routes, runner};
+use recapz_server::{config::Config, report_model::LlmReportModel, routes, runner};
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -18,7 +18,14 @@ async fn main() -> anyhow::Result<()> {
     for tenant in db::tenant_ids(&control)? {
         db::open_tenant(&cfg.data_dir, &tenant)?; // run migrations on startup
     }
-    runner::spawn(cfg.data_dir.clone());
+    let report =
+        LlmReportModel::from_config(&cfg.llm, tokio::runtime::Handle::current())?.map(Arc::new);
+    if report.is_none() {
+        tracing::warn!(
+            "no [llm] provider configured: meetings stop after transcription, no reports"
+        );
+    }
+    runner::spawn(cfg.data_dir.clone(), cfg.speech_model.clone(), report);
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on {}", cfg.bind);
     axum::serve(listener, routes::router(cfg, Arc::new(Mutex::new(control)))).await?;
