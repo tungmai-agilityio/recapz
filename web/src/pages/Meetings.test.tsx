@@ -21,6 +21,23 @@ test('lists meetings from the API', async () => {
   expect(await screen.findByText('Weekly sync')).toBeTruthy()
 })
 
+test('shows a day heading, the status badge and the month count for each meeting', async () => {
+  const now = Date.now()
+  const rows = [
+    { id: '1', title: 'Weekly sync', platform: 'upload', status: 'ready', started_at: now, created_at: now },
+    { id: '2', title: 'Broken one', platform: 'meet', status: 'failed', started_at: now - 1000, created_at: now },
+    { id: '3', title: 'Working one', platform: 'meet', status: 'transcribing', started_at: now - 2000, created_at: now },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  show()
+  expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy()
+  expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
+  expect(screen.getByText('Ready').className).toContain('text-good')
+  expect(screen.getByText('Failed').className).toContain('text-bad')
+  expect(screen.getByText('Transcribing').className).toContain('text-signal-ink')
+  expect(screen.getByText(/3 meetings this month/)).toBeTruthy()
+})
+
 test('shows sign-in when signed out', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 401 })))
   show()
