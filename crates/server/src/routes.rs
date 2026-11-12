@@ -49,6 +49,7 @@ pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
         .route("/api/calendar-events/{id}", patch(calendar::set_join))
         .route("/api/meetings/{id}", get(meeting_detail))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
+        .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
         .route(
             "/api/uploads",
@@ -431,6 +432,94 @@ async fn meeting_transcript(
         })
         .await?;
     Ok(Json(rows.ok_or(ApiError::NotFound)?))
+}
+
+#[derive(Serialize)]
+struct ReportOut {
+    summary: String,
+    decisions: Vec<String>,
+    open_questions: Vec<String>,
+    chapters: Vec<serde_json::Value>,
+    action_items: Vec<ActionItemOut>,
+    model: Option<String>,
+    created_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ActionItemOut {
+    id: String,
+    text: String,
+    due_date: Option<String>,
+    done: bool,
+    source_ms: Option<i64>,
+}
+
+fn json_list<T: serde::de::DeserializeOwned>(raw: Option<String>) -> Vec<T> {
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// The meeting report, or `null` while it has not been written yet.
+async fn meeting_report(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Option<ReportOut>>> {
+    let u = app.current_user(&jar).await?;
+    let uid = u.id.clone();
+    let out = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &id)?.is_none() {
+                return Ok(None);
+            }
+            let report = c
+                .query_row(
+                    "SELECT summary, decisions_json, questions_json, chapters_json, model, created_at
+                     FROM reports WHERE meeting_id = ?1",
+                    [&id],
+                    |r| {
+                        Ok((
+                            r.get::<_, Option<String>>(0)?,
+                            r.get::<_, Option<String>>(1)?,
+                            r.get::<_, Option<String>>(2)?,
+                            r.get::<_, Option<String>>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, Option<i64>>(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            let Some((summary, dec, q, ch, model, created_at)) = report else {
+                return Ok(Some(None));
+            };
+            let mut s = c.prepare(
+                "SELECT id, text, due_date, done, source_ms FROM action_items
+                 WHERE meeting_id = ?1 ORDER BY source_ms, id",
+            )?;
+            let action_items = s
+                .query_map([&id], |r| {
+                    Ok(ActionItemOut {
+                        id: r.get(0)?,
+                        text: r.get(1)?,
+                        due_date: r.get(2)?,
+                        done: r.get::<_, i64>(3)? != 0,
+                        source_ms: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(Some(ReportOut {
+                summary: summary.unwrap_or_default(),
+                decisions: json_list(dec),
+                open_questions: json_list(q),
+                chapters: json_list(ch),
+                action_items,
+                model,
+                created_at,
+            })))
+        })
+        .await?;
+    Ok(Json(out.ok_or(ApiError::NotFound)?))
 }
 
 /// One `bytes=start-end`, `bytes=start-` or `bytes=-suffix` range, clamped to the file.

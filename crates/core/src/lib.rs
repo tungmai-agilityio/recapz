@@ -2,5 +2,6 @@
 pub mod calendar;
 pub mod db;
 pub mod jobs;
+pub mod purge;
 pub mod report_job;
 pub mod transcribe_job;
