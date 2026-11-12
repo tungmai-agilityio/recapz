@@ -67,6 +67,17 @@ export async function uploadFile(file: File) {
   await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))
 }
 
+/** Local development only: the server accepts it when `dev_login = true`. */
+export async function devLogin(email: string) {
+  await check(
+    await fetch('/auth/dev-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+  )
+}
+
 export const logout = async () => { await fetch('/auth/logout', { method: 'POST', headers: csrf() }) }
 
 export interface Citation {
