@@ -40,11 +40,11 @@ export function Ask() {
           placeholder="What did we decide about pricing?"
           className="flex-1 rounded-md border border-hair px-3 py-2"
         />
-        <button type="submit" disabled={busy} className="rounded-md bg-primary px-4 py-2 text-white disabled:opacity-50">
+        <button type="submit" disabled={busy} className="rounded-md bg-primary px-4 py-2 text-primary-fg disabled:opacity-50">
           {busy ? 'Asking…' : 'Ask'}
         </button>
       </form>
-      {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-bad">{error}</p>}
       {answer && <p className="mt-6 whitespace-pre-wrap" aria-live="polite">{answer}</p>}
       <ul className="mt-4 space-y-2">
         {citations.map((c, i) => (
