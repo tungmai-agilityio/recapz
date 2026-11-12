@@ -10,7 +10,7 @@ export function ThemeSwitch() {
   const skins: [Skin, string][] = [['day', 'Daylight'], ['ink', 'Ink']]
   const modes: [Mode, string][] = [['light', '☀ Light'], ['dark', '☾ Dark'], ['system', 'Auto']]
   return (
-    <div className="ml-auto flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2">
       <div role="group" aria-label="Theme" className={group}>
         {skins.map(([k, label]) => (
           <button key={k} aria-pressed={skin === k} className={btn(skin === k)}
