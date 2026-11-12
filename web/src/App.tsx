@@ -1,10 +1,16 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Route, Routes } from 'react-router'
+import { getMe, logout, Unauthorized } from './api'
 import { ThemeSwitch } from './ThemeSwitch'
 import { Ask } from './pages/Ask'
 import { Meetings } from './pages/Meetings'
 import { Report } from './pages/Report'
+import { Button } from './ui/Button'
 
 export default function App() {
+  const qc = useQueryClient()
+  const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
+  const signOut = async () => { await logout(); await qc.resetQueries() }
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <header className="mb-8 flex flex-wrap items-center gap-3">
@@ -20,6 +26,7 @@ export default function App() {
           <NavLink to="/ask" className="ml-4 font-medium text-primary">Ask</NavLink>
         </nav>
         <ThemeSwitch />
+        {me.data && <Button variant="ghost" onClick={signOut}>Sign out</Button>}
       </header>
       <main>
         <Routes>
