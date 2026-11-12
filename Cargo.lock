@@ -1150,6 +1150,7 @@ dependencies = [
  "axum-extra",
  "http-body-util",
  "recapz-core",
+ "recapz-llm",
  "recapz-speech",
  "reqwest",
  "rusqlite",
