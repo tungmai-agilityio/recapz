@@ -100,7 +100,7 @@ export function Meetings() {
                   <p className="flex gap-2.5 text-xs text-mute"><span className="font-mono min-[901px]:hidden">{at(meetingTime(m))}</span><span>{m.platform}</span></p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  {statusBadge[m.status]
+                  {Object.hasOwn(statusBadge, m.status)
                     ? <Badge tone={statusBadge[m.status].tone}>{statusBadge[m.status].label}</Badge>
                     : <Badge>{m.status}</Badge>}
                   <Button variant="danger" aria-label={`Delete ${m.title}`} onClick={() => { del.reset(); setDeleting(m) }}>Delete</Button>

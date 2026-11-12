@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { ToastProvider } from '../ui/Toast'
 import { Meetings } from './Meetings'
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 const show = () =>
   render(
@@ -22,11 +22,13 @@ test('lists meetings from the API', async () => {
 })
 
 test('shows a day heading, the status badge and the month count for each meeting', async () => {
-  const now = Date.now()
+  const now = new Date(2026, 10, 12, 12).getTime()
+  vi.useFakeTimers({ toFake: ['Date'], now })
   const rows = [
     { id: '1', title: 'Weekly sync', platform: 'upload', status: 'ready', started_at: now, created_at: now },
     { id: '2', title: 'Broken one', platform: 'meet', status: 'failed', started_at: now - 1000, created_at: now },
     { id: '3', title: 'Working one', platform: 'meet', status: 'transcribing', started_at: now - 2000, created_at: now },
+    { id: '4', title: 'Odd one', platform: 'meet', status: 'toString', started_at: now - 3000, created_at: now },
   ]
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
   show()
@@ -35,7 +37,8 @@ test('shows a day heading, the status badge and the month count for each meeting
   expect(screen.getByText('Ready').className).toContain('text-good')
   expect(screen.getByText('Failed').className).toContain('text-bad')
   expect(screen.getByText('Transcribing').className).toContain('text-signal-ink')
-  expect(screen.getByText(/3 meetings this month/)).toBeTruthy()
+  expect(screen.getByText('toString').className).toContain('text-ink-2')
+  expect(screen.getByText(/4 meetings this month/)).toBeTruthy()
 })
 
 test('shows sign-in when signed out', async () => {
