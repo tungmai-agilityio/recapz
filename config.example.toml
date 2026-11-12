@@ -8,3 +8,14 @@ dev_login = false            # local development only: enables POST /auth/dev-lo
 [google]
 client_id = ""
 client_secret = ""
+
+# Meeting reports. Leave `provider` empty to skip reports.
+# Only transcript text is sent to the provider; audio never leaves the server.
+[llm]
+provider = ""            # "anthropic" or "openai" (any OpenAI-compatible server)
+base_url = ""            # required for "openai", e.g. http://localhost:8000/v1
+api_key = ""
+model = ""
+max_tokens = 2048
+price_input = 0          # micro-USD per million input tokens
+price_output = 0         # micro-USD per million output tokens
