@@ -39,6 +39,9 @@ export interface ReportData {
 
 export class Unauthorized extends Error {}
 
+/** Echoes the csrf cookie in a header on state-changing requests. */
+const csrf = () => ({ 'x-csrf-token': /(?:^|; )recapz_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' })
+
 async function check(res: Response) {
   if (res.status === 401) throw new Unauthorized()
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
@@ -61,10 +64,10 @@ export const getReport = async (id: string): Promise<ReportData | null> =>
 export async function uploadFile(file: File) {
   const body = new FormData()
   body.append('file', file)
-  await check(await fetch('/api/uploads', { method: 'POST', body }))
+  await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))
 }
 
-export const logout = async () => { await fetch('/auth/logout', { method: 'POST' }) }
+export const logout = async () => { await fetch('/auth/logout', { method: 'POST', headers: csrf() }) }
 
 export interface Citation {
   meeting_id: string
@@ -90,7 +93,7 @@ export async function ask(question: string, onToken: (t: string) => void): Promi
   const res = await check(
     await fetch('/api/ask', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...csrf() },
       body: JSON.stringify({ question }),
     }),
   )
