@@ -2,6 +2,8 @@
 pub mod calendar;
 pub mod chunk;
 pub mod db;
+pub mod embed;
+pub mod index_job;
 pub mod jobs;
 pub mod purge;
 pub mod report_job;
