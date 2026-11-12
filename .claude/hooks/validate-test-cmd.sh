@@ -7,7 +7,7 @@ while IFS= read -r part; do
   [ -z "$part" ] && continue
   case "$part" in
     "make test"* | "make lint"* | "cargo test"* | "cargo clippy"* | "cargo fmt --check"* | \
-    "pnpm -C web test"* | "pnpm -C web lint"* | "pnpm -C web exec playwright"* | \
+    "pnpm -C web test"* | "pnpm -C web lint"* | "pnpm -C web exec tsc --noEmit"* | "pnpm -C web exec playwright"* | \
     "cd "* | "ls"* | "tail "* | "head "* | "grep "* | "wc "* | "mkdir -p "* | \
     "git status"* | "git diff"* | "git rev-parse"*) ;;
     *) echo "test-runner may only run tests, lint or read logs; blocked: $part" >&2; exit 2 ;;
