@@ -1,15 +1,16 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { ThemeSwitch } from './ThemeSwitch'
-import { applyTheme } from './theme'
+import { applyTheme, initTheme } from './theme'
 
 let systemDark = false
+let onChange: () => void = () => {}
 const html = document.documentElement
 
 beforeEach(() => {
   localStorage.clear()
   systemDark = false
-  vi.stubGlobal('matchMedia', () => ({ matches: systemDark, addEventListener() {} }))
+  vi.stubGlobal('matchMedia', () => ({ matches: systemDark, addEventListener: (_: string, f: () => void) => { onChange = f } }))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -48,4 +49,21 @@ test('the switch changes skin and mode, persists them and marks the pressed butt
   expect(html.dataset.theme).toBe('dark')
   expect(localStorage.getItem('recapz-skin')).toBe('ink')
   expect(localStorage.getItem('recapz-mode')).toBe('dark')
+})
+
+test('invalid stored values fall back to Daylight and light', () => {
+  localStorage.setItem('recapz-skin', 'foo')
+  localStorage.setItem('recapz-mode', 'bar')
+  applyTheme()
+  expect(html.dataset.skin).toBe('day')
+  expect(html.dataset.theme).toBe('light')
+})
+
+test('Auto re-applies when the system preference changes', () => {
+  localStorage.setItem('recapz-mode', 'system')
+  initTheme()
+  expect(html.dataset.theme).toBe('light')
+  systemDark = true
+  onChange()
+  expect(html.dataset.theme).toBe('dark')
 })
