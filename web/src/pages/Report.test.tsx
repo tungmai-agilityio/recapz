@@ -7,10 +7,10 @@ import { Report } from './Report'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-const show = () =>
+const show = (path = '/meetings/m1') =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={['/meetings/m1']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes><Route path="/meetings/:id" element={<Report />} /></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -29,6 +29,19 @@ test('shows the meeting and its transcript lines with times', async () => {
   expect(await screen.findByText('Xin chào')).toBeTruthy()
   expect(screen.getByText('Next topic')).toBeTruthy()
   expect(screen.getAllByRole('time').map((t) => t.textContent)).toEqual(['0:00', '1:05'])
+})
+
+test('opens at the moment given in ?t= and highlights that line', async () => {
+  const segs = [
+    { id: 1, speaker_id: null, start_ms: 0, end_ms: 1000, text: 'Xin chào' },
+    { id: 2, speaker_id: null, start_ms: 65000, end_ms: 70000, text: 'Next topic' },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? null : meeting))))
+  const { container } = show('/meetings/m1?t=66000')
+  const line = (await screen.findByText('Next topic')).closest('button')!
+  await vi.waitFor(() => expect(line.getAttribute('aria-current')).toBe('true'))
+  expect(screen.getByText('Xin chào').closest('button')!.getAttribute('aria-current')).toBeNull()
+  expect(container.querySelector('audio')!.currentTime).toBe(66)
 })
 
 test('says so when the meeting is not found', async () => {
