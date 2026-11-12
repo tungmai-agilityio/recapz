@@ -31,6 +31,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Join links are parsed strictly (Meet and Zoom hosts only) and stored normalised, so the same call is never joined twice by one member.
 - Zoom v1 uses the Meeting SDK bot per the decision doc in #29; it needs Zoom app review, and upload stays the fallback.
 - Report email transport is undecided: assume SMTP behind a trait, nothing is wired yet.
+- Hosted speech: an optional adapter (Deepgram first, opt-in per deployment, off by default) is decided in `docs/hosted-speech.md` but not built; local whisper stays the default.
 
 ## Open issues
 - Google sign-in has not been exercised against real Google credentials.
