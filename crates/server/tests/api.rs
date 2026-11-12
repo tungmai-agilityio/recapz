@@ -601,3 +601,149 @@ async fn joining_a_pasted_link_queues_a_scheduled_meeting_for_the_owner_only() {
     .await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
+
+fn del(path: &str, cookie: &str) -> Request<Body> {
+    json_req("DELETE", path, cookie, "")
+}
+
+fn count(t: &rusqlite::Connection, sql: &str) -> i64 {
+    t.query_row(sql, [], |r| r.get(0)).unwrap()
+}
+
+/// Adds one row in every table a meeting owns, plus an audio file; returns the meeting id.
+fn seed_full_meeting(
+    t: &rusqlite::Connection,
+    dir: &std::path::Path,
+    tid: &str,
+    owner: &str,
+    status: &str,
+) -> String {
+    let id = format!("m-{owner}-{status}");
+    let audio = db::tenant_dir(dir, tid).join("audio").join(&id);
+    std::fs::create_dir_all(&audio).unwrap();
+    std::fs::write(audio.join("a.wav"), b"RIFF").unwrap();
+    t.execute_batch(&format!(
+        "INSERT INTO meetings (id, title, platform, status, owner_id, share, audio_path) VALUES ('{id}','t','upload','{status}','{owner}','attendees','audio/{id}/a.wav');
+         INSERT INTO speakers (id, meeting_id, label) VALUES ('s-{id}','{id}','Speaker 1');
+         INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES ('{id}','s-{id}',0,1,'zebrafish');
+         INSERT INTO reports (meeting_id, summary) VALUES ('{id}','zebrafish');
+         INSERT INTO action_items (id, meeting_id, text) VALUES ('a-{id}','{id}','zebrafish');
+         INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding) VALUES ('{id}',0,1,'zebrafish',x'00');
+         INSERT INTO jobs (kind, meeting_id, run_after) VALUES ('report','{id}',0);"
+    ))
+    .unwrap();
+    id
+}
+
+#[tokio::test]
+async fn delete_meeting_is_owner_or_admin_only_and_removes_everything() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let uid = |email: &str| -> String {
+        t.query_row("SELECT id FROM members WHERE email = ?1", [email], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+    // members rows appear on first request; touch each once
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let (amy_id, boss_id) = (uid("amy@example.com"), uid("boss@example.com"));
+
+    let mine = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    let keep = seed_full_meeting(&t, dir.path(), &tid, &boss_id, "ready");
+    let busy = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "transcribing");
+    let shared = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "scheduled");
+    t.execute(
+        "UPDATE meetings SET share='workspace' WHERE id=?1",
+        [&shared],
+    )
+    .unwrap();
+    let private = |id: &str| format!("/api/meetings/{id}");
+
+    // Signed out, unseen private meeting, still processing, non-owner member: nothing is deleted.
+    let (s, ..) = send(&app, del(&private(&mine), "recapz_session=nope")).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, ..) = send(&app, del(&private(&mine), &bob)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, body) = send(&app, del(&private(&busy), &amy)).await;
+    assert_eq!(
+        (s, body.as_str()),
+        (StatusCode::CONFLICT, "meeting is still processing")
+    );
+    let (s, ..) = send(&app, del(&private(&shared), &bob)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(count(&t, "SELECT count(*) FROM meetings"), 4);
+
+    // The owner deletes: rows, search rows and audio are gone, the other meetings are untouched.
+    let (s, ..) = send(&app, del(&private(&mine), &amy)).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    for table in [
+        "segments",
+        "speakers",
+        "reports",
+        "action_items",
+        "chunks",
+        "jobs",
+    ] {
+        assert_eq!(
+            count(
+                &t,
+                &format!("SELECT count(*) FROM {table} WHERE meeting_id='{mine}'")
+            ),
+            0,
+            "{table}"
+        );
+        assert_eq!(
+            count(
+                &t,
+                &format!("SELECT count(*) FROM {table} WHERE meeting_id='{keep}'")
+            ),
+            1,
+            "{table} of the other meeting"
+        );
+    }
+    assert_eq!(count(&t, "SELECT count(*) FROM meetings"), 3);
+    // Four seeded meetings each had one search row; the deleted one's is gone.
+    assert_eq!(
+        count(
+            &t,
+            "SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH 'zebrafish'"
+        ),
+        3
+    );
+    assert!(!db::tenant_dir(dir.path(), &tid)
+        .join("audio")
+        .join(&mine)
+        .exists());
+    assert!(db::tenant_dir(dir.path(), &tid)
+        .join("audio")
+        .join(&keep)
+        .join("a.wav")
+        .exists());
+    let (s, ..) = send(&app, get(&private(&mine), &amy)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    // An admin may delete a workspace-shared meeting they do not own.
+    let (s, ..) = send(&app, del(&private(&shared), &boss)).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert_eq!(count(&t, "SELECT count(*) FROM meetings"), 2);
+}
