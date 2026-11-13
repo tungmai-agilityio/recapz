@@ -89,7 +89,8 @@
       const log = find(S.chatLog);
       const messages = log
         ? [...log.children].map((m) => {
-            const own = /^you\b[:\s]*/i.exec(m.textContent);
+            // Our own lines start "You:"; a participant named "You Li" must not look like us.
+            const own = /^you:\s*/i.exec(m.textContent);
             return { text: own ? m.textContent.slice(own[0].length) : m.textContent, self: !!own };
           })
         : [];

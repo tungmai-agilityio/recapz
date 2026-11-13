@@ -42,6 +42,10 @@ struct Run {
     _browser: Browser, // held so it is killed when the run ends
     phase: Phase,
     last_poll: Instant,
+    /// Frames thrown away before recording started (tests check the consent ordering with it).
+    dropped_frames: u64,
+    /// The part of `dropped_frames` thrown away at the moment of admission, after the notice.
+    dropped_at_admission: u64,
 }
 
 pub struct MeetDriver {
@@ -79,6 +83,12 @@ impl MeetDriver {
                 JoinStep::Admitted => {
                     // Everything in the log now is ours (the notice) or older: only later messages count.
                     let seen = run.meet.observe().await?.messages.len();
+                    // Frames buffered during the lobby and while the notice was posted are not ours
+                    // to keep: recording starts now.
+                    while run.capture.frames.try_recv().is_ok() {
+                        run.dropped_frames += 1;
+                        run.dropped_at_admission += 1;
+                    }
                     run.phase = Phase::InCall {
                         since: Instant::now(),
                         last_audio: Instant::now(),
@@ -115,6 +125,8 @@ impl MeetDriver {
                         speaker: name,
                     }));
                 }
+                // The log can shrink (panel closed and reopened): count from what is there now.
+                *chat_seen = (*chat_seen).min(o.messages.len());
                 for m in o.messages.into_iter().skip(*chat_seen) {
                     *chat_seen += 1;
                     self.pending.push_back(DriverEvent::Call(Event::Chat {
@@ -151,11 +163,17 @@ impl CallDriver for MeetDriver {
             capture,
             _browser: browser,
             phase: Phase::Joining,
-            last_poll: Instant::now() - POLL,
+            last_poll: Instant::now()
+                .checked_sub(POLL)
+                .unwrap_or_else(Instant::now),
+            dropped_frames: 0,
+            dropped_at_admission: 0,
         });
         Ok(())
     }
 
+    /// Not cancel-safe in the middle of a poll: a dropped call can post the notice twice. The
+    /// loop awaits it to completion.
     async fn next(&mut self) -> Result<DriverEvent, DriverError> {
         loop {
             if let Some(e) = self.pending.pop_front() {
@@ -165,7 +183,10 @@ impl CallDriver for MeetDriver {
             let wait = POLL.saturating_sub(run.last_poll.elapsed());
             match &mut run.phase {
                 Phase::Joining => {
-                    while run.capture.frames.try_recv().is_ok() {} // nothing is kept before admission
+                    // Nothing is kept before admission.
+                    while run.capture.frames.try_recv().is_ok() {
+                        run.dropped_frames += 1;
+                    }
                     tokio::time::sleep(wait).await;
                 }
                 Phase::InCall { last_audio, .. } => {
@@ -311,6 +332,10 @@ mod browser_tests {
             .iter()
             .all(|e| matches!(call(e), Some(Event::Tick { .. }))));
         assert!(admitted >= 2, "waited in the lobby");
+        // Frames flowed during the lobby and the notice, and every one of them was thrown away:
+        // the page produces one every 100 ms, so over a 1.2 s lobby there are many.
+        let dropped = d.run.as_ref().unwrap().dropped_frames;
+        assert!(dropped >= 5, "dropped {dropped}");
         d.leave().await;
     }
 
@@ -380,5 +405,73 @@ mod browser_tests {
         );
         d.leave().await;
         assert!(!work.exists());
+    }
+
+    #[tokio::test]
+    async fn an_opt_out_is_seen_after_the_chat_log_was_cleared_and_from_a_name_starting_with_you() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((mut d, url, _)) = driver("chat_reopen") else {
+            return;
+        };
+        let (seen, _) = collect(&mut d, &url, |e| {
+            matches!(call(e), Some(Event::Chat { .. }))
+        })
+        .await;
+        assert_eq!(
+            seen.iter()
+                .filter_map(call)
+                .filter(|e| matches!(e, Event::Chat { .. }))
+                .collect::<Vec<_>>(),
+            [&Event::Chat {
+                text: "Sam: opt out please".into(),
+                from_self: false
+            }]
+        );
+        d.leave().await;
+
+        let Some((mut d, url, _)) = driver("name_you") else {
+            return;
+        };
+        let (seen, _) = collect(&mut d, &url, |e| {
+            matches!(call(e), Some(Event::Chat { .. }))
+        })
+        .await;
+        assert_eq!(
+            seen.iter()
+                .filter_map(call)
+                .filter(|e| matches!(e, Event::Chat { .. }))
+                .collect::<Vec<_>>(),
+            [&Event::Chat {
+                text: "You Li: opt out".into(),
+                from_self: false
+            }],
+            "not mistaken for the notetaker's own message"
+        );
+        d.leave().await;
+    }
+
+    #[tokio::test]
+    async fn audio_that_arrived_while_the_notice_was_being_posted_is_not_kept() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        // `slow_chat` takes 0.8 s to show our message, so about 8 frames pile up meanwhile.
+        let Some((mut d, url, _)) = driver("slow_chat") else {
+            return;
+        };
+        let (seen, err) = collect(&mut d, &url, |e| matches!(e, DriverEvent::Audio(_))).await;
+        assert_eq!(err, None);
+        let admitted = seen
+            .iter()
+            .position(|e| matches!(call(e), Some(Event::Admitted)))
+            .unwrap();
+        assert!(
+            admitted < seen.len() - 1,
+            "the first audio frame comes after Admitted"
+        );
+        let dropped = d.run.as_ref().unwrap().dropped_at_admission;
+        assert!(
+            dropped >= 5,
+            "only {dropped} buffered frames were thrown away at admission"
+        );
+        d.leave().await;
     }
 }
