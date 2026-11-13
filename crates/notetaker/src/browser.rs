@@ -170,6 +170,8 @@ impl Browser {
                 "--use-fake-device-for-media-stream",
                 "--use-fake-ui-for-media-stream",
             ])
+            // Audio capture starts without a click, so the audio context must not wait for one.
+            .arg("--autoplay-policy=no-user-gesture-required")
             .args([
                 "--no-first-run",
                 "--no-default-browser-check",
