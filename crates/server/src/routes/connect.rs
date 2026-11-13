@@ -147,16 +147,19 @@ pub(super) async fn callback(
 
 pub(super) async fn status(State(app): State<App>, jar: CookieJar) -> Res<Json<serde_json::Value>> {
     let u = app.current_user(&jar).await?;
-    let connected: i64 = app
+    let (connected, reconnect) = app
         .tenant(u.tenant_id.clone(), move |c| {
-            Ok(c.query_row(
+            let n: i64 = c.query_row(
                 "SELECT COUNT(*) FROM google_tokens WHERE member_id = ?1",
                 [&u.id],
                 |r| r.get(0),
-            )?)
+            )?;
+            Ok((n > 0, google_tokens::needs_reconnect(c, &u.id)?))
         })
         .await?;
-    Ok(Json(serde_json::json!({ "connected": connected > 0 })))
+    Ok(Json(
+        serde_json::json!({ "connected": connected, "needs_reconnect": reconnect }),
+    ))
 }
 
 /// Revokes the grant at Google (best effort: a failure never keeps the token) and hard-deletes it.

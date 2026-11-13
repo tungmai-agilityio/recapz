@@ -81,6 +81,7 @@ fn google(base: &str) -> Google {
         token_url: format!("{base}/token"),
         userinfo_url: format!("{base}/userinfo"),
         revoke_url: format!("{base}/revoke"),
+        ..Google::default()
     }
 }
 
@@ -198,14 +199,20 @@ async fn connecting_asks_for_offline_calendar_access_and_stores_the_encrypted_to
     }
     assert!(to.starts_with(&format!("{base}/auth?")));
 
-    assert_eq!(connected(&app, &session).await, r#"{"connected":false}"#);
+    assert_eq!(
+        connected(&app, &session).await,
+        r#"{"connected":false,"needs_reconnect":false}"#
+    );
     let r = callback(&app, &session, "good").await;
     assert_eq!(r.location.as_deref(), Some("/?calendar=connected"));
     assert_eq!(
         stored(dir.path()),
         Some(("rt-1".into(), format!("openid email {CAL}")))
     );
-    assert_eq!(connected(&app, &session).await, r#"{"connected":true}"#);
+    assert_eq!(
+        connected(&app, &session).await,
+        r#"{"connected":true,"needs_reconnect":false}"#
+    );
 }
 
 #[tokio::test]
@@ -294,7 +301,10 @@ async fn disconnect_revokes_at_google_and_hard_deletes_the_token() {
     );
     assert_eq!(stored(dir.path()), None);
     assert_eq!(*revoked.lock().unwrap(), vec!["rt-1".to_string()]);
-    assert_eq!(connected(&app, &session).await, r#"{"connected":false}"#);
+    assert_eq!(
+        connected(&app, &session).await,
+        r#"{"connected":false,"needs_reconnect":false}"#
+    );
     // Disconnecting again is harmless and calls Google no second time.
     assert_eq!(
         send(&app, del(&session)).await.status,

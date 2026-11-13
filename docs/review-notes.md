@@ -102,3 +102,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Opt-out calls `purge_meeting`, which deletes the meeting row, so no `opted_out` status remains to show. Confirm that is the intended outcome; keeping a stub row would need a purge variant.
 - The "may be cut short" note set on a recovered recording is cleared by the transcribe job when it succeeds (it resets `error`). Say so if the note should survive.
 - The spawned loop and the Meet driver are not wired yet; `run_meeting`, `claim_scheduled` and `recover` are tested with the scripted driver and called from the loop in the Meet driver PRs.
+
+## Calendar sync (assumptions)
+- Sync runs every 10 minutes per connected member for the next 7 days, one member at a time, and starts only when `google.client_id` and `RECAPZ_SECRET_KEY` are set. A malformed key stops the server at start.
+- `invalid_grant` deletes the token and sets a "reconnect" marker in the tenant `settings` table (`google_reconnect:<member>`); `GET /api/calendar` returns `needs_reconnect` for it, and saving a new token or disconnecting clears it. Events already synced stay.
+- Booking meetings from calendar events (`calendar::book_due`) is still not called anywhere; it belongs in the notetaker loop that PR 11 and later wire up.
