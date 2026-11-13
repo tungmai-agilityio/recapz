@@ -46,6 +46,14 @@ pub fn handle(
                 params![mid, s.start_ms, s.end_ms, s.text],
             )?;
         }
+        // Names come before the report and the index so both read the labelled transcript: jobs run
+        // oldest first. Only a call recording has the samples file.
+        if tenant_dir(data_dir, tenant_id)
+            .join(format!("audio/{mid}/speakers.jsonl"))
+            .exists()
+        {
+            crate::jobs::enqueue(c, crate::label_job::KIND, Some(mid), None)?;
+        }
         if then_report {
             c.execute(
                 "UPDATE meetings SET status='reporting', error=NULL WHERE id=?1",
@@ -168,6 +176,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn a_call_recording_queues_label_before_report_and_index_an_upload_queues_none() {
+        let wav = wav_1s();
+        let (dir, c, job) = setup(Some(&wav));
+        handle(&c, &job, dir.path(), "t1", &StubTranscriber, true).unwrap();
+        let kinds = |c: &Connection| -> Vec<String> {
+            c.prepare("SELECT kind FROM jobs WHERE state='queued' ORDER BY id")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            kinds(&c),
+            vec!["report", "index"],
+            "an upload has no samples"
+        );
+
+        std::fs::write(
+            tenant_dir(dir.path(), "t1").join("audio/m1/speakers.jsonl"),
+            "",
+        )
+        .unwrap();
+        c.execute("DELETE FROM jobs WHERE state='queued'", [])
+            .unwrap();
+        handle(&c, &job, dir.path(), "t1", &StubTranscriber, true).unwrap();
+        assert_eq!(kinds(&c), vec!["label", "report", "index"]);
     }
 
     #[test]

@@ -7,6 +7,20 @@ pub struct Sample {
     pub speaker: String,
 }
 
+/// Reads `speakers.jsonl`, one `{"at_ms":..,"speaker":..}` per line. A line that does not parse is
+/// skipped, because a crash can cut the last one short.
+pub fn parse_jsonl(text: &str) -> Vec<Sample> {
+    text.lines()
+        .filter_map(|l| {
+            let v: serde_json::Value = serde_json::from_str(l).ok()?;
+            Some(Sample {
+                at_ms: v["at_ms"].as_i64()?,
+                speaker: v["speaker"].as_str()?.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// The speaker with the most samples inside `[start_ms, end_ms]`, or `None` when nobody was sampled.
 /// Both ends are inclusive, so a sample on a shared boundary counts for both neighbours (intended).
 /// Ties go to the speaker who appears first in the window.
@@ -52,6 +66,13 @@ mod tests {
         ];
         assert_eq!(speaker_for(&v, 0, 1000), Some("B"));
         assert_eq!(speaker_for(&v, 1000, 6000), Some("A"));
+    }
+
+    #[test]
+    fn jsonl_lines_parse_and_a_cut_line_is_skipped() {
+        let t = "{\"at_ms\":250,\"speaker\":\"Ann\"}\n{\"at_ms\":500,\"speaker\":\"Bo\"}\n{\"at_ms\":75";
+        assert_eq!(parse_jsonl(t), vec![s(250, "Ann"), s(500, "Bo")]);
+        assert!(parse_jsonl("").is_empty());
     }
 
     #[test]

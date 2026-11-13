@@ -145,3 +145,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The login window is a separate Chromium instance from calls; calls copy the profile, so a login or logout never disturbs a call in progress, but a call already running keeps its copy until it ends.
 - `logout` hard deletes the profile folder and is safe to repeat. Excluding `notetaker-profile/` from backups is applied in the deploy PR.
 - `login` only proves the browser exited cleanly and wrote a profile, not that the person finished signing in (Chromium creates the profile on first start), so it says "profile saved" and asks for a test call. `logout` does not check for an open login window; delete it only when no login window is open.
+
+## Labelling speakers (PR 13)
+- `speakers.rs` moved from the notetaker crate to core (the notetaker re-exports it), so the `label` job can use `speaker_for` without core depending on a browser crate.
+- Sample times count from admission, the same start as the recording, so they line up with segment times. Not checked against a real call.
+- The `transcribe` job queues `label` first, then `report` and `index`, only when the call's `speakers.jsonl` exists. Jobs run oldest first, so the report reads named speakers. If `label` itself fails and is retried, the report may already have run with generic names; accepted for v1.
+- Each name becomes a `speakers` row with `label` and `display_name` set to the call's display name; members are not matched. Segments with no samples stay unnamed.
