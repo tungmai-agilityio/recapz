@@ -135,6 +135,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn captures_a_tone_played_over_an_in_page_connection() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         if find_chromium(None).is_none() {
             println!("SKIPPED: no Chromium found");
             return;

@@ -22,3 +22,11 @@ pub fn serve(html: &'static str) -> String {
     });
     url
 }
+
+static BROWSER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Real-browser tests run one at a time: several Chromium instances at once make the audio timing
+/// test miss its tolerance on a busy machine.
+pub async fn exclusive() -> tokio::sync::MutexGuard<'static, ()> {
+    BROWSER.lock().await
+}
