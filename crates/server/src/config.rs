@@ -11,6 +11,7 @@ pub struct Google {
     pub token_url: String,
     pub userinfo_url: String,
     pub revoke_url: String,
+    pub events_url: String,
 }
 
 impl Default for Google {
@@ -22,6 +23,7 @@ impl Default for Google {
             token_url: "https://oauth2.googleapis.com/token".into(),
             userinfo_url: "https://openidconnect.googleapis.com/v1/userinfo".into(),
             revoke_url: "https://oauth2.googleapis.com/revoke".into(),
+            events_url: "https://www.googleapis.com/calendar/v3/calendars/primary/events".into(),
         }
     }
 }
