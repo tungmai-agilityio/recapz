@@ -29,12 +29,8 @@ pub fn decode_frame(payload: &str) -> Option<Vec<i16>> {
     if bytes.len() % 2 != 0 {
         return None;
     }
-    Some(
-        bytes
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]))
-            .collect(),
-    )
+    let (pairs, _) = bytes.as_chunks::<2>();
+    Some(pairs.iter().map(|b| i16::from_le_bytes(*b)).collect())
 }
 
 /// Adds the capture script to every document the page loads from now on (and the current one),
