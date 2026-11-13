@@ -10,7 +10,7 @@ base64 = "0.22"
 chromiumoxide = "0.9.1"
 futures-util = "0.3"
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "macros", "time", "process"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "process", "sync"] }
 
 [features]
 # Tests that start a real Chromium (`make test-browser`). Without it they are not compiled.

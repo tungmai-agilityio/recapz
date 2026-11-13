@@ -1,10 +1,13 @@
 //! Joining a Meet call through its web page and announcing the notetaker in chat. The page lookups
 //! live in `meet/page.js`; this side drives them and turns failures into `DriverError`s.
-//! Following the call (removal, end, participants, speakers) is the next step.
+//! `driver` builds the `CallDriver` for Meet on top of it.
 use crate::driver::DriverError;
 use chromiumoxide::{cdp::browser_protocol::input::InsertTextParams, Page};
 use serde_json::Value;
 use std::time::{Duration, Instant};
+
+mod driver;
+pub use driver::{MeetConfig, MeetDriver};
 
 const SCRIPT: &str = include_str!("meet/page.js");
 const POLL: Duration = Duration::from_millis(250);
@@ -16,6 +19,10 @@ pub enum PageState {
     Lobby,
     Admitted,
     Denied,
+    /// A participant removed the notetaker.
+    Removed,
+    /// The call is over (ended, or the notetaker is no longer in it).
+    Ended,
     /// None of the known phases: the page loads, or it has changed.
     Unknown,
 }
@@ -29,10 +36,48 @@ pub enum Joined {
     LobbyTimeout,
 }
 
+/// What one pass of the joining loop found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinStep {
+    Waiting,
+    /// Admitted and the notice is in the chat.
+    Admitted,
+    /// Refused, removed or the call is gone before admission.
+    Denied,
+}
+
+pub(crate) struct ChatLine {
+    pub text: String,
+    /// Posted by the notetaker itself.
+    pub own: bool,
+}
+
+pub(crate) struct Observation {
+    pub state: PageState,
+    pub count: Option<u32>,
+    pub speaker: Option<String>,
+    pub messages: Vec<ChatLine>,
+}
+
+fn parse_state(s: Option<&str>) -> PageState {
+    match s {
+        Some("signed_out") => PageState::SignedOut,
+        Some("prejoin") => PageState::Prejoin,
+        Some("lobby") => PageState::Lobby,
+        Some("admitted") => PageState::Admitted,
+        Some("denied") => PageState::Denied,
+        Some("removed") => PageState::Removed,
+        Some("ended") => PageState::Ended,
+        _ => PageState::Unknown,
+    }
+}
+
 pub struct MeetPage {
     page: Page,
     /// How long no known phase may show before the page counts as changed.
     pub unknown_limit: Duration,
+    asked: Option<Instant>,
+    unknown_since: Option<Instant>,
 }
 
 impl MeetPage {
@@ -40,6 +85,8 @@ impl MeetPage {
         Self {
             page,
             unknown_limit: Duration::from_secs(20),
+            asked: None,
+            unknown_since: None,
         }
     }
 
@@ -82,18 +129,42 @@ impl MeetPage {
         }
     }
 
+    /// One round trip with everything the follow loop needs.
+    pub(crate) async fn observe(&self) -> Result<Observation, DriverError> {
+        let v = self.eval("window.__recapzMeet?.observe() ?? null").await?;
+        let v: Value = match v {
+            Value::String(s) => serde_json::from_str(&s).unwrap_or(Value::Null),
+            _ => Value::Null,
+        };
+        if v.is_null() {
+            return Err(DriverError::UiChanged("page_script".to_string()));
+        }
+        Ok(Observation {
+            state: parse_state(v["state"].as_str()),
+            count: v["count"].as_u64().map(|c| c as u32),
+            speaker: v["speaker"].as_str().map(str::to_string),
+            messages: v["messages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|m| ChatLine {
+                    text: m["text"].as_str().unwrap_or("").to_string(),
+                    own: m["self"] == true,
+                })
+                .collect(),
+        })
+    }
+
+    /// Clicks the leave button; the caller closes the browser either way.
+    pub(crate) async fn leave(&self) -> Result<(), DriverError> {
+        self.act("leave()").await
+    }
+
     pub async fn state(&self) -> Result<PageState, DriverError> {
         let v = self
             .eval("window.__recapzMeet?.state() ?? 'unknown'")
             .await?;
-        Ok(match v.as_str() {
-            Some("signed_out") => PageState::SignedOut,
-            Some("prejoin") => PageState::Prejoin,
-            Some("lobby") => PageState::Lobby,
-            Some("admitted") => PageState::Admitted,
-            Some("denied") => PageState::Denied,
-            _ => PageState::Unknown,
-        })
+        Ok(parse_state(v.as_str()))
     }
 
     /// Posts `notice` in the call chat and checks it appears. `ChatOff` when chat is disabled.
@@ -126,56 +197,69 @@ impl MeetPage {
         Err(DriverError::UiChanged("chat_send".to_string()))
     }
 
-    /// Opens `url`, turns camera and microphone off, asks to join, waits to be let in (at most
-    /// `lobby_limit`) and posts `notice`. When the notice cannot be posted the call is not
-    /// recorded: the error says why and the caller leaves.
+    /// One pass of joining: turns devices off and asks to join once, then reports whether the
+    /// notetaker is let in (with the notice posted), refused, or still waiting. When the notice
+    /// cannot be posted the error says why and the caller leaves without recording.
+    pub async fn step_join(&mut self, notice: &str) -> Result<JoinStep, DriverError> {
+        match self.state().await? {
+            PageState::SignedOut => return Err(DriverError::SignedOut),
+            PageState::Denied | PageState::Removed | PageState::Ended => {
+                return Ok(JoinStep::Denied)
+            }
+            PageState::Admitted => {
+                self.announce(notice).await?;
+                return Ok(JoinStep::Admitted);
+            }
+            PageState::Prejoin if self.asked.is_none() => {
+                self.act("prepare()").await?;
+                self.act("join()").await?;
+                self.asked = Some(Instant::now());
+            }
+            // Still on the join page after asking: the click did nothing, so the page changed.
+            PageState::Prejoin
+                if self
+                    .asked
+                    .is_some_and(|t| t.elapsed() >= self.unknown_limit) =>
+            {
+                return Err(DriverError::UiChanged("join_button".to_string()));
+            }
+            PageState::Unknown => {
+                let since = *self.unknown_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= self.unknown_limit {
+                    // Before asking, the join button is the missing piece; after, the lobby text.
+                    let step = if self.asked.is_some() {
+                        "lobby_state"
+                    } else {
+                        "join_button"
+                    };
+                    return Err(DriverError::UiChanged(step.to_string()));
+                }
+                return Ok(JoinStep::Waiting);
+            }
+            PageState::Prejoin | PageState::Lobby => {}
+        }
+        self.unknown_since = None;
+        Ok(JoinStep::Waiting)
+    }
+
+    /// Opens `url` and joins, waiting to be let in for at most `lobby_limit`.
     pub async fn join(
-        &self,
+        &mut self,
         url: &str,
         notice: &str,
         lobby_limit: Duration,
     ) -> Result<Joined, DriverError> {
         self.open(url).await?;
-        let (start, mut unknown_since, mut asked) =
-            (Instant::now(), None::<Instant>, None::<Instant>);
+        let start = Instant::now();
         loop {
-            match self.state().await? {
-                PageState::SignedOut => return Err(DriverError::SignedOut),
-                PageState::Denied => return Ok(Joined::Denied),
-                PageState::Admitted => {
-                    self.announce(notice).await?;
-                    return Ok(Joined::Admitted);
+            match self.step_join(notice).await? {
+                JoinStep::Admitted => return Ok(Joined::Admitted),
+                JoinStep::Denied => return Ok(Joined::Denied),
+                JoinStep::Waiting if start.elapsed() >= lobby_limit => {
+                    return Ok(Joined::LobbyTimeout)
                 }
-                PageState::Prejoin if asked.is_none() => {
-                    self.act("prepare()").await?;
-                    self.act("join()").await?;
-                    asked = Some(Instant::now());
-                }
-                // Still on the join page after asking: the click did nothing, so the page changed.
-                PageState::Prejoin if asked.is_some_and(|t| t.elapsed() >= self.unknown_limit) => {
-                    return Err(DriverError::UiChanged("join_button".to_string()));
-                }
-                PageState::Unknown => {
-                    let since = *unknown_since.get_or_insert_with(Instant::now);
-                    if since.elapsed() >= self.unknown_limit {
-                        // Before asking, the join button is the missing piece; after, the lobby text.
-                        let step = if asked.is_some() {
-                            "lobby_state"
-                        } else {
-                            "join_button"
-                        };
-                        return Err(DriverError::UiChanged(step.to_string()));
-                    }
-                }
-                PageState::Prejoin | PageState::Lobby => {}
+                JoinStep::Waiting => tokio::time::sleep(POLL).await,
             }
-            if !matches!(self.state().await?, PageState::Unknown) {
-                unknown_since = None;
-            }
-            if start.elapsed() >= lobby_limit {
-                return Ok(Joined::LobbyTimeout);
-            }
-            tokio::time::sleep(POLL).await;
         }
     }
 }
@@ -230,6 +314,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn admitted_at_once_turns_devices_off_and_posts_the_notice_once() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         let Some((r, meet, _b)) = run("admit", Duration::from_secs(30)).await else {
             return;
         };
@@ -239,7 +324,7 @@ mod browser_tests {
             "camera and microphone off"
         );
         let log = meet
-            .eval("[...document.querySelectorAll('ul li')].map(l => l.textContent)")
+            .eval("[...document.querySelectorAll('ul[aria-label=\"Chat messages\"] li')].map(l => l.textContent)")
             .await
             .unwrap();
         assert_eq!(
@@ -252,6 +337,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn waits_in_the_lobby_then_posts_the_notice_after_admission() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         let Some((r, meet, _b)) = run("lobby_admit", Duration::from_secs(30)).await else {
             return;
         };
@@ -261,6 +347,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn the_end_states_are_reported_as_what_they_are() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         let cases: [(&str, Duration, Result<Joined, DriverError>); 8] = [
             ("denied", Duration::from_secs(30), Ok(Joined::Denied)),
             (
@@ -309,6 +396,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn another_persons_matching_message_does_not_count_and_an_empty_notice_is_refused() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         // `chat_echo` shows a message that already starts like our notice.
         let Some((r, meet, _b)) = run("chat_echo", Duration::from_secs(30)).await else {
             return;
@@ -319,7 +407,7 @@ mod browser_tests {
             "our own post raises the count above the echo"
         );
         let n = meet
-            .eval("document.querySelectorAll('ul li').length")
+            .eval("document.querySelectorAll('ul[aria-label=\"Chat messages\"] li').length")
             .await
             .unwrap();
         assert_eq!(n, 2, "the earlier message and exactly one notice of ours");
