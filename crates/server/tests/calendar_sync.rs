@@ -64,6 +64,7 @@ async fn mock_google(events_mode: &'static str) -> (Google, Mock) {
                 }
                 match (events_mode, q.get("pageToken").map(String::as_str)) {
                     ("down", _) => (StatusCode::INTERNAL_SERVER_ERROR, String::new()),
+                    ("endless", _) => (StatusCode::OK, serde_json::json!({"items": [ev("e1", "Standup", 10)], "nextPageToken": "again"}).to_string()),
                     ("huge", _) => (StatusCode::OK, " ".repeat(5 * 1024 * 1024)),
                     (_, None) => (StatusCode::OK, serde_json::json!({"items": [ev("e1", "Standup", 10)], "nextPageToken": "p2"}).to_string()),
                     (_, Some("p2")) => (StatusCode::OK, serde_json::json!({"items": [ev("e2", "Review", 60)]}).to_string()),
@@ -173,7 +174,7 @@ async fn invalid_grant_deletes_the_token_asks_to_reconnect_and_keeps_synced_even
 
 #[tokio::test]
 async fn other_failures_keep_the_token_and_the_events() {
-    for mode in ["down", "huge"] {
+    for mode in ["down", "huge", "endless"] {
         let (dir, tenant) = setup(Some("rt-good"));
         let (g, _) = mock_google("ok").await;
         run(&dir, &tenant, &g).await.unwrap();

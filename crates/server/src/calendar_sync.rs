@@ -86,10 +86,11 @@ async fn fetch(
         all.extend(page.events);
         token = page.next_page_token;
         if token.is_none() {
-            break;
+            return Ok(all);
         }
     }
-    Ok(all)
+    // A partial list would make `calendar::sync` delete real events, so keep what is stored.
+    bail!("too many calendar pages")
 }
 
 /// Syncs one member's next seven days. Any other failure (network, 5xx, bad reply) is an `Err`

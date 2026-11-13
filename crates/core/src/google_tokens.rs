@@ -102,15 +102,20 @@ pub fn delete(c: &Connection, member_id: &str) -> Result<()> {
 /// Google no longer honours the token (revoked, password change, Testing-mode expiry): hard delete
 /// it and remember that the member should be asked to reconnect.
 pub fn mark_revoked(c: &Connection, member_id: &str) -> Result<()> {
-    c.execute(
-        "DELETE FROM google_tokens WHERE member_id = ?1",
-        [member_id],
-    )?;
-    c.execute(
-        "INSERT INTO settings (key, value) VALUES (?1, '1') ON CONFLICT (key) DO UPDATE SET value = '1'",
-        [marker(member_id)],
-    )?;
-    Ok(())
+    c.execute_batch("BEGIN")?;
+    let done = (|| -> Result<()> {
+        c.execute(
+            "DELETE FROM google_tokens WHERE member_id = ?1",
+            [member_id],
+        )?;
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, '1') ON CONFLICT (key) DO UPDATE SET value = '1'",
+            [marker(member_id)],
+        )?;
+        Ok(())
+    })();
+    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+    done
 }
 
 pub fn needs_reconnect(c: &Connection, member_id: &str) -> Result<bool> {
