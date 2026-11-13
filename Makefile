@@ -1,4 +1,4 @@
-.PHONY: dev local test lint release
+.PHONY: dev local test test-browser lint release
 
 dev:
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -10,6 +10,10 @@ local:
 test:
 	cargo test --workspace
 	pnpm -C web test
+
+# Tests that start a real Chromium; prints SKIPPED when none is installed.
+test-browser:
+	cargo test -p recapz-notetaker --features browser-tests browser_tests -- --nocapture
 
 lint:
 	cargo fmt --check
