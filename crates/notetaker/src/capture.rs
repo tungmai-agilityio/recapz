@@ -11,6 +11,9 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 const SCRIPT: &str = include_str!("meet/capture.js");
 const BINDING: &str = "recapzAudio";
+/// A real frame is 3200 bytes, 4268 base64 characters. Anything larger comes from a page that is
+/// not our script (any script on the call page can call the binding) and is dropped unread.
+const MAX_PAYLOAD: usize = 8 * 1024;
 
 pub struct AudioCapture {
     pub frames: mpsc::Receiver<Vec<i16>>,
@@ -25,6 +28,9 @@ impl Drop for AudioCapture {
 
 /// Decodes one binding payload: base64 of 16-bit little-endian samples. Bad payloads give `None`.
 pub fn decode_frame(payload: &str) -> Option<Vec<i16>> {
+    if payload.len() > MAX_PAYLOAD {
+        return None;
+    }
     let bytes = STANDARD.decode(payload).ok()?;
     if bytes.len() % 2 != 0 {
         return None;
@@ -47,7 +53,11 @@ pub async fn start(page: &Page) -> Result<AudioCapture> {
                 continue;
             }
             if let Some(frame) = decode_frame(&e.payload) {
-                if tx.send(frame).await.is_err() {
+                // Never wait on the reader: a flood from the page must not stall or grow the queue.
+                if matches!(
+                    tx.try_send(frame),
+                    Err(mpsc::error::TrySendError::Closed(_))
+                ) {
                     break; // the reader is gone
                 }
             }

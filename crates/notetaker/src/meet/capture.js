@@ -3,7 +3,8 @@
 // base64 of 16-bit little-endian samples. Nothing here sends audio anywhere else.
 (() => {
   // Audio worklets exist only in secure contexts (https, localhost); about:blank has none.
-  if (!window.isSecureContext || window.__recapzCapture) return;
+  // Only the top page: frames from several iframes would interleave into one broken timeline.
+  if (window !== window.top || !window.isSecureContext || window.__recapzCapture) return;
   window.__recapzCapture = true;
   const FRAME = 1600; // 100 ms at 16 kHz
   const ctx = new AudioContext({ sampleRate: 16000 });
