@@ -101,8 +101,7 @@ mod browser_tests {
         wav::WavWriter,
     };
     use std::{
-        io::{Cursor, Read, Write},
-        net::TcpListener,
+        io::Cursor,
         time::{Duration, Instant},
     };
 
@@ -120,24 +119,6 @@ mod browser_tests {
       await pc1.setRemoteDescription(pc2.localDescription);
     })();
     </script>"#;
-
-    /// Serves the fixture on localhost (a secure context, which audio worklets require).
-    fn serve() -> String {
-        let l = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/", l.local_addr().unwrap());
-        std::thread::spawn(move || {
-            for mut c in l.incoming().flatten() {
-                let mut buf = [0u8; 1024];
-                let _ = c.read(&mut buf);
-                let _ = write!(
-                    c,
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{FIXTURE}",
-                    FIXTURE.len()
-                );
-            }
-        });
-        url
-    }
 
     /// Signal power at one frequency (Goertzel).
     fn power(samples: &[i16], hz: f64) -> f64 {
@@ -170,7 +151,9 @@ mod browser_tests {
         .unwrap();
         let page = b.inner.new_page("about:blank").await.unwrap();
         let mut cap = start(&page).await.unwrap();
-        page.goto(serve()).await.unwrap();
+        page.goto(crate::test_support::serve(FIXTURE))
+            .await
+            .unwrap();
 
         // Collect three seconds of frames, starting at the first one.
         let mut samples: Vec<i16> = Vec::new();
