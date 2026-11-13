@@ -130,3 +130,9 @@ export async function ask(question: string, onToken: (t: string) => void): Promi
     if (done) return citations
   }
 }
+
+export interface CalendarStatus { connected: boolean; needs_reconnect: boolean }
+
+export const getCalendar = async (): Promise<CalendarStatus> => (await check(await fetch('/api/calendar'))).json()
+
+export const disconnectCalendar = async () => { await check(await fetch('/api/calendar', { method: 'DELETE', headers: csrf() })) }
