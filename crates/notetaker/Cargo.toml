@@ -5,10 +5,10 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-anyhow = "1.0.104"
+anyhow = "1"
 chromiumoxide = "0.9.1"
-futures-util = "0.3.34"
-tokio = { version = "1.54.1", features = ["rt", "macros", "time", "process"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["rt", "macros", "time", "process"] }
 
 [features]
 # Tests that start a real Chromium (`make test-browser`). Without it they are not compiled.

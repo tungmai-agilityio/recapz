@@ -111,5 +111,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Notetaker browser launch (assumptions)
 - Uses `chromiumoxide` 0.9.1 (released and building on Rust 1.85+, so it looks maintained; the hand-written fallback in the plan was not needed). Chromium is started by `std::process::Command` in its own process group, then `chromiumoxide` only connects to its debug port, so cleanup does not depend on the library.
 - The process group is killed through `kill(1)` instead of a `libc` call, to avoid one more dependency. Unix only (macOS for dev, Linux for the server).
-- The per-call work folder is created with mode 0700 and deleted with the browser. Callers should put it under the data folder (for example `data/notetaker-tmp/<meeting id>`), which is already excluded from nothing; the decision to exclude the Chromium profile from backups is applied by excluding `notetaker-profile/` and `notetaker-tmp/` in the deploy PR.
+- The per-call work folder is created with mode 0700 and deleted with the browser. Callers should put it under the data folder (for example `data/notetaker-tmp/<meeting id>`). Backups do not exclude it yet; the deploy PR will exclude `notetaker-profile/` and `notetaker-tmp/`.
+- Chromium listens for DevTools on a random localhost port, so any local user on the server can reach a running notetaker browser. Keep the server single-purpose or restrict local logins.
+- A server killed without a handler (SIGKILL) leaves its browser and work folder behind; the loop PR should sweep `notetaker-tmp/` at startup.
 - `make test-browser` runs the real-browser test; with no Chromium it prints SKIPPED and returns (it does not fail the build).

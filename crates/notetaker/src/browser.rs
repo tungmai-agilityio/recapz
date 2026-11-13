@@ -23,33 +23,61 @@ const SKIP: &[&str] = &[
     "GrShaderCache",
 ];
 
+/// A per-call folder that is deleted when dropped, whatever path leaves the scope.
+pub struct WorkDir(PathBuf);
+
+impl WorkDir {
+    /// Creates `path` (private to the owner); it must not exist yet.
+    pub fn create(path: PathBuf) -> Result<Self> {
+        if path.exists() {
+            bail!("work dir already exists");
+        }
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&path)?;
+        Ok(Self(path))
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for WorkDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A child started in its own process group, so renderer and GPU helpers die with it.
 pub struct ProcessGroup {
     child: Child,
-    work_dir: PathBuf,
+    _work_dir: WorkDir, // dropped after the kill below, so the folder goes last
 }
 
 impl ProcessGroup {
-    /// Spawns `cmd` and takes ownership of `work_dir`, which is deleted on drop (also when the
-    /// spawn fails).
-    pub fn spawn(cmd: &mut Command, work_dir: PathBuf) -> Result<Self> {
-        match cmd
+    /// Spawns `cmd` and takes ownership of `work_dir` (also deleted when the spawn fails).
+    pub fn spawn(cmd: &mut Command, work_dir: WorkDir) -> Result<Self> {
+        let child = cmd
             .process_group(0)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(child) => Ok(Self { child, work_dir }),
-            Err(e) => {
-                let _ = fs::remove_dir_all(&work_dir);
-                Err(e.into())
-            }
-        }
+            .spawn()?;
+        Ok(Self {
+            child,
+            _work_dir: work_dir,
+        })
     }
 
     pub fn pid(&self) -> u32 {
         self.child.id()
+    }
+
+    /// Whether the process has already exited.
+    fn exited(&mut self) -> bool {
+        !matches!(self.child.try_wait(), Ok(None))
     }
 }
 
@@ -61,7 +89,6 @@ impl Drop for ProcessGroup {
             .stderr(Stdio::null())
             .status();
         let _ = self.child.wait();
-        let _ = fs::remove_dir_all(&self.work_dir);
     }
 }
 
@@ -128,26 +155,17 @@ pub struct Browser {
 impl Browser {
     pub async fn launch(o: Launch) -> Result<Self> {
         let exe = find_chromium(o.chromium.as_deref()).context("Chromium not found")?;
-        if o.work_dir.exists() {
-            bail!("work dir already exists");
-        }
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(&o.work_dir)?;
-        let user_data = o.work_dir.join("profile");
-        let prepared = match &o.profile {
-            Some(src) => copy_profile(src, &user_data),
-            None => Ok(fs::DirBuilder::new().mode(0o700).create(&user_data)?),
-        };
-        if let Err(e) = prepared {
-            let _ = fs::remove_dir_all(&o.work_dir);
-            return Err(e);
+        let work = WorkDir::create(o.work_dir)?; // every `?` below removes it again
+        let user_data = work.path().join("profile");
+        match &o.profile {
+            Some(src) => copy_profile(src, &user_data)?,
+            None => fs::DirBuilder::new().mode(0o700).create(&user_data)?,
         }
         let mut cmd = Command::new(exe);
         cmd.arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", user_data.display()))
-            // No real camera or microphone is ever opened, and the notetaker sends no audio.
+            // The real camera and microphone are never opened (the fake ones play a test tone).
+            // The fake UI accepts permission prompts for them without a person.
             .args([
                 "--use-fake-device-for-media-stream",
                 "--use-fake-ui-for-media-stream",
@@ -161,8 +179,8 @@ impl Browser {
             cmd.arg("--headless=new");
         }
         // From here, dropping `group` on any error kills the browser and removes the work dir.
-        let group = ProcessGroup::spawn(&mut cmd, o.work_dir)?;
-        let port = debug_port(&user_data.join("DevToolsActivePort")).await?;
+        let mut group = ProcessGroup::spawn(&mut cmd, work)?;
+        let port = debug_port(&mut group, &user_data.join("DevToolsActivePort")).await?;
         let (inner, mut events) =
             chromiumoxide::Browser::connect(format!("http://127.0.0.1:{port}"))
                 .await
@@ -186,15 +204,23 @@ impl Drop for Browser {
     }
 }
 
-/// Chromium writes its debug port to this file in the profile folder once it is listening.
-async fn debug_port(file: &Path) -> Result<u16> {
+/// Chromium writes its debug port (first line) and a browser path (second line) to this file in
+/// the profile folder once it is listening; waiting for both avoids a half-written number.
+/// Fails at once when the process has already exited.
+async fn debug_port(group: &mut ProcessGroup, file: &Path) -> Result<u16> {
     let start = Instant::now();
     while start.elapsed() < START_TIMEOUT {
-        if let Some(port) = fs::read_to_string(file)
-            .ok()
-            .and_then(|s| s.lines().next().and_then(|l| l.trim().parse().ok()))
-        {
-            return Ok(port);
+        if let Ok(text) = fs::read_to_string(file) {
+            let mut lines = text.lines();
+            if let (Some(port), Some(_)) = (
+                lines.next().and_then(|l| l.trim().parse().ok()),
+                lines.next(),
+            ) {
+                return Ok(port);
+            }
+        }
+        if group.exited() {
+            bail!("the browser exited before it started listening");
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -204,6 +230,7 @@ async fn debug_port(file: &Path) -> Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     fn alive(pid: &str) -> bool {
         Command::new("kill")
@@ -233,13 +260,13 @@ mod tests {
     #[test]
     fn dropping_the_group_kills_its_helpers_and_removes_the_work_dir() {
         let work = tmp("group");
-        fs::create_dir_all(&work).unwrap();
+        let guard = WorkDir::create(work.clone()).unwrap();
         let pidfile = work.join("helper.pid");
         // A parent that starts a helper of its own, like a browser's renderer.
         let mut cmd = Command::new("sh");
         cmd.arg("-c")
             .arg(format!("sleep 300 & echo $! > {}; wait", pidfile.display()));
-        let g = ProcessGroup::spawn(&mut cmd, work.clone()).unwrap();
+        let g = ProcessGroup::spawn(&mut cmd, guard).unwrap();
         assert!(wait_for(
             || fs::read_to_string(&pidfile).is_ok_and(|s| !s.trim().is_empty())
         ));
@@ -255,8 +282,8 @@ mod tests {
     #[test]
     fn a_failed_spawn_still_removes_the_work_dir() {
         let work = tmp("nospawn");
-        fs::create_dir_all(&work).unwrap();
-        assert!(ProcessGroup::spawn(&mut Command::new("/no/such/binary"), work.clone()).is_err());
+        let guard = WorkDir::create(work.clone()).unwrap();
+        assert!(ProcessGroup::spawn(&mut Command::new("/no/such/binary"), guard).is_err());
         assert!(!work.exists());
     }
 
@@ -276,6 +303,8 @@ mod tests {
             fs::write(src.join(f), f).unwrap();
         }
         copy_profile(&src, &dst).unwrap();
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!((mode(&dst), mode(&dst.join("Default"))), (0o700, 0o700));
         let mut got: Vec<String> = Vec::new();
         for d in [&dst, &dst.join("Default"), &dst.join("Default/Network")] {
             for e in fs::read_dir(d).unwrap() {
@@ -304,6 +333,44 @@ mod tests {
         assert_eq!(find_chromium(Some(&file)), Some(file.clone()));
         assert_eq!(find_chromium(Some(Path::new("/no/such/chromium"))), None);
         fs::remove_file(file).unwrap();
+    }
+
+    fn launch_with(exe: &str, profile: Option<PathBuf>, work: &Path) -> Result<Browser> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(Browser::launch(Launch {
+            chromium: Some(PathBuf::from(exe)),
+            profile,
+            work_dir: work.to_path_buf(),
+            headless: true,
+        }))
+    }
+
+    #[test]
+    fn failed_launches_leave_no_work_dir_behind() {
+        // A browser that exits at once is reported at once, not after the start timeout.
+        let work = tmp("exits");
+        let began = Instant::now();
+        assert!(launch_with("/usr/bin/true", None, &work).is_err());
+        assert!(began.elapsed() < Duration::from_secs(5));
+        assert!(!work.exists());
+        // The saved profile cannot be copied.
+        let work = tmp("nocopy");
+        assert!(launch_with(
+            "/usr/bin/true",
+            Some(PathBuf::from("/no/such/profile")),
+            &work
+        )
+        .is_err());
+        assert!(!work.exists());
+        // A work dir that already exists is refused and left alone.
+        let work = tmp("exists");
+        fs::create_dir_all(&work).unwrap();
+        assert!(launch_with("/usr/bin/true", None, &work).is_err());
+        assert!(work.exists());
+        fs::remove_dir_all(&work).unwrap();
     }
 }
 
