@@ -16,6 +16,11 @@
     signIn: { role: 'link', name: /^sign in$/i },
     lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon/i,
     deniedText: /denied your request|you can.?t join this call/i,
+    rejoin: { role: 'button', name: /^rejoin$/i },
+    participantCount: /^(\d+) participants?$/i,
+    speaking: /^(.+), speaking$/i,
+    removedText: /you.?ve been removed from the (call|meeting)/i,
+    endedText: /the (call|meeting) has ended|you left the (call|meeting)/i,
     chatOffText: /chat (is|has been) turned off|can.?t send messages/i,
   };
   const roleOf = (el) =>
@@ -33,6 +38,8 @@
   window.__recapzMeet = {
     // The page's current phase, in the order a call goes through them.
     state() {
+      if (S.removedText.test(text())) return 'removed';
+      if (S.endedText.test(text()) || find(S.rejoin)) return 'ended';
       if (find(S.leave)) return 'admitted';
       if (S.deniedText.test(text())) return 'denied';
       if (S.lobbyText.test(text())) return 'lobby';
@@ -67,6 +74,35 @@
     clickSend() {
       const b = find(S.chatSend);
       if (!b) return fail('chat_send');
+      b.click();
+      return ok();
+    },
+    // Everything the follow loop needs in one round trip: phase, participant count, who is
+    // marked as speaking, and the chat log (with our own messages flagged).
+    observe() {
+      const count = [...document.querySelectorAll('[aria-label]')]
+        .map((e) => S.participantCount.exec(e.getAttribute('aria-label')))
+        .find((m) => m);
+      const speaker = [...document.querySelectorAll('[aria-label]')]
+        .map((e) => S.speaking.exec(e.getAttribute('aria-label')))
+        .find((m) => m);
+      const log = find(S.chatLog);
+      const messages = log
+        ? [...log.children].map((m) => {
+            const own = /^you\b[:\s]*/i.exec(m.textContent);
+            return { text: own ? m.textContent.slice(own[0].length) : m.textContent, self: !!own };
+          })
+        : [];
+      return JSON.stringify({
+        state: this.state(),
+        count: count ? Number(count[1]) : null,
+        speaker: speaker ? speaker[1] : null,
+        messages,
+      });
+    },
+    leave() {
+      const b = find(S.leave);
+      if (!b) return fail('leave_button');
       b.click();
       return ok();
     },

@@ -135,6 +135,7 @@ pub fn find_chromium(configured: Option<&Path>) -> Option<PathBuf> {
     .find(|p| p.is_file())
 }
 
+#[derive(Clone)]
 pub struct Launch {
     /// `notetaker.chromium_path`; `None` searches the usual locations.
     pub chromium: Option<PathBuf>,
@@ -383,6 +384,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn launches_connects_uses_a_copy_of_the_profile_and_cleans_up() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
         if find_chromium(None).is_none() {
             println!("SKIPPED: no Chromium found");
             return;

@@ -131,3 +131,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Camera and microphone toggles are only clicked when the page offers "turn off"; the fake devices in the launcher mean a real device is never opened either way.
 - Capture installs its hook before the page loads, so audio frames can flow while the notetaker is still in the lobby. The follow step must write no frames to disk until `join` returns `Admitted` (notice posted), and must leave the call when `join` returns an error.
 - A join click that has no effect (the join page still showing after `unknown_limit`) is reported as `meet_ui_changed: join_button`, and the notice only counts as posted when the number of chat messages starting like it goes up.
+
+## Notetaker following the call (assumptions)
+- Participant count, who is speaking, the chat log, "removed", "ended" and the rejoin button are looked up in `meet/page.js` by labels we modelled ("N participants", "Name, speaking", "You've been removed from the call", "Rejoin"). Like the join labels they are unverified against Meet; the live check must confirm each. Chat texts from others arrive as the page shows them, sender name included, so the opt-out words match whole words anywhere in the line.
+- `MeetDriver` looks at the page every 250 ms and drops audio frames until admission and the posted notice; it returns `NoAudio` after 5 minutes without a frame (the plan's 60-second warning log is not added: this crate does not log).
+- Speaker sample times count from admission, while the recording starts at the first frame after it; the gap is a few hundred milliseconds, inside the matching window used by `speaker_for`.
+- Browser tests now take a shared lock so only one Chromium runs at a time; with several at once the audio timing test missed its 200 ms tolerance on a busy machine.

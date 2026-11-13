@@ -25,18 +25,26 @@ const joined = () => {
 };
 const incall = () => {
   app.innerHTML = btn('Leave call') + btn('Chat with everyone', null, s === 'chat_off' ? 'disabled' : '')
+    + `<div role="status" aria-label="${s === 'alone' ? '1 participant' : '3 participants'}"></div>`
+    + '<ul aria-label="Participants" role="list"><li aria-label="Ann, speaking"></li><li aria-label="Bo"></li></ul>'
     + '<div id="panel"></div>';
+  const later = (ms, f) => setTimeout(f, ms);
+  const say = (who, t) => { const ul = document.querySelector('ul[aria-label="Chat messages"]');
+    if (!ul) return; const li = document.createElement('li'); li.textContent = who + ': ' + t; ul.appendChild(li); };
+  if (s === 'removed') later(1500, () => { app.innerHTML = '<p>You\'ve been removed from the call</p>'; });
+  if (s === 'ended') later(1500, () => { app.innerHTML = '<p>The call has ended</p>' + btn('Rejoin'); });
+  if (s === 'opt_out') later(1500, () => say('Sam', 'Please opt out, thanks'));
   const chat = app.querySelector('[aria-label="Chat with everyone"]');
   chat.onclick = () => {
     document.getElementById('panel').innerHTML =
       '<ul aria-label="Chat messages" role="list"></ul><textarea aria-label="Send a message to everyone"></textarea>'
       + '<button aria-label="Send message">Send</button>';
     const ta = document.querySelector('textarea');
-    if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector('ul').appendChild(e); }
+    if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector('ul[aria-label="Chat messages"]').appendChild(e); }
     document.querySelector('[aria-label="Send message"]').onclick = () => {
       if (s === 'chat_send_broken' || !ta.value) return;
       const li = document.createElement('li'); li.textContent = 'You: ' + ta.value;
-      document.querySelector('ul').appendChild(li); ta.value = '';
+      document.querySelector('ul[aria-label="Chat messages"]').appendChild(li); ta.value = '';
     };
   };
 };
