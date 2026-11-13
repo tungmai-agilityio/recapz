@@ -156,3 +156,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Xvfb runs as its own unit on `:99` and the server unit sets `DISPLAY=:99`; not run on a real host. Chromium's package name and its user-namespace policy differ by distribution, so the docs say what is needed instead of one command for all.
 - `/etc/recapz/recapz.env` must exist (the unit reads it); the deploy steps create it empty with mode 0640.
 - The backup script skips `notetaker-profile/` and `notetaker-tmp/`. Checked with a throwaway data folder: the recording and the database copies are kept, both cookie files are not.
+
+## Calendar connect on Recording & privacy (PR 14)
+- The prototype's Recording & privacy screen needs a settings API that does not exist yet, so this PR adds the screen with only the calendar row; the other rows stay unticked in `docs/ui-parity.md`. The tile copies the prototype's Connections tile (logo, name, one line, badge) inside the screen's boxed row layout.
+- The Google callback now redirects to `/recording?calendar=<outcome>` (it was `/`), so the member lands where the outcome is shown.
+- Notetaker sign-in status is not shown: the server has no endpoint for it. Add one with the settings API, then a status row here.
+- Checked by eye in the in-app browser: Daylight and Ink, mobile width. Dark mode was not checked beyond the shared tokens. Screenshot of this screen and the prototype's are in the thread.
+- The server does not serve the built web app yet (no static or fallback route in `crates/server`), so outside `make dev` the redirect to `/recording?...` has no page to land on, same as the earlier redirect to `/`. Serving the app is a separate gap; not part of this plan.

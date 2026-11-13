@@ -80,7 +80,7 @@ async fn revoke(app: &App, member: &str, token: &str) {
 /// Ends the flow by sending the member back to the app with the outcome in the query.
 fn back(jar: CookieJar, outcome: &str) -> Res<(CookieJar, Redirect)> {
     let jar = jar.remove(Cookie::build(STATE_COOKIE).path("/auth").build());
-    Ok((jar, Redirect::to(&format!("/?calendar={outcome}"))))
+    Ok((jar, Redirect::to(&format!("/recording?calendar={outcome}"))))
 }
 
 pub(super) async fn callback(
