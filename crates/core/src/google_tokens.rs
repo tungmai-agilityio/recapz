@@ -15,7 +15,7 @@ pub struct SecretKey([u8; 32]);
 impl SecretKey {
     pub fn from_hex(s: &str) -> Result<Self> {
         let s = s.trim();
-        if s.len() != 64 || !s.is_ascii() {
+        if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
             bail!("secret key must be 64 hex characters");
         }
         let mut k = [0u8; 32];
@@ -181,8 +181,28 @@ mod tests {
 
     #[test]
     fn keys_must_be_64_hex_characters() {
-        for bad in ["", "abcd", &KEY_A[..63], &format!("{}g", &KEY_A[..63])] {
+        for bad in [
+            "",
+            "abcd",
+            &KEY_A[..63],
+            &format!("{}g", &KEY_A[..63]),
+            &format!("+{}", &KEY_A[1..]),
+        ] {
             assert!(SecretKey::from_hex(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn every_save_uses_a_fresh_nonce() {
+        let (_d, c) = setup();
+        let nonce = |c: &Connection| -> Vec<u8> {
+            c.query_row("SELECT nonce FROM google_tokens", [], |r| r.get(0))
+                .unwrap()
+        };
+        save(&c, &key(KEY_A), "u1", "same", "s").unwrap();
+        let first = nonce(&c);
+        save(&c, &key(KEY_A), "u1", "same", "s").unwrap();
+        assert_eq!(first.len(), 24);
+        assert_ne!(first, nonce(&c));
     }
 }
