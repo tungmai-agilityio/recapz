@@ -65,6 +65,14 @@ test('the active rail item and breadcrumb follow the route', async () => {
   expect(document.querySelector('header')?.textContent).not.toContain('Meetings')
 })
 
+test('Recording & privacy is in the rail under Workspace, active on its route, with its breadcrumb', async () => {
+  mount('/recording', signedIn())
+  expect((await screen.findByRole('link', { name: 'Recording & privacy' })).getAttribute('aria-current')).toBe('page')
+  expect(screen.getByRole('heading', { name: 'Recording & privacy' })).toBeTruthy()
+  expect(document.querySelector('header')?.textContent).toContain('Workspace / Recording & privacy')
+  expect(screen.getByRole('link', { name: 'Meetings' }).getAttribute('aria-current')).toBeNull()
+})
+
 test('Sign out posts to /auth/logout and returns to the sign-in card', async () => {
   const calls: string[] = []
   mount('/', signedIn(), calls)

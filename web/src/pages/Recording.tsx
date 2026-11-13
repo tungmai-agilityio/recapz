@@ -1,0 +1,87 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { disconnectCalendar, getCalendar } from '../api'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { PageHead } from '../ui/PageHead'
+import { useToast } from '../ui/toast-context'
+
+/** What the server redirects back with after Google's consent screen. */
+const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
+  connected: { tone: 'good', text: 'Google Calendar is connected.' },
+  denied: { tone: 'bad', text: 'Calendar access was not granted, so nothing was connected.' },
+  scope_missing: { tone: 'bad', text: 'The calendar box was unticked on the Google screen, so nothing was connected.' },
+  wrong_account: { tone: 'bad', text: 'That Google account is not the one you signed in with. Pick the same account and try again.' },
+  error: { tone: 'bad', text: 'Google Calendar could not be connected. Try again.' },
+}
+
+export function Recording() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [params, setParams] = useSearchParams()
+  const outcome = outcomes[params.get('calendar') ?? '']
+  const cal = useQuery({ queryKey: ['calendar'], queryFn: getCalendar })
+  const [asking, setAsking] = useState(false)
+  const off = useMutation({
+    mutationFn: disconnectCalendar,
+    onSuccess: () => { setAsking(false); toast('Google Calendar disconnected'); qc.invalidateQueries({ queryKey: ['calendar'] }) },
+  })
+  // The outcome is read once from the address, then dropped so a reload does not repeat it.
+  useEffect(() => { if (outcome) qc.invalidateQueries({ queryKey: ['calendar'] }) }, [outcome, qc])
+  const dismiss = () => setParams((p) => { p.delete('calendar'); return p }, { replace: true })
+
+  const c = cal.data
+  const state = !c ? null : c.needs_reconnect ? 'reconnect' : c.connected ? 'connected' : 'none'
+  return (
+    <section>
+      <PageHead title="Recording & privacy" lede="Who gets recorded, what people are told, and how long anything is kept." />
+      {outcome && (
+        <p role={outcome.tone === 'bad' ? 'alert' : undefined} aria-live={outcome.tone === 'bad' ? undefined : 'polite'}
+          className={`mt-4 flex items-start justify-between gap-3 rounded-md px-3 py-2 text-sm ${outcome.tone === 'good' ? 'bg-good-wash text-good' : 'bg-bad-wash text-bad'}`}>
+          <span>{outcome.text}</span>
+          <button type="button" onClick={dismiss} className="font-medium underline">Dismiss</button>
+        </p>
+      )}
+      <div className="mt-6 rounded-lg border border-hair bg-sheet">
+        <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+          <div>
+            <h2 className="font-semibold">Calendar</h2>
+            <p className="mt-1 text-sm text-mute">Recapz reads your Google Calendar to find meetings with a video link. It never changes your calendar.</p>
+          </div>
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-md bg-speaker-1 text-sm font-bold text-primary-fg">G</span>
+              {state === 'connected' && <Badge tone="good">Connected</Badge>}
+              {state === 'reconnect' && <Badge tone="bad">Reconnect needed</Badge>}
+              {state === 'none' && <Badge>Not connected</Badge>}
+            </div>
+            <h3 className="mt-2 font-semibold">Google Calendar</h3>
+            <p className="text-sm text-mute">
+              {state === 'reconnect' ? 'Google stopped accepting the saved access, so new meetings are not being found.' : 'Finds meetings to join'}
+            </p>
+            {cal.isError && <p role="alert" className="mt-3 text-sm text-bad">Could not load the calendar connection.</p>}
+            {state && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {state !== 'connected' && (
+                  <a href="/auth/calendar" className="inline-flex items-center rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg no-underline hover:opacity-90">
+                    {state === 'reconnect' ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+                  </a>
+                )}
+                {state !== 'none' && <Button variant="danger" onClick={() => setAsking(true)}>Disconnect</Button>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {asking && (
+        <ConfirmDialog title="Disconnect Google Calendar?" confirmLabel="Disconnect" busy={off.isPending}
+          error={off.isError ? 'Could not disconnect. Try again.' : undefined}
+          onConfirm={() => off.mutate()} onCancel={() => { setAsking(false); off.reset() }}>
+          Recapz forgets the saved access and stops finding your meetings. Meetings already recorded stay.
+        </ConfirmDialog>
+      )}
+    </section>
+  )
+}

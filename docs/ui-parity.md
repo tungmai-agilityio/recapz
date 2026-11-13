@@ -88,6 +88,8 @@ once the list returns the owner.
 - [ ] Default sharing and Who can sign in radio groups
 
 ## S8 Recording & privacy (blocked: settings API)
+- [x] Calendar row: Google Calendar tile with Connected, Reconnect needed or Not connected, Connect or Reconnect, Disconnect with confirm, and the `?calendar=` outcome message (both skins, mobile checked by eye)
+- [ ] Notetaker sign-in status on this screen: no API exposes it yet (a signed-out account only shows as a failed meeting's error), so there is nothing to show
 - [ ] Join rule radios, notetaker name, join message
 - [ ] Retention selects (audio, transcripts); "Where data lives" read-only text
 - [ ] Delete everything one participant said, with confirm; Save changes; saved toast

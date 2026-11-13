@@ -204,7 +204,7 @@ async fn connecting_asks_for_offline_calendar_access_and_stores_the_encrypted_to
         r#"{"connected":false,"needs_reconnect":false}"#
     );
     let r = callback(&app, &session, "good").await;
-    assert_eq!(r.location.as_deref(), Some("/?calendar=connected"));
+    assert_eq!(r.location.as_deref(), Some("/recording?calendar=connected"));
     assert_eq!(
         stored(dir.path()),
         Some(("rt-1".into(), format!("openid email {CAL}")))
@@ -223,7 +223,11 @@ async fn nothing_is_stored_when_calendar_is_unticked_or_the_account_differs() {
     let session = sign_in(&app).await;
     for (code, outcome) in [("unticked", "scope_missing"), ("other", "wrong_account")] {
         let r = callback(&app, &session, code).await;
-        assert_eq!(r.location, Some(format!("/?calendar={outcome}")), "{code}");
+        assert_eq!(
+            r.location,
+            Some(format!("/recording?calendar={outcome}")),
+            "{code}"
+        );
         assert_eq!(stored(dir.path()), None, "{code}");
     }
     // Both grants Google issued but we refused are cancelled at Google.
@@ -238,7 +242,7 @@ async fn nothing_is_stored_when_calendar_is_unticked_or_the_account_differs() {
     .unwrap();
     assert_eq!(
         send(&app, req).await.location.as_deref(),
-        Some("/?calendar=denied")
+        Some("/recording?calendar=denied")
     );
     assert_eq!(stored(dir.path()), None);
 }
