@@ -1,7 +1,7 @@
 [Unit]
 Description=Recapz server
-After=network-online.target
-Wants=network-online.target
+After=network-online.target recapz-xvfb.service
+Wants=network-online.target recapz-xvfb.service
 
 [Service]
 User=recapz
@@ -9,6 +9,9 @@ Group=recapz
 WorkingDirectory=/var/lib/recapz
 Environment=RECAPZ_CONFIG=/etc/recapz/config.toml
 Environment=RUST_LOG=info
+Environment=DISPLAY=:99
+# RECAPZ_SECRET_KEY (64 hex characters) lives here, not in config.toml.
+EnvironmentFile=/etc/recapz/recapz.env
 ExecStart=/usr/local/bin/recapz
 Restart=on-failure
 RestartSec=5
