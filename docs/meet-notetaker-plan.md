@@ -140,7 +140,7 @@ assumes.
 - Restart recovery: on start, any meeting left in `joining` fails with `server_restarted`; any meeting in
   `recording` gets its WAV header repaired (the samples are on disk), moves to `transcribing` and is
   marked with a note that the recording may be cut short. No automatic rejoin in v1.
-- Hard cap: leave after `max_call_minutes` (default 240) with `LeaveReason::MaxDuration`.
+- Hard cap: leave after `max_call_minutes` (default 240, counted from the join attempt) with `LeaveReason::MaxDuration`.
 - Cross-member dedupe (two members booking the same call) stays an open issue; the loop joins once per
   meeting row.
 
