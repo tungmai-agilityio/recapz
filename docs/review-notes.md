@@ -115,3 +115,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Chromium listens for DevTools on a random localhost port, so any local user on the server can reach a running notetaker browser. Keep the server single-purpose or restrict local logins.
 - A server killed without a handler (SIGKILL) leaves its browser and work folder behind; the loop PR should sweep `notetaker-tmp/` at startup.
 - `make test-browser` runs the real-browser test; with no Chromium it prints SKIPPED and returns (it does not fail the build).
+
+## Notetaker audio capture (assumptions)
+- Capture hooks `RTCPeerConnection` in the page before its own scripts run, so a call page that builds its connections through another constructor (or in a worker) would be missed. The tone test proves the mechanism against our own loopback page, not against the real call page; only the live check can prove that.
+- The mix is one stream: if several remote tracks carry the same speaker they add up and the result is clamped. A very loud overlap can clip.
+- The capture needs a secure context (https or localhost) and the `--autoplay-policy=no-user-gesture-required` flag, which the launcher now sets.
