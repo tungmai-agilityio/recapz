@@ -122,7 +122,7 @@ mod tests {
         );
         assert!(has_login(&data));
 
-        assert_eq!(logout(&data).unwrap(), true);
+        assert!(logout(&data).unwrap());
         assert!(!profile_dir(&data).exists() && !has_login(&data));
         assert_eq!(
             logout(&data).unwrap(),
