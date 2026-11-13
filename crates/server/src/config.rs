@@ -44,6 +44,14 @@ pub struct Llm {
     pub price_output: u64,
 }
 
+/// Settings for the browser notetaker.
+#[derive(Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Notetaker {
+    /// Chromium or Chrome binary; empty searches the usual locations.
+    pub chromium_path: String,
+}
+
 #[derive(Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
@@ -56,6 +64,7 @@ pub struct Config {
     pub dev_login: bool,
     pub google: Google,
     pub llm: Llm,
+    pub notetaker: Notetaker,
     /// ggml speech model file used by the transcribe job (needs the `whisper` build feature).
     pub speech_model: PathBuf,
     /// Questions one member may ask per minute (each one is a paid model call).
@@ -82,6 +91,7 @@ impl Default for Config {
             dev_login: false,
             google: Google::default(),
             llm: Llm::default(),
+            notetaker: Notetaker::default(),
             speech_model: "./models/ggml-large-v3-turbo.bin".into(),
             ask_per_minute: 20,
             embedder: "hash".into(),

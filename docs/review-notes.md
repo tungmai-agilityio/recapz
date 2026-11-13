@@ -139,3 +139,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Browser tests now take a shared lock so only one Chromium runs at a time; with several at once the audio timing test missed its 200 ms tolerance on a busy machine.
 - Our own chat lines are recognised by a leading "You:"; a participant named "You Li" is not mistaken for the notetaker. If the real page labels our own lines differently, opt-outs from others would still be seen (they are never flagged as ours) but our notice could be re-read as a member message; the live check covers this.
 - The chat line count is clamped when the log shrinks (panel closed and reopened), so an opt-out typed after a reopen is still seen. Lines re-rendered after a reopen can be reported again, which is harmless once a leave decision exists.
+
+## Notetaker login (assumptions)
+- `recapz notetaker-login` runs Chromium directly on `data/notetaker-profile/` (mode 0700, tightened if it already existed) with no debug port, so only the person at the window types the password. It succeeds only if the browser exits cleanly and wrote a profile. On Linux it needs `DISPLAY` or `WAYLAND_DISPLAY`; the error tells the person to use SSH X forwarding or VNC. A signed-out session later shows up as `notetaker_signed_out` on the meeting.
+- The login window is a separate Chromium instance from calls; calls copy the profile, so a login or logout never disturbs a call in progress, but a call already running keeps its copy until it ends.
+- `logout` hard deletes the profile folder and is safe to repeat. Excluding `notetaker-profile/` from backups is applied in the deploy PR.

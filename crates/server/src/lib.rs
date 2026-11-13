@@ -1,4 +1,5 @@
 pub mod calendar_sync;
+pub mod cli;
 pub mod config;
 pub mod embedder;
 pub mod google_calendar;

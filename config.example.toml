@@ -6,6 +6,8 @@ speech_model = "./models/ggml-large-v3-turbo.bin"  # ggml file; needs a build wi
 embedder = "hash"  # Ask text embedder; "hash" is built in (word overlap, no model download)
 ask_per_minute = 20  # questions per member per minute
 dev_login = false            # local development only: enables POST /auth/dev-login
+max_concurrent_calls = 2     # calls the notetaker may be in at once
+max_call_minutes = 240       # hard cap on one call
 
 [google]
 client_id = ""
@@ -21,3 +23,10 @@ model = ""
 max_tokens = 2048   # reasoning models (gpt-5 family) spend this on thinking first; start at 8192 for them
 price_input = 0          # micro-USD per million input tokens
 price_output = 0         # micro-USD per million output tokens
+
+# The browser notetaker joins calls with a saved Google sign-in:
+#   recapz notetaker-login    opens a window once to sign in the notetaker's account
+#   recapz notetaker-logout   deletes the saved sign-in
+# Also set RECAPZ_SECRET_KEY (64 hex characters) in the environment for calendar connect.
+[notetaker]
+chromium_path = ""       # empty searches the usual locations
