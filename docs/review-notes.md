@@ -151,3 +151,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Sample times count from admission, the same start as the recording, so they line up with segment times. Not checked against a real call.
 - The `transcribe` job queues `label` first, then `report` and `index`, only when the call's `speakers.jsonl` exists. Jobs run oldest first, so the report reads named speakers. If `label` itself fails and is retried, the report may already have run with generic names; accepted for v1.
 - Each name becomes a `speakers` row with `label` and `display_name` set to the call's display name; members are not matched. Segments with no samples stay unnamed.
+
+## Deploy for the notetaker (PR 15)
+- Xvfb runs as its own unit on `:99` and the server unit sets `DISPLAY=:99`; not run on a real host. Chromium's package name and its user-namespace policy differ by distribution, so the docs say what is needed instead of one command for all.
+- `/etc/recapz/recapz.env` must exist (the unit reads it); the deploy steps create it empty with mode 0640.
+- The backup script skips `notetaker-profile/` and `notetaker-tmp/`. Checked with a throwaway data folder: the recording and the database copies are kept, both cookie files are not.

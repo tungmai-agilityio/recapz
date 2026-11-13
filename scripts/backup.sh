@@ -12,7 +12,8 @@ find . -name '*.sqlite' | while read -r f; do
   mkdir -p "$dest/$(dirname "$f")"
   sqlite3 "$f" ".backup '$dest/$f'"
 done
-# everything else (recordings); skip SQLite files and their -wal/-shm sidecars
-find . -type f ! -name '*.sqlite' ! -name '*.sqlite-wal' ! -name '*.sqlite-shm' -print0 | rsync -a --from0 --files-from=- . "$dest/"
+# everything else (recordings); skip SQLite files and their -wal/-shm sidecars, and the notetaker's
+# saved Google sign-in and per-call browser copies (live session cookies never go into a backup)
+find . -type f ! -name '*.sqlite' ! -name '*.sqlite-wal' ! -name '*.sqlite-shm' ! -path './notetaker-profile/*' ! -path './notetaker-tmp/*' -print0 | rsync -a --from0 --files-from=- . "$dest/"
 find "$out" -mindepth 1 -maxdepth 1 -type d -mtime +"$keep" -exec rm -rf {} +
 echo "$dest"
