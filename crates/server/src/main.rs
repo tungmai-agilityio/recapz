@@ -11,6 +11,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let cfg =
         Config::load(&std::env::var("RECAPZ_CONFIG").unwrap_or_else(|_| "config.toml".into()))?;
+    if let Some(result) = recapz_server::cli::run(std::env::args().nth(1).as_deref(), &cfg) {
+        return result;
+    }
     let control = db::open_control(&cfg.data_dir)?;
     if !cfg.bootstrap_admin_email.is_empty() {
         db::bootstrap_admin(&control, &cfg.bootstrap_admin_email)?;

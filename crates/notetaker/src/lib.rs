@@ -5,6 +5,7 @@ pub mod driver;
 pub mod links;
 pub mod meet;
 pub mod optout;
+pub mod profile;
 pub mod session;
 pub mod speakers;
 #[cfg(all(test, feature = "browser-tests"))]
