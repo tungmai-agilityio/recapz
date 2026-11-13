@@ -1,7 +1,11 @@
 //! Writes captured 16 kHz mono PCM as a WAV file, so the recording is playable and the speech
 //! step can read it back. The size fields are patched on `finish`, so a crash leaves a file whose
 //! header says zero length; the samples are still on disk.
-use std::io::{self, Seek, SeekFrom, Write};
+use std::{
+    fs::OpenOptions,
+    io::{self, Seek, SeekFrom, Write},
+    path::Path,
+};
 
 const RATE: u32 = 16_000;
 
@@ -46,6 +50,21 @@ impl<W: Write + Seek> WavWriter<W> {
         self.out.flush()?;
         Ok(self.out)
     }
+}
+
+/// Fixes the size fields of a recording that was never finished (a crash or restart), using the
+/// file length. A trailing half sample is ignored.
+pub fn repair(path: &Path) -> io::Result<()> {
+    let mut f = OpenOptions::new().read(true).write(true).open(path)?;
+    let len = f.metadata()?.len();
+    if len < 44 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "not a WAV file"));
+    }
+    let data = ((len - 44) & !1) as u32;
+    f.seek(SeekFrom::Start(4))?;
+    f.write_all(&(36 + data).to_le_bytes())?;
+    f.seek(SeekFrom::Start(40))?;
+    f.write_all(&data.to_le_bytes())
 }
 
 #[cfg(test)]
@@ -94,5 +113,26 @@ mod tests {
             .into_inner();
         assert_eq!(b.len(), 44);
         assert_eq!(u32::from_le_bytes(b[40..44].try_into().unwrap()), 0);
+    }
+
+    #[test]
+    fn repair_restores_sizes_of_an_unfinished_recording() {
+        let dir = std::env::temp_dir().join(format!("recapz-wav-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("r.wav");
+        let mut w = WavWriter::new(std::fs::File::create(&path).unwrap()).unwrap();
+        w.write(&[1, 2, 3]).unwrap();
+        drop(w); // never finished: header says zero length
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(&[9]) // half a sample
+            .unwrap();
+        repair(&path).unwrap();
+        let b = std::fs::read(&path).unwrap();
+        assert_eq!(u32::from_le_bytes(b[40..44].try_into().unwrap()), 6);
+        assert_eq!(u32::from_le_bytes(b[4..8].try_into().unwrap()), 42);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
