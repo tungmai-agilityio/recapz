@@ -3,6 +3,7 @@ pub mod calendar;
 pub mod chunk;
 pub mod db;
 pub mod embed;
+pub mod google_tokens;
 pub mod index_job;
 pub mod jobs;
 pub mod purge;
