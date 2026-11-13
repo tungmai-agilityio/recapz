@@ -1,8 +1,8 @@
 # Google Meet notetaker plan
 
-Status: **proposed, needs the maintainer's approval.** Nothing in this plan is built. Facts marked
-*unverified* come from general knowledge and must be checked against Google's current docs before the
-PR that depends on them. Decisions marked **(pending)** wait on the maintainer.
+Status: **open questions answered by the maintainer (2026-11-12/13); plan awaits approval.** Nothing in
+this plan is built. Facts marked *unverified* come from general knowledge and must be checked against
+Google's current docs before the PR that depends on them.
 
 ## What exists today
 
@@ -25,7 +25,8 @@ Goals for this plan: a notetaker that joins a Meet call from a pasted link or a 
 itself, records the call audio to `audio/<meeting id>/`, leaves on the existing rules, and hands the
 recording to the same `transcribe` job uploads use.
 
-Non-goals: Zoom (Meeting SDK bot, `docs/zoom-join-path.md`), Teams, live view streaming, video capture,
+Non-goals: Zoom (comes after Meet; the join path in `docs/zoom-join-path.md` will be revisited then,
+with Zoom's real-time media streams as a candidate that needs no bot), Teams, live view streaming, video capture,
 hosted speech (opt-in per `docs/hosted-speech.md`, unaffected by this plan).
 
 ## 1. Join path
@@ -34,30 +35,32 @@ hosted speech (opt-in per `docs/hosted-speech.md`, unaffected by this plan).
 
 | Option | How | Pros | Cons |
 |---|---|---|---|
-| **A. Chromium on the Meet web client** (proposed) | Rust drives Chromium over the DevTools protocol | Works on any Meet call the account can reach; no Google review; audio stays on our server | Page changes break it; automation may be detected; terms risk (see Risks) |
-| B. Meet Media API | Official real-time media over WebRTC | Supported interface, per-participant audio | Developer Preview *(unverified as of 2026-11)*; enrollment and restricted scopes; likely limited to calls in our own Workspace |
+| **A. Chromium on the Meet web client** (chosen) | Rust drives Chromium over the DevTools protocol | Works on any Meet call the account can reach; no Google review; audio stays on our server | Page changes break it; automation may be detected; terms risk (see Risks) |
+| B. Meet Media API | Official real-time media over WebRTC | Supported interface, no participant in the call | Never left Developer Preview; Google announced its shutdown on 2026-10-28, endpoints off on 2027-01-15 ([release notes](https://developers.google.com/workspace/meet/release-notes)) |
 | C. Meet REST API after the call | Read Google's own recording or transcript | No bot at all | Needs Workspace plans with recording/transcripts; no Vietnamese quality data; no opt-out in call |
 | D. Scrape in-call captions | Read caption text from the page | No audio handling | Caption languages and quality are Google's, not our whisper; still a bot |
 
-Decision: **A for v1**, keep B as the replacement to revisit when it leaves preview. Upload stays the
-fallback for calls the notetaker cannot join.
+Decision (maintainer, 2026-11-12): **A for v1.** B is being shut down, so it is not an option. Upload stays
+the fallback for calls the notetaker cannot join.
 
-### Identity: signed-in account vs guest **(pending)**
+### Identity: signed-in account vs guest
 
-| | Dedicated Workspace account in the team's domain (proposed) | Free Google account | Guest (not signed in) |
+Decision (maintainer, 2026-11-12): **a dedicated Workspace account in the team's domain.**
+
+| | Dedicated Workspace account in the team's domain (chosen) | Free Google account | Guest (not signed in) |
 |---|---|---|---|
 | Admit | Same-domain calls usually admit without knocking *(unverified, depends on the call's access setting)* | Knocks on every call | Knocks; many Workspace domains block anonymous guests |
 | Calendar invites | Can be invited like a person | Same | Not possible |
 | Detection risk | Lowest: real account, persistent profile | Medium | Highest |
 | Cost | One Workspace seat | Free | Free |
 
-Proposed: a dedicated account such as `notetaker@<team domain>`, signed in **once by a human** through a
+The account, such as `notetaker@<team domain>`, is signed in **once by a human** through a
 `recapz notetaker-login` command that opens a visible Chromium window on the server's display (or over
 SSH X forwarding / VNC). The browser profile is kept in `data/notetaker-profile/` (mode 0700). Automated
 password entry is not built: it trips Google's sign-in protection and needs 2FA handling.
 
-The profile directory is a credential. It is excluded from backups (re-login is cheap), never logged, and
-removed by `recapz notetaker-logout`.
+The profile directory is a credential. It is excluded from backups (decided 2026-11-13; re-login is
+cheap), never logged, and removed by `recapz notetaker-logout`.
 
 ### Join flow
 
@@ -85,8 +88,7 @@ and labels over class names, and every lookup that fails reports a named step (`
   recording and transcribing this call for {owner name}. Type 'opt out' to make it leave and delete the
   recording." It is posted once per call.
 - If the chat message cannot be posted (chat disabled for participants), the notetaker **leaves**:
-  without the notice there is no consent and no way to opt out. Proposed default; the maintainer can
-  relax it.
+  without the notice there is no consent and no way to opt out. Decision (maintainer, 2026-11-13).
 - Opt-out works from the lobby onward (already in `Session`) and calls `purge_meeting`.
 - If a hosted speech provider is enabled, the join message also names it (open question in
   `docs/hosted-speech.md`, proposed yes).
@@ -98,7 +100,7 @@ and labels over class names, and every lookup that fails reports a named step (`
 
 ### Options
 
-| | In-page capture (proposed) | OS audio sink |
+| | In-page capture (chosen) | OS audio sink |
 |---|---|---|
 | How | Script hooks remote WebRTC audio tracks, mixes them in an `AudioContext` at 16 kHz, an `AudioWorklet` posts 16-bit frames to Rust through a DevTools binding | Chromium plays to a PulseAudio null sink per call; Rust reads the monitor source |
 | Deps | None beyond Chromium | PulseAudio on the server, one sink per call; BlackHole or similar on macOS for dev |
@@ -159,7 +161,8 @@ assumes.
   verification (no third-party security assessment, which is for restricted scopes). See Google's
   [production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview)
   and [unverified apps](https://support.google.com/cloud/answer/7454865) pages.
-- Proposed: Internal if the team is on one Workspace domain **(pending, tied to the identity decision)**.
+- Decision (maintainer, 2026-11-13): **Internal.** Only members in the team's Workspace domain can
+  connect a calendar; no Google verification is needed. A member outside the domain gets a clear error.
 
 ## 5. Token storage
 
@@ -215,8 +218,8 @@ Always: the browser process group is killed in a drop guard, and the temp profil
    consent with the scope unticked, refresh, `invalid_grant`, revoke on disconnect, encrypt/decrypt
    round trip, wrong key fails.
 6. **Live, manual, once per milestone.** The maintainer opens a test call; the checklist covers admit,
-   denied, opt-out, chat off, removal, 30-minute recording, Vietnamese and English speech. Then
-   `scripts/smoke-join.sh` runs daily on the server with `MEET_TEST_URL`.
+   denied, opt-out, chat off, removal, a call hosted outside the team's domain, 30-minute recording,
+   Vietnamese and English speech. Then `scripts/smoke-join.sh` runs daily on the server with `MEET_TEST_URL`.
 
 The fixture tests prove our code works against our model of the page. Only the live check proves the
 model matches Meet; that gap is accepted and called out in each PR.
@@ -227,7 +230,7 @@ model matches Meet; that gap is accepted and called out in each PR.
 |---|---|---|---|
 | Meet page changes | High, ongoing | Joins fail | One selectors file, ARIA first, named failure steps, daily smoke test, upload fallback |
 | Automation detected, account challenged or suspended | Medium *(unverified)* | No joins until re-login | Visible (non-headless) Chromium under a virtual display on the server, persistent profile, real account, low volume, no scripted sign-in |
-| Google terms on automated access | Real *(not legal advice)* | Account suspension | Internal use only, dedicated account, Media API as the long-term replacement |
+| Google terms on automated access | Real *(not legal advice)* | Account suspension | Internal use only, dedicated account; no official replacement exists once the Media API shuts down |
 | Workspace settings block the account | Medium | Knocks or denied | Same-domain account; `Denied` reported clearly |
 | Mixed audio only | Likely | Weaker speaker labels | Active-speaker samples; diarization later |
 | Chromium plus whisper on one GPU server | Medium | Memory pressure | `max_concurrent_calls`, transcription runs after the call |
@@ -269,10 +272,14 @@ New dependencies, each with its reason in its PR: a DevTools protocol client (`c
 *unverified that it is still maintained; fallback is a small hand-written client over
 `tokio-tungstenite`*) in PR 8, `chacha20poly1305` in PR 5.
 
-## Open questions for the maintainer
+## Maintainer decisions
 
-1. Notetaker identity: dedicated Workspace account, free Google account, or guest? (proposed: Workspace)
-2. Is the team on one Google Workspace domain, so the OAuth consent screen can be Internal?
-3. Leave when the chat notice cannot be posted? (proposed: yes)
-4. External calls (other companies' Meet links): in scope for v1? They will always knock.
-5. Retention of the Chromium profile in backups (proposed: excluded).
+Recorded 2026-11-12 and 2026-11-13.
+
+1. Meet first with the browser notetaker; Zoom later, its join path revisited then.
+2. Notetaker identity: a dedicated Workspace account in the team's domain.
+3. OAuth consent screen: Internal.
+4. When the chat notice cannot be posted, the notetaker leaves.
+5. External calls are in scope: the notetaker knocks on other companies' calls, and the live check
+   includes one.
+6. The Chromium profile is excluded from backups.
