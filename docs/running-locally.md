@@ -15,6 +15,7 @@ One command once the setup below is done: `make local` (server with real transcr
    - `dev_login = true` (local only; Google sign-in is not needed)
    - `base_url = "http://localhost:5173"`: the server rejects browser POSTs (upload, Ask) whose Origin is not `base_url`, and the browser talks to the web app on :5173. Leave the default and every upload and Ask in the browser returns 403.
    - Optional, for reports and Ask, under `[llm]`: `provider = "openai"`, `base_url = "https://api.openai.com/v1"`, `api_key`, `model` (for example `gpt-4o-mini`), and the two prices. Reasoning models (the gpt-5 family) spend `max_tokens` on thinking before the reply, so with the default 2048 some report tasks come back empty and the report fails with `invalid JSON after retry (Eof)`. Start at `max_tokens = 8192` for them (a 40-second sample already used about 3,700 thinking tokens per task, so longer meetings may need more). The key lives only in this file; keep it out of git and chat.
+   - Optional, only to try Google Calendar connect: set `RECAPZ_SECRET_KEY` in the environment (never in `config.toml`) to 64 hex characters, for example from `openssl rand -hex 32`. It encrypts stored Google refresh tokens; without it Connect calendar answers 503. Add `<base_url>/auth/calendar/callback` as an authorised redirect URI in the Google client.
 4. `pnpm -C web install`
 
 ## Run
