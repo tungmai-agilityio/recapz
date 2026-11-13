@@ -11,6 +11,7 @@ anyhow = "1"
 recapz-speech = { path = "../speech" }
 uuid = { version = "1", features = ["v7"] }
 serde_json = "1"
+chacha20poly1305 = "0.11.0"
 
 [dev-dependencies]
 tempfile = "3"
