@@ -4,6 +4,8 @@ use crate::optout::is_opt_out;
 
 pub const LOBBY_TIMEOUT_MS: i64 = 10 * 60 * 1000;
 pub const ALONE_TIMEOUT_MS: i64 = 2 * 60 * 1000;
+/// Default hard cap on a call (`max_call_minutes`, 240).
+pub const MAX_CALL_MS: i64 = 240 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
@@ -24,6 +26,10 @@ pub enum Event {
     CallEnded {
         at_ms: i64,
     },
+    /// The join was refused. Only meaningful before admission; ignored after.
+    Denied,
+    /// A participant removed the notetaker. Only meaningful after admission; ignored before.
+    Removed,
     /// Periodic clock tick so timeouts fire when nothing else happens.
     Tick {
         at_ms: i64,
@@ -35,6 +41,12 @@ pub enum LeaveReason {
     LobbyTimeout,
     Alone,
     CallEnded,
+    /// The host or a participant refused the join.
+    Denied,
+    /// A participant removed the notetaker mid-call. The audio so far is kept and transcribed.
+    Removed,
+    /// The call ran past the hard cap. The audio is kept and transcribed.
+    MaxDuration,
     /// Someone asked not to be recorded: the recording, transcript and report must be deleted.
     OptOut,
 }
@@ -49,6 +61,7 @@ pub enum Action {
 pub struct Session {
     started_ms: i64,
     admitted: bool,
+    max_call_ms: i64,
     alone_since: Option<i64>,
     done: Option<LeaveReason>,
 }
@@ -59,9 +72,16 @@ impl Session {
         Self {
             started_ms,
             admitted: false,
+            max_call_ms: MAX_CALL_MS,
             alone_since: None,
             done: None,
         }
+    }
+
+    /// Overrides the hard cap on call length, measured from `started_ms`.
+    pub fn with_max_call_ms(mut self, max_call_ms: i64) -> Self {
+        self.max_call_ms = max_call_ms;
+        self
     }
 
     /// Once a leave decision is made it stays; later events do not change it.
@@ -81,6 +101,8 @@ impl Session {
             } if is_opt_out(&text) => Some(LeaveReason::OptOut),
             Event::Chat { .. } => None,
             Event::CallEnded { .. } => Some(LeaveReason::CallEnded),
+            Event::Denied => (!self.admitted).then_some(LeaveReason::Denied),
+            Event::Removed => self.admitted.then_some(LeaveReason::Removed),
             Event::Participants { at_ms, count } => {
                 if !self.admitted {
                     // Ignored until admitted; the lobby timeout covers that time.
@@ -103,6 +125,10 @@ impl Session {
     }
 
     fn timeouts(&self, now: i64) -> Option<LeaveReason> {
+        // ponytail: the cap runs from the join attempt, so lobby time counts; fine at 240 min.
+        if self.admitted && now - self.started_ms >= self.max_call_ms {
+            return Some(LeaveReason::MaxDuration);
+        }
         if !self.admitted {
             return (now - self.started_ms >= LOBBY_TIMEOUT_MS)
                 .then_some(LeaveReason::LobbyTimeout);
@@ -277,6 +303,51 @@ mod tests {
                 count: 4
             }),
             Action::Leave(LeaveReason::Alone)
+        );
+    }
+
+    #[test]
+    fn denied_leaves_before_admission_and_is_ignored_after() {
+        let mut s = Session::new(0);
+        assert_eq!(
+            s.on_event(Event::Denied),
+            Action::Leave(LeaveReason::Denied)
+        );
+        let mut s = admitted();
+        assert_eq!(s.on_event(Event::Denied), Action::Continue);
+    }
+
+    #[test]
+    fn removed_leaves_after_admission_and_is_ignored_before() {
+        let mut s = Session::new(0);
+        assert_eq!(s.on_event(Event::Removed), Action::Continue);
+        let mut s = admitted();
+        assert_eq!(
+            s.on_event(Event::Removed),
+            Action::Leave(LeaveReason::Removed)
+        );
+    }
+
+    #[test]
+    fn max_duration_leaves_at_the_cap_not_before() {
+        let mut s = Session::new(1_000).with_max_call_ms(60_000);
+        s.on_event(Event::Admitted);
+        assert_eq!(s.on_event(Event::Tick { at_ms: 60_999 }), Action::Continue);
+        assert_eq!(
+            s.on_event(Event::Tick { at_ms: 61_000 }),
+            Action::Leave(LeaveReason::MaxDuration)
+        );
+        // Default cap is 240 minutes.
+        let mut s = admitted();
+        assert_eq!(
+            s.on_event(Event::Tick {
+                at_ms: MAX_CALL_MS - 1
+            }),
+            Action::Continue
+        );
+        assert_eq!(
+            s.on_event(Event::Tick { at_ms: MAX_CALL_MS }),
+            Action::Leave(LeaveReason::MaxDuration)
         );
     }
 }
