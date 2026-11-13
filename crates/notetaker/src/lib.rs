@@ -1,4 +1,5 @@
 //! Notetaker logic that does not need a browser: opt-out detection and speaker matching.
+pub mod browser;
 pub mod driver;
 pub mod links;
 pub mod optout;
