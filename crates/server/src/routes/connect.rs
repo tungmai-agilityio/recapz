@@ -1,7 +1,7 @@
 //! Connect and disconnect Google Calendar for the signed-in member. Sign-in keeps its own small
 //! scopes; this is a separate, optional grant (calendar read-only, offline) whose refresh token is
 //! stored encrypted. Nothing is stored when the member unticks the calendar scope.
-use super::{enc, ensure_member, ApiError, App, Res, UserInfo, OAUTH_STATE_COOKIE};
+use super::{enc, ensure_member, ApiError, App, Res, UserInfo};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -12,6 +12,8 @@ use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use recapz_core::{db, google_tokens};
 use serde::Deserialize;
 
+/// Not the sign-in state cookie, so one flow's state is never accepted by the other.
+const STATE_COOKIE: &str = "recapz_cal_state";
 const CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar.events.readonly";
 
 fn redirect_uri(app: &App) -> String {
@@ -39,7 +41,7 @@ pub(super) async fn start(State(app): State<App>, jar: CookieJar) -> Res<(Cookie
         enc(&format!("openid email {CALENDAR_SCOPE}")),
         state
     );
-    let c = Cookie::build((OAUTH_STATE_COOKIE, state))
+    let c = Cookie::build((STATE_COOKIE, state))
         .path("/auth")
         .http_only(true)
         .secure(app.secure())
@@ -63,9 +65,21 @@ struct Tokens {
     scope: String,
 }
 
+/// Asks Google to cancel a grant. Best effort: a failure is logged without the token.
+async fn revoke(app: &App, member: &str, token: &str) {
+    let sent = reqwest::Client::new()
+        .post(&app.cfg.google.revoke_url)
+        .form(&[("token", token)])
+        .send()
+        .await;
+    if sent.is_err() {
+        tracing::warn!(member = %member, "Google revoke failed");
+    }
+}
+
 /// Ends the flow by sending the member back to the app with the outcome in the query.
 fn back(jar: CookieJar, outcome: &str) -> Res<(CookieJar, Redirect)> {
-    let jar = jar.remove(Cookie::build(OAUTH_STATE_COOKIE).path("/auth").build());
+    let jar = jar.remove(Cookie::build(STATE_COOKIE).path("/auth").build());
     Ok((jar, Redirect::to(&format!("/?calendar={outcome}"))))
 }
 
@@ -76,7 +90,7 @@ pub(super) async fn callback(
 ) -> Res<(CookieJar, Redirect)> {
     let u = app.current_user(&jar).await?;
     let k = key(&app)?;
-    let expected = jar.get(OAUTH_STATE_COOKIE).map(|c| c.value().to_owned());
+    let expected = jar.get(STATE_COOKIE).map(|c| c.value().to_owned());
     if expected.as_deref() != Some(q.state.as_str()) {
         return Err(ApiError::BadRequest("invalid calendar state"));
     }
@@ -101,7 +115,10 @@ pub(super) async fn callback(
         .json()
         .await?;
     // The member can untick calendar on the consent screen: then nothing is stored.
+    // Either way Google already issued a grant we will not keep, so cancel it.
+    let unwanted = tok.refresh_token.as_deref().unwrap_or(&tok.access_token);
     if !tok.scope.split(' ').any(|s| s == CALENDAR_SCOPE) {
+        revoke(&app, &u.id, unwanted).await;
         return back(jar, "scope_missing");
     }
     let info: UserInfo = http
@@ -113,6 +130,7 @@ pub(super) async fn callback(
         .json()
         .await?;
     if !info.email_verified || !info.email.eq_ignore_ascii_case(&u.email) {
+        revoke(&app, &u.id, unwanted).await;
         return back(jar, "wrong_account");
     }
     let Some(refresh) = tok.refresh_token else {
@@ -154,14 +172,7 @@ pub(super) async fn disconnect(State(app): State<App>, jar: CookieJar) -> Res<St
         })
         .await?;
     if let Some(t) = token {
-        let sent = reqwest::Client::new()
-            .post(&app.cfg.google.revoke_url)
-            .form(&[("token", t.as_str())])
-            .send()
-            .await;
-        if sent.is_err() {
-            tracing::warn!(member = %u.id, "Google revoke failed; token already deleted here");
-        }
+        revoke(&app, &u.id, &t).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }

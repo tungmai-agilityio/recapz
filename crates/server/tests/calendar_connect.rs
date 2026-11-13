@@ -132,7 +132,7 @@ async fn start(app: &Router, session: &str) -> (String, String, Reply) {
     let state_cookie = r
         .cookies
         .iter()
-        .find(|c| c.starts_with("recapz_oauth_state="))
+        .find(|c| c.starts_with("recapz_cal_state="))
         .cloned()
         .unwrap();
     let state = state_cookie.split('=').nth(1).unwrap().to_owned();
@@ -211,7 +211,7 @@ async fn connecting_asks_for_offline_calendar_access_and_stores_the_encrypted_to
 #[tokio::test]
 async fn nothing_is_stored_when_calendar_is_unticked_or_the_account_differs() {
     let dir = tempfile::tempdir().unwrap();
-    let (base, _) = mock_google().await;
+    let (base, revoked) = mock_google().await;
     let app = app(dir.path(), google(&base), KEY);
     let session = sign_in(&app).await;
     for (code, outcome) in [("unticked", "scope_missing"), ("other", "wrong_account")] {
@@ -219,6 +219,8 @@ async fn nothing_is_stored_when_calendar_is_unticked_or_the_account_differs() {
         assert_eq!(r.location, Some(format!("/?calendar={outcome}")), "{code}");
         assert_eq!(stored(dir.path()), None, "{code}");
     }
+    // Both grants Google issued but we refused are cancelled at Google.
+    assert_eq!(*revoked.lock().unwrap(), vec!["rt-1".to_string(); 2]);
     // Declined or refused by Google: no code comes back.
     let (state, state_cookie, _) = start(&app, &session).await;
     let req = Request::get(format!(
