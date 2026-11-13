@@ -350,4 +350,25 @@ mod tests {
             Action::Leave(LeaveReason::MaxDuration)
         );
     }
+
+    #[test]
+    fn max_duration_counts_lobby_time() {
+        let mut s = Session::new(0).with_max_call_ms(60 * 60 * 1000);
+        s.on_event(Event::Tick {
+            at_ms: 5 * 60 * 1000,
+        });
+        s.on_event(Event::Admitted);
+        assert_eq!(
+            s.on_event(Event::Tick {
+                at_ms: 60 * 60 * 1000 - 1
+            }),
+            Action::Continue
+        );
+        assert_eq!(
+            s.on_event(Event::Tick {
+                at_ms: 60 * 60 * 1000
+            }),
+            Action::Leave(LeaveReason::MaxDuration)
+        );
+    }
 }
