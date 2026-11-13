@@ -82,6 +82,12 @@ mod tests {
             None,
             "odd byte count"
         );
+        let real = STANDARD.encode(vec![0u8; 3200]);
+        assert_eq!(real.len(), 4268);
+        assert_eq!(decode_frame(&real).map(|f| f.len()), Some(1600));
+        let just_over = "A".repeat(MAX_PAYLOAD + 4); // valid base64, one group over the cap
+        assert_eq!(decode_frame(&just_over), None);
+        assert_eq!(decode_frame(&"A".repeat(100_000)), None, "dropped unread");
     }
 }
 
