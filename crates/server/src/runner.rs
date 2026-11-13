@@ -1,5 +1,5 @@
 use crate::report_model::LlmReportModel;
-use recapz_core::{db, embed::Embedder, index_job, jobs, report_job, transcribe_job};
+use recapz_core::{db, embed::Embedder, index_job, jobs, label_job, report_job, transcribe_job};
 use recapz_speech::transcribe::Transcriber;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -25,9 +25,14 @@ fn run_pending(
     embedder: &dyn Embedder,
 ) -> anyhow::Result<bool> {
     let kinds: &[&str] = if report.is_some() {
-        &[transcribe_job::KIND, index_job::KIND, report_job::KIND]
+        &[
+            transcribe_job::KIND,
+            label_job::KIND,
+            index_job::KIND,
+            report_job::KIND,
+        ]
     } else {
-        &[transcribe_job::KIND, index_job::KIND]
+        &[transcribe_job::KIND, label_job::KIND, index_job::KIND]
     };
     let control = db::open_control(data_dir)?;
     let mut ran = false;
@@ -38,6 +43,7 @@ fn run_pending(
                 transcribe_job::handle(c, j, data_dir, &tenant, tx, r.is_some())
             }
             (transcribe_job::KIND, None, _) => anyhow::bail!("no speech model configured"),
+            (label_job::KIND, _, _) => label_job::handle(c, j, data_dir, &tenant),
             (report_job::KIND, _, Some(m)) => report_job::handle(c, j, m),
             (index_job::KIND, _, _) => index_job::handle(c, j, embedder),
             _ => anyhow::bail!("no handler for {}", j.kind),

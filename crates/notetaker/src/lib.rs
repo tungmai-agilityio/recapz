@@ -7,7 +7,7 @@ pub mod meet;
 pub mod optout;
 pub mod profile;
 pub mod session;
-pub mod speakers;
+pub use recapz_core::speakers;
 #[cfg(all(test, feature = "browser-tests"))]
 mod test_support;
 pub mod wav;

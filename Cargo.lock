@@ -1514,6 +1514,7 @@ dependencies = [
  "base64 0.22.1",
  "chromiumoxide",
  "futures-util",
+ "recapz-core",
  "serde_json",
  "tokio",
 ]
