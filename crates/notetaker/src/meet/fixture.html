@@ -1,0 +1,44 @@
+<!doctype html><title>call fixture</title>
+<!-- Our own minimal markup for tests, not a copy of any real page. ?s= picks the scenario. -->
+<body><div id="app"></div><script>
+const s = new URLSearchParams(location.search).get('s') || 'admit';
+const app = document.getElementById('app');
+const btn = (label, on, extra = '') => `<button aria-label="${label}" ${extra}>${label}</button>`;
+const prejoin = () => {
+  if (s === 'signed_out') { app.innerHTML = '<a href="https://accounts.example/signin">Sign in</a>'; return; }
+  if (s === 'no_join_button') { app.innerHTML = '<button>Enter</button>'; return; }
+  app.innerHTML = '<h1>Ready to join?</h1>' + btn('Turn off camera') + btn('Turn off microphone')
+    + btn(s.startsWith('lobby') ? 'Ask to join' : 'Join now');
+  app.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+    const l = b.getAttribute('aria-label');
+    if (l === 'Turn off camera') { b.setAttribute('aria-label', 'Turn on camera'); window.camOff = true; }
+    else if (l === 'Turn off microphone') { b.setAttribute('aria-label', 'Turn on microphone'); window.micOff = true; }
+    else if (/join/i.test(l)) { if (s !== 'join_noop') joined(); }
+  }));
+};
+const joined = () => {
+  if (s === 'vanishes') { app.innerHTML = '<p>Loading</p>'; return; }
+  if (s === 'denied') { app.innerHTML = '<p>Someone in the call denied your request to join</p>'; return; }
+  if (s === 'lobby_stuck') { app.innerHTML = '<p>Asking to be let in…</p>'; return; }
+  if (s === 'lobby_admit') { app.innerHTML = '<p>Asking to be let in…</p>'; setTimeout(incall, 1200); return; }
+  incall();
+};
+const incall = () => {
+  app.innerHTML = btn('Leave call') + btn('Chat with everyone', null, s === 'chat_off' ? 'disabled' : '')
+    + '<div id="panel"></div>';
+  const chat = app.querySelector('[aria-label="Chat with everyone"]');
+  chat.onclick = () => {
+    document.getElementById('panel').innerHTML =
+      '<ul aria-label="Chat messages" role="list"></ul><textarea aria-label="Send a message to everyone"></textarea>'
+      + '<button aria-label="Send message">Send</button>';
+    const ta = document.querySelector('textarea');
+    if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector('ul').appendChild(e); }
+    document.querySelector('[aria-label="Send message"]').onclick = () => {
+      if (s === 'chat_send_broken' || !ta.value) return;
+      const li = document.createElement('li'); li.textContent = 'You: ' + ta.value;
+      document.querySelector('ul').appendChild(li); ta.value = '';
+    };
+  };
+};
+prejoin();
+</script></body>

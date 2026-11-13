@@ -3,7 +3,10 @@ pub mod browser;
 pub mod capture;
 pub mod driver;
 pub mod links;
+pub mod meet;
 pub mod optout;
 pub mod session;
 pub mod speakers;
+#[cfg(all(test, feature = "browser-tests"))]
+mod test_support;
 pub mod wav;

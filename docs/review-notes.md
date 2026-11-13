@@ -122,3 +122,12 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The capture needs a secure context (https or localhost) and the `--autoplay-policy=no-user-gesture-required` flag, which the launcher now sets.
 - Any script on the call page can call the audio binding and so inject fake audio; that is the same trust level as the page's own audio. The server drops payloads over 8 KB unread and drops frames when its queue is full, so a hostile page cannot grow server memory.
 - The capture worklet loads from a `blob:` URL; a call page with a strict content security policy for workers could block it (unverified for Meet, checked in the live check). Only the standard `RTCPeerConnection` name is hooked, not `webkitRTCPeerConnection`, and only the top frame is captured.
+
+## Notetaker join flow (assumptions)
+- Every label the notetaker looks for on the call page (join and ask-to-join buttons, camera and microphone toggles, leave button, chat button, message box, send button, lobby and denied texts, sign-in link) is in one table in `crates/notetaker/src/meet/page.js` and is our guess at the page. The tests run against our own fixture, so they prove the flow, not the labels. The live check must confirm each one; a wrong one reports `meet_ui_changed: <step>`.
+- Typing the notice uses a real text-insert event (not a script that sets the value), then checks the message shows in the chat log before it counts as posted; no message in 3 seconds is `meet_ui_changed: chat_send`.
+- Chat disabled (button disabled or an off-notice on the page) is `ChatOff`: the notetaker must leave and never start capture. The caller (the follow step) is responsible for leaving.
+- Guest sign-in (typing a display name) is not built: the notetaker uses a signed-in account. A signed-out page is reported as `SignedOut`.
+- Camera and microphone toggles are only clicked when the page offers "turn off"; the fake devices in the launcher mean a real device is never opened either way.
+- Capture installs its hook before the page loads, so audio frames can flow while the notetaker is still in the lobby. The follow step must write no frames to disk until `join` returns `Admitted` (notice posted), and must leave the call when `join` returns an error.
+- A join click that has no effect (the join page still showing after `unknown_limit`) is reported as `meet_ui_changed: join_button`, and the notice only counts as posted when the number of chat messages starting like it goes up.
