@@ -96,3 +96,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Questions for review
 - Confirm the Zoom Meeting SDK bot for v1 (#29) and who owns the Zoom developer account.
 - Which speech model and Zoom join path to choose depends on real recordings (needs team recordings with consent).
+
+## Meet notetaker loop (assumptions)
+- The notetaker claims every `scheduled` meeting that has a join link, oldest first, up to `max_concurrent_calls` minus the calls already `joining` or `recording`. Calendar booking already creates the row about when the call starts, so the loop does not re-check the start time. Revisit if booking moves earlier than one minute.
+- Opt-out calls `purge_meeting`, which deletes the meeting row, so no `opted_out` status remains to show. Confirm that is the intended outcome; keeping a stub row would need a purge variant.
+- The "may be cut short" note set on a recovered recording is cleared by the transcribe job when it succeeds (it resets `error`). Say so if the note should survive.
+- The spawned loop and the Meet driver are not wired yet; `run_meeting`, `claim_scheduled` and `recover` are tested with the scripted driver and called from the loop in the Meet driver PRs.

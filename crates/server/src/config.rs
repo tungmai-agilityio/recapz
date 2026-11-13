@@ -42,6 +42,10 @@ pub struct Config {
     pub ask_per_minute: u32,
     /// Text embedder for Ask search: `hash` (built in). Changing it re-indexes meetings at start.
     pub embedder: String,
+    /// Calls the notetaker may be in at once (each runs a browser next to the speech model).
+    pub max_concurrent_calls: usize,
+    /// Hard cap on one call; the notetaker leaves and transcribes what it has.
+    pub max_call_minutes: u32,
 }
 
 impl Default for Config {
@@ -57,6 +61,8 @@ impl Default for Config {
             speech_model: "./models/ggml-large-v3-turbo.bin".into(),
             ask_per_minute: 20,
             embedder: "hash".into(),
+            max_concurrent_calls: 2,
+            max_call_minutes: 240,
         }
     }
 }
