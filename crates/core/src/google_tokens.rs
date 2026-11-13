@@ -53,6 +53,7 @@ pub fn save(
          ON CONFLICT(member_id) DO UPDATE SET refresh_token = ?2, nonce = ?3, scopes = ?4, updated_at = ?5",
         params![member_id, blob, nonce.as_slice(), scopes, now],
     )?;
+    c.execute("DELETE FROM settings WHERE key = ?1", [marker(member_id)])?; // connected again
     Ok(())
 }
 
@@ -84,13 +85,40 @@ pub fn load(c: &Connection, key: &SecretKey, member_id: &str) -> Result<Option<(
     Ok(Some((String::from_utf8(plain)?, scopes)))
 }
 
-/// Hard delete (disconnect or revoked grant).
+fn marker(member_id: &str) -> String {
+    format!("google_reconnect:{member_id}")
+}
+
+/// Hard delete on the member's own disconnect; also clears any "reconnect" marker.
 pub fn delete(c: &Connection, member_id: &str) -> Result<()> {
     c.execute(
         "DELETE FROM google_tokens WHERE member_id = ?1",
         [member_id],
     )?;
+    c.execute("DELETE FROM settings WHERE key = ?1", [marker(member_id)])?;
     Ok(())
+}
+
+/// Google no longer honours the token (revoked, password change, Testing-mode expiry): hard delete
+/// it and remember that the member should be asked to reconnect.
+pub fn mark_revoked(c: &Connection, member_id: &str) -> Result<()> {
+    c.execute(
+        "DELETE FROM google_tokens WHERE member_id = ?1",
+        [member_id],
+    )?;
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, '1') ON CONFLICT (key) DO UPDATE SET value = '1'",
+        [marker(member_id)],
+    )?;
+    Ok(())
+}
+
+pub fn needs_reconnect(c: &Connection, member_id: &str) -> Result<bool> {
+    Ok(c.query_row(
+        "SELECT COUNT(*) FROM settings WHERE key = ?1",
+        [marker(member_id)],
+        |r| r.get::<_, i64>(0),
+    )? > 0)
 }
 
 #[cfg(test)]
@@ -204,5 +232,27 @@ mod tests {
         save(&c, &key(KEY_A), "u1", "same", "s").unwrap();
         assert_eq!(first.len(), 24);
         assert_ne!(first, nonce(&c));
+    }
+
+    #[test]
+    fn a_revoked_grant_deletes_the_token_and_asks_for_a_reconnect_until_saved_again() {
+        let (_d, c) = setup();
+        save(&c, &key(KEY_A), "u1", "tok", "s").unwrap();
+        assert!(!needs_reconnect(&c, "u1").unwrap());
+        mark_revoked(&c, "u1").unwrap();
+        assert_eq!(load(&c, &key(KEY_A), "u1").unwrap(), None);
+        assert!(needs_reconnect(&c, "u1").unwrap());
+        assert!(
+            !needs_reconnect(&c, "u2").unwrap(),
+            "other members are unaffected"
+        );
+        save(&c, &key(KEY_A), "u1", "tok2", "s").unwrap();
+        assert!(!needs_reconnect(&c, "u1").unwrap());
+        mark_revoked(&c, "u1").unwrap();
+        delete(&c, "u1").unwrap();
+        assert!(
+            !needs_reconnect(&c, "u1").unwrap(),
+            "disconnecting clears the marker"
+        );
     }
 }

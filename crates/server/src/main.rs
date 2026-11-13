@@ -33,6 +33,17 @@ async fn main() -> anyhow::Result<()> {
         report,
         embedder,
     );
+    if cfg.google.client_id.is_empty() || cfg.secret_key.is_empty() {
+        tracing::warn!("calendar sync is off: needs google.client_id and RECAPZ_SECRET_KEY");
+    } else if recapz_core::google_tokens::SecretKey::from_hex(&cfg.secret_key).is_err() {
+        anyhow::bail!("RECAPZ_SECRET_KEY must be 64 hex characters");
+    } else {
+        recapz_server::calendar_sync::spawn(
+            cfg.data_dir.clone(),
+            cfg.google.clone(),
+            cfg.secret_key.clone(),
+        );
+    }
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on {}", cfg.bind);
     axum::serve(listener, routes::router(cfg, Arc::new(Mutex::new(control)))).await?;
