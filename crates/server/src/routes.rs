@@ -39,6 +39,7 @@ pub struct App {
 }
 
 mod ask;
+mod connect;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
     let llm = crate::report_model::router_from_config(&cfg.llm)
@@ -70,6 +71,12 @@ pub fn router_with_llm(
         )
         .route("/auth/google", get(google_start))
         .route("/auth/callback", get(google_callback))
+        .route("/auth/calendar", get(connect::start))
+        .route("/auth/calendar/callback", get(connect::callback))
+        .route(
+            "/api/calendar",
+            get(connect::status).delete(connect::disconnect),
+        )
         .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
@@ -279,7 +286,8 @@ async fn google_start(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar,
     }
     let state = db::new_id();
     let url = format!(
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&state={}",
+        "{}?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email%20profile&state={}",
+        app.cfg.google.auth_url,
         enc(&app.cfg.google.client_id),
         enc(&format!("{}/auth/callback", app.cfg.base_url)),
         state
@@ -332,7 +340,7 @@ async fn google_callback(
     }
     let http = reqwest::Client::new();
     let tok: TokenResponse = http
-        .post("https://oauth2.googleapis.com/token")
+        .post(&app.cfg.google.token_url)
         .form(&[
             ("code", q.code.as_str()),
             ("client_id", &app.cfg.google.client_id),
@@ -349,7 +357,7 @@ async fn google_callback(
         .json()
         .await?;
     let info: UserInfo = http
-        .get("https://openidconnect.googleapis.com/v1/userinfo")
+        .get(&app.cfg.google.userinfo_url)
         .bearer_auth(tok.access_token)
         .send()
         .await?
