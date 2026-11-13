@@ -124,11 +124,7 @@ mod tests {
 
         assert!(logout(&data).unwrap());
         assert!(!profile_dir(&data).exists() && !has_login(&data));
-        assert_eq!(
-            logout(&data).unwrap(),
-            false,
-            "logging out twice is harmless"
-        );
+        assert!(!logout(&data).unwrap(), "logging out twice is harmless");
         fs::remove_dir_all(&data).unwrap();
     }
 
