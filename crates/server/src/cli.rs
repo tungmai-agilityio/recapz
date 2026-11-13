@@ -30,7 +30,7 @@ fn login(cfg: &Config) -> Result<()> {
     }
     println!("A browser window opens. Sign in with the notetaker's Google account, then close the window.");
     profile::login(&chromium, &cfg.data_dir)?;
-    println!("Saved. The notetaker will use this sign-in for calls.");
+    println!("Profile saved. Run a test call to confirm the sign-in worked.");
     Ok(())
 }
 
