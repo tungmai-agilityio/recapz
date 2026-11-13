@@ -163,3 +163,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Notetaker sign-in status is not shown: the server has no endpoint for it. Add one with the settings API, then a status row here.
 - Checked by eye in the in-app browser: Daylight and Ink, mobile width. Dark mode was not checked beyond the shared tokens. Screenshot of this screen and the prototype's are in the thread.
 - The server does not serve the built web app yet (no static or fallback route in `crates/server`), so outside `make dev` the redirect to `/recording?...` has no page to land on, same as the earlier redirect to `/`. Serving the app is a separate gap; not part of this plan.
+
+## Starting the notetaker loop (follow-up to PR 4)
+- PR 4 built the claim, run and recovery rules but nothing started them. `notetaker_loop` now does, every 15 s: book calendar events that start within a minute (`book_due`), claim scheduled meetings up to `max_concurrent_calls` (counted across tenants), and start each call. Startup runs `recover` for every tenant and deletes `notetaker-tmp/` (left by a killed server) before the loop begins. The loop is off, with a warning, when no Chromium is found.
+- Each call runs on its own thread with its own current-thread runtime, because `run_meeting` holds a database handle across waits and so cannot be moved between threads. A stuck call cannot stall the server's runtime either. The thread count is bounded by `max_concurrent_calls`.
+- A call that cannot start fails the meeting with `notetaker_signed_out` (no saved profile) or `notetaker_no_display` (Linux without `DISPLAY`) and never launches a browser. Any error out of the call itself becomes `notetaker_error` (details in the log, by meeting id only).
+- The chat notice is a constant for now ("Recapz notetaker is recording and transcribing this call. Type 'opt out' ..."): the notetaker name and join message settings need the settings API. The name shown in the participant list is whatever the saved Google account is called.
+- `max_call_minutes` is converted to ms here; 0 is treated as 1 minute.
+- Not tested: a real call through the loop (needs the live check, PR 16); the thread start and the Meet driver wiring are only compiled.

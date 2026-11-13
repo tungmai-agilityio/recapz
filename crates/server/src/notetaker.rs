@@ -222,7 +222,7 @@ fn to_transcribing(c: &Connection, id: &str, note: Option<&str>) -> Result<()> {
 }
 
 /// Fails the meeting and removes any audio kept for it: a failed call has nothing to transcribe.
-fn fail(c: &Connection, data_dir: &Path, tenant: &str, id: &str, why: &str) -> Result<()> {
+pub fn fail(c: &Connection, data_dir: &Path, tenant: &str, id: &str, why: &str) -> Result<()> {
     match fs::remove_dir_all(tenant_dir(data_dir, tenant).join("audio").join(id)) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
         _ => {}
