@@ -1,7 +1,7 @@
 //! Starts the notetaker for real: every 15 s it books calendar events that are about to start,
 //! claims `scheduled` meetings (capped), and runs each call in its own task with a Meet driver.
 //! The rules for one call (what ends it, what status it leaves) are in `notetaker`.
-use crate::notetaker::{claim_scheduled, fail, recover, run_meeting};
+use crate::notetaker::{claim_scheduled, fail, recover, run_meeting, salvage};
 use anyhow::Result;
 use recapz_core::{
     calendar::book_due,
@@ -53,7 +53,9 @@ pub fn startup(data_dir: &Path) -> Result<()> {
     }
 }
 
-/// One pass over every tenant: books due events, then claims scheduled meetings up to the cap.
+/// One pass over every tenant: books due events, then claims scheduled meetings so that at most
+/// `max_concurrent` calls are active across all tenants. A tenant that errors is logged and skipped,
+/// so it neither blocks the others nor loses what they already claimed.
 /// Returns `(tenant, meeting id, join url)` for each call to start.
 pub fn due_calls(
     data_dir: &Path,
@@ -61,17 +63,46 @@ pub fn due_calls(
     now: i64,
 ) -> Result<Vec<(String, String, String)>> {
     let control = db::open_control(data_dir)?;
-    let mut out = Vec::new();
+    let mut tenants = Vec::new();
+    let mut active_total = 0usize;
     for tenant in db::tenant_ids(&control)? {
-        let c = db::open_tenant(data_dir, &tenant)?;
-        book_due(&c, now, LEAD_MS)?;
-        // The cap is across tenants: what this pass already claimed counts as active.
-        let room = max_concurrent.saturating_sub(out.len());
-        for (id, url) in claim_scheduled(&c, room)? {
-            out.push((tenant.clone(), id, url));
+        match open_and_count(data_dir, &tenant, now) {
+            Ok((c, active)) => {
+                active_total += active;
+                tenants.push((tenant, c, active));
+            }
+            Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
+        }
+    }
+    let mut out = Vec::new();
+    for (tenant, c, active) in tenants {
+        let free = max_concurrent.saturating_sub(active_total + out.len());
+        // `claim_scheduled` caps on this tenant's own active calls, so give it room on top of them.
+        match claim_scheduled(&c, active + free) {
+            Ok(claimed) => out.extend(
+                claimed
+                    .into_iter()
+                    .map(|(id, url)| (tenant.clone(), id, url)),
+            ),
+            Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
         }
     }
     Ok(out)
+}
+
+fn open_and_count(
+    data_dir: &Path,
+    tenant: &str,
+    now: i64,
+) -> Result<(rusqlite::Connection, usize)> {
+    let c = db::open_tenant(data_dir, tenant)?;
+    book_due(&c, now, LEAD_MS)?;
+    let active = c.query_row(
+        "SELECT COUNT(*) FROM meetings WHERE status IN ('joining','recording')",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok((c, active))
 }
 
 /// Why a call cannot start at all, as the error shown on the meeting.
@@ -123,7 +154,7 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
     if let Err(e) = result {
         // The meeting id only: never the join link or anything said in the call.
         tracing::error!("notetaker call {i} failed: {e:#}");
-        mark_error(&d, &t, &i);
+        salvage_logged(&d, &t, &i);
     }
 }
 
@@ -134,26 +165,47 @@ fn start(s: Arc<Settings>, tenant: String, id: String, url: String) {
         .name("notetaker-call".into())
         .spawn({
             let (s, tenant, id) = (s.clone(), tenant.clone(), id.clone());
-            move || match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt.block_on(call(s, tenant, id, url)),
-                Err(e) => {
-                    tracing::error!("notetaker runtime: {e}");
-                    mark_error(&s.data_dir, &tenant, &id);
-                }
+            move || {
+                guarded(&s.data_dir, &tenant, &id, || {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("a current-thread runtime")
+                        .block_on(call(s.clone(), tenant.clone(), id.clone(), url));
+                })
             }
         });
     if let Err(e) = spawned {
         tracing::error!("could not start the call thread: {e}");
-        mark_error(&s.data_dir, &tenant, &id);
+        salvage_logged(&s.data_dir, &tenant, &id);
     }
 }
 
-fn mark_error(data_dir: &Path, tenant: &str, id: &str) {
-    let _ = db::open_tenant(data_dir, tenant)
-        .and_then(|c| fail(&c, data_dir, tenant, id, "notetaker_error"));
+/// Runs a call; a panic anywhere in it (driver, capture, database) settles the meeting instead of
+/// leaving it `joining` or `recording` and counting against the cap until the next restart.
+fn guarded(data_dir: &Path, tenant: &str, id: &str, run: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).is_err() {
+        tracing::error!("notetaker call {id} panicked");
+        salvage_logged(data_dir, tenant, id);
+    }
+}
+
+/// A call that ended in an error or a panic: keep what was recorded, fail what was not. Logged when
+/// even that fails, because the meeting then stays `joining` or `recording` until the next restart.
+fn salvage_logged(data_dir: &Path, tenant: &str, id: &str) {
+    let done = db::open_tenant(data_dir, tenant).and_then(|c| {
+        salvage(
+            &c,
+            data_dir,
+            tenant,
+            id,
+            "The recording may be cut short because the call ended with an error",
+            "notetaker_error",
+        )
+    });
+    if let Err(e) = done {
+        tracing::error!("notetaker call {id}: could not settle the meeting: {e:#}");
+    }
 }
 
 /// Starts the loop. Call `startup` first.
@@ -228,6 +280,99 @@ mod tests {
             due_calls(dir.path(), 2, 2_000).unwrap().is_empty(),
             "now full"
         );
+    }
+
+    #[test]
+    fn the_cap_holds_across_tenants_and_earlier_ticks() {
+        let (dir, c1) = setup();
+        let control = db::open_control(dir.path()).unwrap();
+        control
+            .execute("INSERT INTO tenants (id, name) VALUES ('t2', 'Other')", [])
+            .unwrap();
+        let c2 = db::open_tenant(dir.path(), "t2").unwrap();
+        meeting(&c1, "r1", "recording", 1);
+        meeting(&c1, "r2", "joining", 2);
+        meeting(&c2, "s1", "scheduled", 3);
+        assert!(
+            due_calls(dir.path(), 2, 1_000).unwrap().is_empty(),
+            "two calls are active in the other tenant"
+        );
+        assert_eq!(status(&c2, "s1"), "scheduled");
+        // Three slots, two taken: one more across both tenants, wherever it is waiting.
+        meeting(&c1, "s2", "scheduled", 4);
+        meeting(&c2, "s3", "scheduled", 5);
+        assert_eq!(due_calls(dir.path(), 3, 1_000).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_broken_tenant_does_not_block_the_others_or_lose_their_claims() {
+        let (dir, c) = setup();
+        let control = db::open_control(dir.path()).unwrap();
+        control
+            .execute("INSERT INTO tenants (id, name) VALUES ('t0', 'Broken')", [])
+            .unwrap();
+        control
+            .execute(
+                "INSERT INTO tenants (id, name) VALUES ('t9', 'Broken too')",
+                [],
+            )
+            .unwrap();
+        for t in ["t0", "t9"] {
+            let broken = db::tenant_dir(dir.path(), t);
+            fs::create_dir_all(&broken).unwrap();
+            fs::write(broken.join("recapz.sqlite"), "not a database").unwrap();
+        }
+        meeting(&c, "ok", "scheduled", 1);
+        let got = due_calls(dir.path(), 2, 1_000).unwrap();
+        assert_eq!(
+            got.len(),
+            1,
+            "t1's meeting is claimed whichever side the broken ones sort"
+        );
+        assert_eq!(status(&c, "ok"), "joining");
+    }
+
+    #[test]
+    fn a_panicking_call_is_settled_and_a_recording_keeps_its_audio() {
+        let (dir, c) = setup();
+        let audio = tenant_dir_audio(dir.path(), "rec");
+        fs::create_dir_all(&audio).unwrap();
+        let mut w = recapz_notetaker::wav::WavWriter::new(std::io::BufWriter::new(
+            fs::File::create(audio.join("recording.wav")).unwrap(),
+        ))
+        .unwrap();
+        w.write(&vec![0i16; 16_000]).unwrap();
+        drop(w); // a header that was never finished, like a cut-off call
+        meeting(&c, "rec", "recording", 1);
+        c.execute(
+            "UPDATE meetings SET audio_path='audio/rec/recording.wav' WHERE id='rec'",
+            [],
+        )
+        .unwrap();
+        meeting(&c, "join", "joining", 2);
+        meeting(&c, "other", "recording", 3); // another live call: must not be touched
+        guarded(dir.path(), "t1", "rec", || panic!("driver bug"));
+        guarded(dir.path(), "t1", "join", || panic!("driver bug"));
+        assert_eq!(status(&c, "rec"), "transcribing");
+        assert!(
+            audio.join("recording.wav").exists(),
+            "the recording is kept"
+        );
+        assert_eq!(status(&c, "join"), "failed");
+        let why: String = c
+            .query_row("SELECT error FROM meetings WHERE id='join'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(why, "notetaker_error");
+        assert_eq!(status(&c, "other"), "recording");
+        // A call that already finished is left as it is.
+        guarded(dir.path(), "t1", "rec", || panic!("late"));
+        assert_eq!(status(&c, "rec"), "transcribing");
+    }
+
+    fn tenant_dir_audio(data: &Path, id: &str) -> PathBuf {
+        db::tenant_dir(data, "t1").join("audio").join(id)
     }
 
     #[test]

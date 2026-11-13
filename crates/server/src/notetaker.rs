@@ -13,7 +13,7 @@ use recapz_notetaker::{
     session::{Action, Event, LeaveReason, Session},
     wav::{self, WavWriter},
 };
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
@@ -64,21 +64,50 @@ pub fn recover(c: &Connection, data_dir: &Path, tenant: &str) -> Result<()> {
             Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    for (id, rel) in stuck {
-        let repaired = rel
-            .map(|rel| wav::repair(&tenant_dir(data_dir, tenant).join(rel)).is_ok())
-            .unwrap_or(false);
-        if repaired {
-            to_transcribing(
-                c,
-                &id,
-                Some("The recording may be cut short because the server restarted"),
-            )?;
-        } else {
-            fail(c, data_dir, tenant, &id, "server_restarted")?;
-        }
+    for (id, _) in stuck {
+        salvage(
+            c,
+            data_dir,
+            tenant,
+            &id,
+            "The recording may be cut short because the server restarted",
+            "server_restarted",
+        )?;
     }
     Ok(())
+}
+
+/// One call that ended without finishing: a recording with audio on disk has its WAV header repaired
+/// and is transcribed (with `note` shown on it); anything else fails with `why`. Touches only `id`,
+/// so other calls running now are left alone.
+pub fn salvage(
+    c: &Connection,
+    data_dir: &Path,
+    tenant: &str,
+    id: &str,
+    note: &str,
+    why: &str,
+) -> Result<()> {
+    let row: Option<(String, Option<String>)> = c
+        .query_row(
+            "SELECT status, audio_path FROM meetings WHERE id=?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    match row {
+        Some((status, Some(rel))) if status == "recording" => {
+            if wav::repair(&tenant_dir(data_dir, tenant).join(rel)).is_ok() {
+                to_transcribing(c, id, Some(note))
+            } else {
+                fail(c, data_dir, tenant, id, why)
+            }
+        }
+        Some((status, _)) if status == "joining" || status == "recording" => {
+            fail(c, data_dir, tenant, id, why)
+        }
+        _ => Ok(()), // already finished, or gone (opt-out)
+    }
 }
 
 struct Outcome {
