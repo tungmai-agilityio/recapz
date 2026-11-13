@@ -47,6 +47,24 @@ async fn main() -> anyhow::Result<()> {
             cfg.secret_key.clone(),
         );
     }
+    recapz_server::notetaker_loop::startup(&cfg.data_dir)?;
+    match recapz_notetaker::browser::find_chromium(
+        Some(cfg.notetaker.chromium_path.as_str())
+            .filter(|p| !p.is_empty())
+            .map(std::path::Path::new),
+    ) {
+        Some(chromium) => {
+            recapz_server::notetaker_loop::spawn(recapz_server::notetaker_loop::Settings {
+                data_dir: cfg.data_dir.clone(),
+                chromium,
+                max_concurrent: cfg.max_concurrent_calls,
+                max_call_minutes: cfg.max_call_minutes,
+            })
+        }
+        None => {
+            tracing::warn!("the notetaker is off: Chromium not found (set notetaker.chromium_path)")
+        }
+    }
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on {}", cfg.bind);
     axum::serve(listener, routes::router(cfg, Arc::new(Mutex::new(control)))).await?;
