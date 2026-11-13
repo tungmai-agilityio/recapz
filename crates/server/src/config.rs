@@ -1,11 +1,29 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Clone)]
 #[serde(default)]
 pub struct Google {
     pub client_id: String,
     pub client_secret: String,
+    /// Endpoint overrides, so tests can point the OAuth calls at a local mock.
+    pub auth_url: String,
+    pub token_url: String,
+    pub userinfo_url: String,
+    pub revoke_url: String,
+}
+
+impl Default for Google {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            client_secret: String::new(),
+            auth_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
+            token_url: "https://oauth2.googleapis.com/token".into(),
+            userinfo_url: "https://openidconnect.googleapis.com/v1/userinfo".into(),
+            revoke_url: "https://oauth2.googleapis.com/revoke".into(),
+        }
+    }
 }
 
 /// One language-model route used for every report task. Empty `provider` turns reports off.
@@ -46,6 +64,10 @@ pub struct Config {
     pub max_concurrent_calls: usize,
     /// Hard cap on one call; the notetaker leaves and transcribes what it has.
     pub max_call_minutes: u32,
+    /// 64 hex characters that encrypt stored Google refresh tokens. Never read from the config
+    /// file: `Config::load` takes it from `RECAPZ_SECRET_KEY`. Empty turns calendar connect off.
+    #[serde(skip)]
+    pub secret_key: String,
 }
 
 impl Default for Config {
@@ -63,16 +85,19 @@ impl Default for Config {
             embedder: "hash".into(),
             max_concurrent_calls: 2,
             max_call_minutes: 240,
+            secret_key: String::new(),
         }
     }
 }
 
 impl Config {
     pub fn load(path: &str) -> anyhow::Result<Self> {
-        match std::fs::read_to_string(path) {
-            Ok(s) => Ok(toml::from_str(&s)?),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(e) => Err(e.into()),
-        }
+        let mut cfg = match std::fs::read_to_string(path) {
+            Ok(s) => toml::from_str(&s)?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            Err(e) => return Err(e.into()),
+        };
+        cfg.secret_key = std::env::var("RECAPZ_SECRET_KEY").unwrap_or_default();
+        Ok(cfg)
     }
 }
