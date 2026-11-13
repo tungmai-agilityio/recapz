@@ -129,3 +129,5 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Chat disabled (button disabled or an off-notice on the page) is `ChatOff`: the notetaker must leave and never start capture. The caller (the follow step) is responsible for leaving.
 - Guest sign-in (typing a display name) is not built: the notetaker uses a signed-in account. A signed-out page is reported as `SignedOut`.
 - Camera and microphone toggles are only clicked when the page offers "turn off"; the fake devices in the launcher mean a real device is never opened either way.
+- Capture installs its hook before the page loads, so audio frames can flow while the notetaker is still in the lobby. The follow step must write no frames to disk until `join` returns `Admitted` (notice posted), and must leave the call when `join` returns an error.
+- A join click that has no effect (the join page still showing after `unknown_limit`) is reported as `meet_ui_changed: join_button`, and the notice only counts as posted when the number of chat messages starting like it goes up.

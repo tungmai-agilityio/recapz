@@ -98,21 +98,27 @@ impl MeetPage {
 
     /// Posts `notice` in the call chat and checks it appears. `ChatOff` when chat is disabled.
     pub async fn announce(&self, notice: &str) -> Result<(), DriverError> {
+        if notice.trim().is_empty() {
+            return Err(DriverError::UiChanged("notice_empty".to_string()));
+        }
+        let prefix = serde_json::to_string(&notice.chars().take(24).collect::<String>()).unwrap();
         self.act("openChat()").await?;
+        // Someone else's message, or an earlier notice, must not count as ours.
+        let before = self
+            .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
+            .await?;
         self.act("focusChatInput()").await?;
         self.page
             .execute(InsertTextParams::new(notice))
             .await
             .map_err(|_| DriverError::Disconnected)?;
         self.act("clickSend()").await?;
-        let prefix = serde_json::to_string(&notice.chars().take(24).collect::<String>()).unwrap();
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(3) {
-            if self
-                .eval(&format!("window.__recapzMeet.chatHas({prefix})"))
-                .await?
-                == true
-            {
+            let now = self
+                .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
+                .await?;
+            if now.as_u64() > before.as_u64() {
                 return Ok(());
             }
             tokio::time::sleep(POLL).await;
@@ -130,7 +136,8 @@ impl MeetPage {
         lobby_limit: Duration,
     ) -> Result<Joined, DriverError> {
         self.open(url).await?;
-        let (start, mut unknown_since, mut asked) = (Instant::now(), None::<Instant>, false);
+        let (start, mut unknown_since, mut asked) =
+            (Instant::now(), None::<Instant>, None::<Instant>);
         loop {
             match self.state().await? {
                 PageState::SignedOut => return Err(DriverError::SignedOut),
@@ -139,16 +146,24 @@ impl MeetPage {
                     self.announce(notice).await?;
                     return Ok(Joined::Admitted);
                 }
-                PageState::Prejoin if !asked => {
+                PageState::Prejoin if asked.is_none() => {
                     self.act("prepare()").await?;
                     self.act("join()").await?;
-                    asked = true;
+                    asked = Some(Instant::now());
+                }
+                // Still on the join page after asking: the click did nothing, so the page changed.
+                PageState::Prejoin if asked.is_some_and(|t| t.elapsed() >= self.unknown_limit) => {
+                    return Err(DriverError::UiChanged("join_button".to_string()));
                 }
                 PageState::Unknown => {
                     let since = *unknown_since.get_or_insert_with(Instant::now);
                     if since.elapsed() >= self.unknown_limit {
                         // Before asking, the join button is the missing piece; after, the lobby text.
-                        let step = if asked { "lobby_state" } else { "join_button" };
+                        let step = if asked.is_some() {
+                            "lobby_state"
+                        } else {
+                            "join_button"
+                        };
                         return Err(DriverError::UiChanged(step.to_string()));
                     }
                 }
@@ -246,7 +261,7 @@ mod browser_tests {
 
     #[tokio::test]
     async fn the_end_states_are_reported_as_what_they_are() {
-        let cases: [(&str, Duration, Result<Joined, DriverError>); 6] = [
+        let cases: [(&str, Duration, Result<Joined, DriverError>); 8] = [
             ("denied", Duration::from_secs(30), Ok(Joined::Denied)),
             (
                 "lobby_stuck",
@@ -273,6 +288,16 @@ mod browser_tests {
                 Duration::from_secs(30),
                 Err(DriverError::UiChanged("join_button".into())),
             ),
+            (
+                "join_noop",
+                Duration::from_secs(30),
+                Err(DriverError::UiChanged("join_button".into())),
+            ),
+            (
+                "vanishes",
+                Duration::from_secs(30),
+                Err(DriverError::UiChanged("lobby_state".into())),
+            ),
         ];
         for (scenario, limit, want) in cases {
             let Some((got, ..)) = run(scenario, limit).await else {
@@ -280,5 +305,27 @@ mod browser_tests {
             };
             assert_eq!(got, want, "{scenario}");
         }
+    }
+
+    #[tokio::test]
+    async fn another_persons_matching_message_does_not_count_and_an_empty_notice_is_refused() {
+        // `chat_echo` shows a message that already starts like our notice.
+        let Some((r, meet, _b)) = run("chat_echo", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(
+            r,
+            Ok(Joined::Admitted),
+            "our own post raises the count above the echo"
+        );
+        let n = meet
+            .eval("document.querySelectorAll('ul li').length")
+            .await
+            .unwrap();
+        assert_eq!(n, 2, "the earlier message and exactly one notice of ours");
+        assert_eq!(
+            meet.announce("  ").await,
+            Err(DriverError::UiChanged("notice_empty".into()))
+        );
     }
 }

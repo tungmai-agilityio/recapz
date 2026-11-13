@@ -70,10 +70,10 @@
       b.click();
       return ok();
     },
-    // Whether a message starting with `prefix` is in the chat log.
-    chatHas(prefix) {
+    // How many chat messages contain `prefix`; posting must raise it.
+    chatCount(prefix) {
       const log = find(S.chatLog);
-      return !!log && [...log.children].some((m) => m.textContent.includes(prefix));
+      return log ? [...log.children].filter((m) => m.textContent.includes(prefix)).length : 0;
     },
   };
 })();
