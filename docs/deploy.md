@@ -18,6 +18,32 @@ journalctl -u recapz -f
 - Set `dev_login = false` in production.
 - Upgrade: install the new binary, `sudo systemctl restart recapz` (migrations run on start and are additive).
 
+## HTTPS with Cloudflare Tunnel (instead of a reverse proxy)
+
+The tunnel makes an outbound connection from the host, so no inbound port is opened and `bind` stays `127.0.0.1:8080`. The domain must be on Cloudflare DNS.
+
+```sh
+# install cloudflared from Cloudflare's package repository, then:
+cloudflared tunnel login
+cloudflared tunnel create recapz
+cloudflared tunnel route dns recapz recapz.example.com
+sudo install -d /etc/cloudflared
+sudo tee /etc/cloudflared/config.yml >/dev/null <<'YAML'
+tunnel: recapz
+credentials-file: /etc/cloudflared/<tunnel-id>.json
+ingress:
+  - hostname: recapz.example.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
+YAML
+sudo cp ~/.cloudflared/<tunnel-id>.json /etc/cloudflared/ && sudo chmod 0600 /etc/cloudflared/<tunnel-id>.json
+sudo cloudflared service install && sudo systemctl enable --now cloudflared
+```
+
+- Set `base_url = "https://recapz.example.com"` and use the same host in the Google redirect URI.
+- Cloudflare's proxy caps a request body at 100 MB on the Free and Pro plans, so larger uploads fail through the tunnel. Check the largest upload you expect before relying on it.
+- The tunnel credentials file lets anyone run your tunnel: keep it `0600` and out of git.
+
 ## Meeting notetaker (Google Meet)
 
 ```sh
@@ -43,3 +69,25 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
+
+### Off-host copy to Cloudflare R2
+
+`backup.sh` keeps the last 14 days on the host's own disk. Copy each run to a private R2 bucket so a lost disk does not lose the backups.
+
+```sh
+sudo apt install rclone
+sudo -u recapz rclone config create r2 s3 provider Cloudflare \
+  access_key_id <key> secret_access_key <secret> endpoint https://<account-id>.r2.cloudflarestorage.com
+sudo systemctl edit recapz-backup.service      # add the two lines below
+```
+
+```ini
+[Service]
+ExecStartPost=/usr/bin/rclone copy /var/backups/recapz r2:recapz-backups
+```
+
+- Create the bucket private, with an R2 API token scoped to that one bucket (Object Read & Write). The token lives in `~recapz/.config/rclone/rclone.conf`; keep it `0600`.
+- Use `copy`, not `sync`: `sync` would delete the remote copies when the local ones age out, or when the local directory is lost.
+- Expire old objects with an R2 lifecycle rule on the bucket (for example 30 days) instead of deleting from the host.
+- R2 encrypts at rest and rclone uses TLS in transit. For a key only you hold, wrap the remote with `rclone config` type `crypt`; losing that password makes the backups unreadable.
+- Restore: `rclone copy r2:recapz-backups/<stamp> /var/backups/recapz/<stamp>`, then follow the steps above.
