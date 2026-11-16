@@ -8,7 +8,8 @@ import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { NextUp } from './NextUp'
 import { groupByDay, meetingTime, statusBadge } from './meeting-days'
-import { deleteMeeting, devLogin, getMeetings, Unauthorized, uploadFile } from '../api'
+import { Field, inputClass } from '../ui/Field'
+import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized, uploadFile } from '../api'
 
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const thisMonth = (ms: number) => { const a = new Date(ms), b = new Date(); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() }
@@ -36,6 +37,38 @@ function DevLogin({ onDone }: { onDone: () => void }) {
   )
 }
 
+function SendNotetaker({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [url, setUrl] = useState('')
+  const [title, setTitle] = useState('')
+  const send = useMutation({
+    mutationFn: () => joinMeeting(url.trim(), title.trim()),
+    onSuccess: () => {
+      toast('Notetaker is on its way')
+      onClose()
+      return qc.invalidateQueries({ queryKey: ['meetings'] })
+    },
+  })
+  return (
+    <form className="flex flex-col gap-3 rounded-lg border border-hair bg-sheet p-4" aria-label="Send notetaker"
+      onSubmit={(e) => { e.preventDefault(); send.mutate() }}>
+      <Field label="Meeting link" hint="A Google Meet or Zoom link."
+        error={send.error ? send.error.message.replace(/^\d+ /, '') : undefined}>
+        {(p) => <input {...p} type="url" required autoFocus value={url} onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://meet.google.com/abc-defg-hij" className={inputClass} />}
+      </Field>
+      <Field label="Title (optional)">
+        {(p) => <input {...p} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />}
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" type="submit" disabled={send.isPending}>{send.isPending ? 'Sending…' : 'Send notetaker'}</Button>
+      </div>
+    </form>
+  )
+}
+
 export function Meetings() {
   const qc = useQueryClient()
   const { data, error, isLoading } = useQuery({
@@ -48,6 +81,7 @@ export function Meetings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
   })
   const toast = useToast()
+  const [sending, setSending] = useState(false)
   const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null)
   const del = useMutation({
     mutationFn: deleteMeeting,
@@ -74,7 +108,8 @@ export function Meetings() {
     <section className="flex flex-col gap-7">
       <PageHead title="Meetings"
         lede={data ? `${data.filter((m) => thisMonth(meetingTime(m))).length} meetings this month · all audio stays on your server` : undefined}
-        actions={
+        actions={<>
+          <Button onClick={() => setSending(true)}>Send notetaker</Button>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg hover:opacity-90">
             {upload.isPending ? 'Uploading…' : 'Upload recording'}
             <input
@@ -84,7 +119,8 @@ export function Meetings() {
               onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])}
             />
           </label>
-        } />
+        </>} />
+      {sending && <SendNotetaker onClose={() => setSending(false)} />}
       <NextUp />
       {upload.isError && <p className="text-sm text-bad">Upload failed. Try again.</p>}
       {isLoading && <p className="text-mute">Loading…</p>}
