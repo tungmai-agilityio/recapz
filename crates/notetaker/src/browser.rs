@@ -173,6 +173,9 @@ impl Browser {
             ])
             // Audio capture starts without a click, so the audio context must not wait for one.
             .arg("--autoplay-policy=no-user-gesture-required")
+            // A page in another language than the browser's gets translated, which rewrites the
+            // labels the Meet driver looks up; keep the page text as served.
+            .arg("--disable-features=Translate")
             .args([
                 "--no-first-run",
                 "--no-default-browser-check",
