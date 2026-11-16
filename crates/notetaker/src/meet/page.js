@@ -153,6 +153,8 @@
     },
     // How many times `prefix` shows on the page; posting must raise it. The live chat log has no
     // label to look it up by, so this reads the page text (the input box's text is not part of it).
+    // ponytail: another person quoting the notice, or the panel being closed, changes the count; a
+    // labelled message list would be exact, once its markup on the live page is known.
     chatCount(prefix) {
       return text().split(prefix).length - 1;
     },

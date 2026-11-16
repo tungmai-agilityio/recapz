@@ -106,7 +106,11 @@ impl MeetPage {
             .evaluate_on_new_document(SCRIPT)
             .await
             .map_err(|e| dropped("evaluate_on_new_document", e))?;
-        self.page.goto(url).await.map_err(|e| dropped("goto", e))?;
+        // A navigation error can carry the join link, so it is not logged.
+        self.page
+            .goto(url)
+            .await
+            .map_err(|_| dropped("goto", "navigation failed"))?;
         Ok(())
     }
 
