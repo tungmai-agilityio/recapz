@@ -23,6 +23,9 @@ pub struct MeetConfig {
     pub launch: Launch,
     /// The chat message that tells the call it is being recorded and how to opt out.
     pub notice: String,
+    /// When set, a failing page step saves a screenshot and the page's buttons here (a private
+    /// folder for this call), so a changed page can be diagnosed.
+    pub debug_dir: Option<std::path::PathBuf>,
 }
 
 enum Phase {
@@ -203,7 +206,14 @@ impl CallDriver for MeetDriver {
                 }
             }
             if run.last_poll.elapsed() >= POLL {
-                self.poll().await?;
+                if let Err(e) = self.poll().await {
+                    if let (DriverError::UiChanged(_), Some(dir), Some(run)) =
+                        (&e, &self.cfg.debug_dir, &self.run)
+                    {
+                        run.meet.snapshot(dir).await;
+                    }
+                    return Err(e);
+                }
             }
         }
     }
@@ -242,6 +252,7 @@ mod browser_tests {
                 headless: true,
             },
             notice: NOTICE.into(),
+            debug_dir: None,
         };
         Some((
             MeetDriver::new(cfg),
@@ -405,6 +416,41 @@ mod browser_tests {
         );
         d.leave().await;
         assert!(!work.exists());
+    }
+
+    #[tokio::test]
+    async fn a_changed_join_page_saves_a_screenshot_and_its_buttons_when_asked_to() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((mut d, url, work)) = driver("no_join_button") else {
+            return;
+        };
+        let dump = work.with_extension("dump");
+        let _ = std::fs::remove_dir_all(&dump);
+        d.cfg.debug_dir = Some(dump.clone());
+        d.join(&url).await.unwrap();
+        d.run.as_mut().unwrap().meet.unknown_limit = Duration::from_secs(2);
+        let err = loop {
+            if let Err(e) = d.next().await {
+                break e;
+            }
+        };
+        assert_eq!(err, DriverError::UiChanged("join_button".into()));
+        let page: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dump.join("page.json")).unwrap())
+                .unwrap();
+        let names: Vec<&str> = page["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["role"] == "button")
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, vec!["Enter"], "the buttons the page really has");
+        assert!(page["text"].as_str().unwrap().contains("Enter"));
+        let png = std::fs::read(dump.join("page.png")).unwrap();
+        assert_eq!(&png[1..4], b"PNG", "a real screenshot");
+        d.leave().await;
+        let _ = std::fs::remove_dir_all(&dump);
     }
 
     #[tokio::test]

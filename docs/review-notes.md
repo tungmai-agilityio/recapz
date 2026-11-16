@@ -172,3 +172,6 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The chat notice is a constant for now ("Recapz notetaker is recording and transcribing this call. Type 'opt out' ..."): the notetaker name and join message settings need the settings API. The name shown in the participant list is whatever the saved Google account is called.
 - `max_call_minutes` is converted to ms here; 0 is treated as 1 minute.
 - Not tested: a real call through the loop (needs the live check, PR 16); the thread start and the Meet driver wiring are only compiled.
+
+## Meet page debug dump (after the first live run)
+- The first live run failed with `meet_ui_changed: join_button` and the failure left no trace of what the page showed. `RECAPZ_NOTETAKER_DEBUG=1` now saves a screenshot and the page's buttons when a page step fails (private folder, off by default, excluded from backups). Tested on our own fixture page only.

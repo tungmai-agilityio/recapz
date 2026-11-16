@@ -4,7 +4,10 @@
 use crate::driver::DriverError;
 use chromiumoxide::{cdp::browser_protocol::input::InsertTextParams, Page};
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 mod driver;
 pub use driver::{MeetConfig, MeetDriver};
@@ -101,6 +104,28 @@ impl MeetPage {
             .await
             .map_err(|_| DriverError::Disconnected)?;
         Ok(())
+    }
+
+    /// Saves what the page shows (a screenshot and its buttons) into `dir`, for diagnosing a changed
+    /// page. Best effort: the call is already failing. The page can show names, so `dir` is private.
+    pub async fn snapshot(&self, dir: &Path) {
+        use chromiumoxide::page::ScreenshotParams;
+        use std::os::unix::fs::DirBuilderExt;
+        if std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
+            .is_err()
+        {
+            return;
+        }
+        if let Ok(Value::String(json)) = self.eval("window.__recapzMeet?.snapshot()").await {
+            let _ = std::fs::write(dir.join("page.json"), json);
+        }
+        let _ = self
+            .page
+            .save_screenshot(ScreenshotParams::builder().build(), dir.join("page.png"))
+            .await;
     }
 
     async fn eval(&self, expr: &str) -> Result<Value, DriverError> {
