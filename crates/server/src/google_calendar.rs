@@ -1,6 +1,6 @@
 //! Google Calendar events.list responses turned into calendar rows. Pure parsing and request URL
 //! building; the HTTP call and the sign-in scope that allows it are wired separately.
-use recapz_core::calendar::NewEvent;
+use recapz_core::calendar::{Attendee, NewEvent};
 use recapz_notetaker::links;
 use serde_json::Value;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -15,6 +15,10 @@ const MAX_EVENTS: usize = 250;
 const MAX_TEXT: usize = 10_000;
 const MAX_URL: usize = 2048;
 const MAX_PAGE_TOKEN: usize = 2048;
+/// Invitees kept per event (also asked of Google as `maxAttendees`), and the longest name and email.
+const MAX_ATTENDEES: usize = 50;
+const MAX_NAME: usize = 100;
+const MAX_EMAIL: usize = 254;
 
 fn head(s: &str) -> &str {
     s.char_indices().nth(MAX_TEXT).map_or(s, |(i, _)| &s[..i])
@@ -56,6 +60,34 @@ fn join_link(e: &Value) -> Option<links::Link> {
                 .and_then(Value::as_str)
                 .and_then(|t| links::find_in_text(head(t)))
         })
+}
+
+/// Invitees other than the calendar owner. Rooms and other resources, and entries without a usable
+/// email, are skipped.
+fn attendees(e: &Value) -> Vec<Attendee> {
+    let flag = |a: &Value, k: &str| a.get(k).and_then(Value::as_bool) == Some(true);
+    let text = |a: &Value, k: &str, max: usize| {
+        a.get(k)
+            .and_then(Value::as_str)
+            .map(|s| s.trim().chars().take(max).collect::<String>())
+            .filter(|s| !s.is_empty())
+    };
+    e.get("attendees")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|a| !flag(a, "self") && !flag(a, "resource"))
+        .filter_map(|a| {
+            let email = text(a, "email", MAX_EMAIL + 1)
+                .filter(|m| m.len() <= MAX_EMAIL && m.contains('@'))?;
+            Some(Attendee {
+                email,
+                name: text(a, "displayName", MAX_NAME),
+                status: text(a, "responseStatus", 20),
+            })
+        })
+        .take(MAX_ATTENDEES)
+        .collect()
 }
 
 /// Cancelled events, all-day events and events without a start and end time are skipped.
@@ -107,6 +139,7 @@ pub fn parse_page(body: &str) -> anyhow::Result<Page> {
             ends_at: end,
             platform: link.as_ref().map(|l| l.platform().to_string()),
             join_url: link.map(|l| l.url().to_string()),
+            attendees: attendees(e),
         });
     }
     Ok(Page {
@@ -137,6 +170,7 @@ pub fn list_query(
         ("singleEvents", "true".to_string()),
         ("orderBy", "startTime".to_string()),
         ("maxResults", "250".to_string()),
+        ("maxAttendees", MAX_ATTENDEES.to_string()),
     ];
     if let Some(t) = page_token {
         q.push(("pageToken", t.to_string()));
@@ -244,6 +278,43 @@ mod tests {
     }
 
     #[test]
+    fn attendees_skip_the_owner_rooms_and_unusable_entries_and_events_without_any_are_fine() {
+        let body = r#"{"items":[
+          {"id":"a","start":{"dateTime":"2026-11-12T09:00:00Z"},"end":{"dateTime":"2026-11-12T10:00:00Z"},
+           "attendees":[
+             {"email":"me@x.test","self":true,"responseStatus":"accepted"},
+             {"email":"Ann@x.test","displayName":"  Ann Lee ","responseStatus":"accepted"},
+             {"email":"bob@x.test"},
+             {"email":"room-4@resource.x.test","resource":true},
+             {"email":"not-an-email"},
+             {"displayName":"No email"}]},
+          {"id":"b","start":{"dateTime":"2026-11-12T09:00:00Z"},"end":{"dateTime":"2026-11-12T10:00:00Z"}}]}"#;
+        let p = parse_page(body).unwrap();
+        let a = &p.events[0].attendees;
+        assert_eq!(
+            a.iter()
+                .map(|a| (a.email.as_str(), a.name.as_deref(), a.status.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Ann@x.test", Some("Ann Lee"), Some("accepted")),
+                ("bob@x.test", None, None)
+            ]
+        );
+        assert!(p.events[1].attendees.is_empty());
+    }
+
+    #[test]
+    fn attendees_are_capped() {
+        let many: Vec<String> = (0..MAX_ATTENDEES + 5)
+            .map(|i| format!(r#"{{"email":"p{i}@x.test"}}"#))
+            .collect();
+        let extra = format!(r#","attendees":[{}]"#, many.join(","));
+        let body = format!(r#"{{"items":[{}]}}"#, item(0, &extra));
+        let p = parse_page(&body).unwrap();
+        assert_eq!(p.events[0].attendees.len(), MAX_ATTENDEES);
+    }
+
+    #[test]
     fn bad_json_is_an_error_and_an_empty_calendar_is_fine() {
         assert!(parse_page("nope").is_err());
         assert!(parse_page("{}").unwrap().events.is_empty());
@@ -259,6 +330,7 @@ mod tests {
             (get("singleEvents"), get("orderBy"), get("pageToken")),
             (Some("true"), Some("startTime"), Some("tok"))
         );
+        assert_eq!(get("maxAttendees"), Some("50"));
         assert_eq!(
             list_query(0, 1, None)
                 .iter()

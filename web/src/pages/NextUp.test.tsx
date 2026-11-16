@@ -12,7 +12,7 @@ const show = () =>
       <MemoryRouter><NextUp /></MemoryRouter>
     </QueryClientProvider>,
   )
-const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 3_600_000, ends_at: Date.now() + 7_200_000, platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, ...o })
+const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 3_600_000, ends_at: Date.now() + 7_200_000, platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, attendees: [], ...o })
 const api = (connected: boolean, events: unknown[], calls: [string, RequestInit | undefined][] = []) =>
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push([url, init])
@@ -70,4 +70,14 @@ test('a failed events request shows an error', async () => {
     url === '/api/calendar' ? new Response(JSON.stringify({ connected: true, needs_reconnect: false })) : new Response('boom', { status: 500 })))
   show()
   expect((await screen.findByRole('alert')).textContent).toBe('Could not load upcoming meetings.')
+})
+
+test('shows invitees as faces with a +N count, and nothing for an event without any', async () => {
+  const people = ['Ann Lee', 'Bob', 'Cy', 'Di', 'Ed', 'Flo'].map((n, i) => ({ name: i === 1 ? null : n, email: `${n.toLowerCase().replace(' ', '.')}@x.test`, status: null }))
+  api(true, [ev({ attendees: people }), ev({ id: 'e2', title: 'Solo focus' })])
+  show()
+  await screen.findByText('Design review')
+  expect(screen.getAllByRole('img').map((i) => i.getAttribute('aria-label'))).toEqual(['Ann Lee', 'bob@x.test', 'Cy', 'Di'])
+  expect(screen.getByText('+2')).toBeTruthy()
+  expect(screen.getAllByRole('group', { name: '6 invited' })).toHaveLength(1)
 })
