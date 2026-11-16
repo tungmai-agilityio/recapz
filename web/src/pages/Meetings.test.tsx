@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ToastProvider } from '../ui/Toast'
@@ -105,4 +105,51 @@ test('a refused delete keeps the dialog open with the server message', async () 
   fireEvent.click(screen.getByRole('button', { name: 'Delete meeting' }))
   expect((await screen.findByRole('alert')).textContent).toBe('only the owner or an admin can delete')
   expect(screen.getByRole('alertdialog')).toBeTruthy()
+})
+
+const sendNotetaker = async (f: ReturnType<typeof vi.fn>, link: string, title = '') => {
+  vi.stubGlobal('fetch', f)
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Send notetaker' }))
+  fireEvent.change(screen.getByLabelText('Meeting link'), { target: { value: link } })
+  if (title) fireEvent.change(screen.getByLabelText('Title (optional)'), { target: { value: title } })
+  fireEvent.click(within(screen.getByRole('form', { name: 'Send notetaker' })).getByRole('button', { name: 'Send notetaker' }))
+}
+const joins = (f: ReturnType<typeof vi.fn>) => f.mock.calls.filter(([u]) => u === '/api/meetings/join')
+
+test('send notetaker posts the link and title, shows loading, then refreshes the list', async () => {
+  let rows: unknown[] = []
+  let release = () => {}
+  const f = vi.fn(async (u: string) => {
+    if (u === '/api/meetings/join') {
+      await new Promise<void>((r) => { release = r })
+      rows = [{ id: '9', title: 'Design review', platform: 'zoom', status: 'joining', started_at: null, created_at: 1 }]
+      return new Response('{"id":"9"}', { status: 201 })
+    }
+    return new Response(JSON.stringify(rows))
+  })
+  await sendNotetaker(f, ' https://us02web.zoom.us/j/84012345678 ', ' Design review ')
+  expect(await screen.findByRole('button', { name: 'Sending…' })).toHaveProperty('disabled', true)
+  release()
+  expect(await screen.findByText('Design review')).toBeTruthy()
+  expect(joins(f)).toHaveLength(1)
+  const init = joins(f)[0][1] as RequestInit
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body as string)).toEqual({ url: 'https://us02web.zoom.us/j/84012345678', title: 'Design review' })
+  expect(screen.queryByRole('form', { name: 'Send notetaker' })).toBeNull()
+  expect(screen.getByRole('status').textContent).toBe('Notetaker is on its way')
+})
+
+test('send notetaker without a title omits it', async () => {
+  const f = vi.fn(async (u: string) => u === '/api/meetings/join' ? new Response('{"id":"9"}', { status: 201 }) : new Response('[]'))
+  await sendNotetaker(f, 'https://meet.google.com/abc-defg-hij')
+  await waitFor(() => expect(joins(f)).toHaveLength(1))
+  expect(JSON.parse((joins(f)[0][1] as RequestInit).body as string)).toEqual({ url: 'https://meet.google.com/abc-defg-hij' })
+})
+
+test('send notetaker shows the server error and keeps the form open', async () => {
+  const f = vi.fn(async (u: string) => u === '/api/meetings/join' ? new Response('not a Meet or Zoom link', { status: 400 }) : new Response('[]'))
+  await sendNotetaker(f, 'https://example.com/x')
+  expect((await screen.findByRole('alert')).textContent).toBe('not a Meet or Zoom link')
+  expect((screen.getByLabelText('Meeting link') as HTMLInputElement).value).toBe('https://example.com/x')
 })
