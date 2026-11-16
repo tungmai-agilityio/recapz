@@ -56,7 +56,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen grid-cols-[208px_minmax(0,1fr)] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[auto_1fr]">
       <nav aria-label="Screens"
-        className="sticky top-0 flex h-screen flex-col gap-5 overflow-y-auto border-r border-hair bg-rail px-2.5 py-4 text-rail-fg max-[900px]:h-auto max-[900px]:flex-row max-[900px]:items-center max-[900px]:gap-1 max-[900px]:overflow-visible max-[900px]:border-r-0 max-[900px]:border-b max-[900px]:py-2">
+        className="sticky top-0 flex h-screen flex-col gap-5 overflow-x-hidden overflow-y-auto border-r border-hair bg-rail px-2.5 py-4 text-rail-fg max-[900px]:h-auto max-[900px]:flex-row max-[900px]:flex-wrap max-[900px]:items-center max-[900px]:gap-1 max-[900px]:overflow-visible max-[900px]:border-r-0 max-[900px]:border-b max-[900px]:py-2">
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
@@ -73,18 +73,18 @@ export function Shell({ children }: { children: ReactNode }) {
         ))}
         {me.data && (
           <div className="relative mt-auto border-t border-hair pt-2.5 max-[900px]:mt-0 max-[900px]:ml-auto max-[900px]:border-t-0 max-[900px]:pt-0">
-            <Menu label="Account" side={narrow ? 'below' : 'above'} trigger={
-              <span className="flex items-center gap-2.5 rounded-md p-1 text-left hover:bg-nav-on-bg">
+            <Menu label="Account" side={narrow ? 'below' : 'above'} align={narrow ? 'right' : 'left'} className="min-w-0 [&>button]:w-full max-[900px]:[&>button]:w-auto" trigger={
+              <span className="flex w-full min-w-0 items-center gap-2.5 rounded-md p-1 text-left hover:bg-nav-on-bg">
                 <Face name={who} speaker={0} size={30} />
-                <span className="min-w-0 max-[900px]:hidden">
+                <span className="min-w-0 flex-1 max-[900px]:hidden">
                   <span className="block truncate text-sm font-semibold text-rail-on">{me.data.name || me.data.email}</span>
-                  {me.data.name && <span className="block max-w-[120px] truncate text-xs opacity-80">{me.data.email}</span>}
+                  {me.data.name && <span className="block truncate text-xs opacity-80">{me.data.email}</span>}
                 </span>
               </span>
             }>
               <div className="mb-1 flex flex-col gap-0.5 border-b border-hair px-2.5 pt-2.5 pb-2">
-                <b>{me.data.name || me.data.email}</b>
-                <small className="text-mute">{me.data.email}</small>
+                <b className="break-all">{me.data.name || me.data.email}</b>
+                {me.data.name && <small className="break-all text-mute">{me.data.email}</small>}
                 <span className="mt-1.5 self-start"><Badge>{me.data.role.charAt(0).toUpperCase() + me.data.role.slice(1)}</Badge></span>
               </div>
               <MenuItem onClick={() => out.mutate()}>Sign out</MenuItem>
