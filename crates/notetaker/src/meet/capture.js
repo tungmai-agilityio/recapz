@@ -6,6 +6,16 @@
   // Only the top page: frames from several iframes would interleave into one broken timeline.
   if (window !== window.top || !window.isSecureContext || window.__recapzCapture) return;
   window.__recapzCapture = true;
+  // What this script did, read by the server for its log when a call recorded nothing: counts and
+  // names only, never audio or page text.
+  const info = (window.__recapzCaptureInfo = {
+    worklet: 'pending',
+    pcs: 0,
+    tracks: 0,
+    frames: 0,
+    get ctx() { return ctx.state; },
+    get iframes() { return document.querySelectorAll('iframe').length; },
+  });
   const FRAME = 1600; // 100 ms at 16 kHz
   const ctx = new AudioContext({ sampleRate: 16000 });
   const mix = ctx.createGain();
@@ -26,21 +36,28 @@
   }
   registerProcessor('recapz-capture', Capture);`;
   const url = URL.createObjectURL(new Blob([worklet], { type: 'text/javascript' }));
-  ctx.audioWorklet.addModule(url).then(() => {
-    const node = new AudioWorkletNode(ctx, 'recapz-capture');
-    node.port.onmessage = (e) => {
-      window.recapzAudio(btoa(String.fromCharCode(...new Uint8Array(e.data))));
-    };
-    mix.connect(node);
-    node.connect(silent).connect(ctx.destination);
-    ctx.resume();
-  });
+  ctx.audioWorklet.addModule(url).then(
+    () => {
+      info.worklet = 'ok';
+      const node = new AudioWorkletNode(ctx, 'recapz-capture');
+      node.port.onmessage = (e) => {
+        info.frames++;
+        window.recapzAudio(btoa(String.fromCharCode(...new Uint8Array(e.data))));
+      };
+      mix.connect(node);
+      node.connect(silent).connect(ctx.destination);
+      ctx.resume();
+    },
+    (e) => { info.worklet = `error: ${e.name}`; },
+  );
 
   const Original = window.RTCPeerConnection;
   window.RTCPeerConnection = function (...args) {
     const pc = new Original(...args);
+    info.pcs++;
     pc.addEventListener('track', (e) => {
       if (e.track.kind !== 'audio') return;
+      info.tracks++;
       const stream = new MediaStream([e.track]);
       // Chrome only feeds a remote stream to Web Audio while a media element also holds it.
       const el = new Audio();

@@ -193,5 +193,21 @@ mod browser_tests {
         w.write(&samples).unwrap();
         let wav = w.finish().unwrap().into_inner();
         assert_eq!(wav.len(), 44 + samples.len() * 2);
+
+        // What the script says about itself, logged for a call that recorded nothing.
+        let info = page
+            .evaluate(
+                "window.__recapzCaptureInfo ? JSON.stringify(window.__recapzCaptureInfo) : ''",
+            )
+            .await
+            .unwrap()
+            .into_value::<String>()
+            .unwrap();
+        let info: serde_json::Value = serde_json::from_str(&info).expect("no capture info");
+        assert_eq!(info["worklet"], "ok");
+        assert_eq!(info["pcs"], 2); // the fixture opens two connections
+        assert_eq!(info["tracks"], 1); // and one audio track arrives
+        assert!(info["frames"].as_u64().unwrap() >= 30);
+        assert_eq!(info["ctx"], "running");
     }
 }

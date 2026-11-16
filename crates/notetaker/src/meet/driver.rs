@@ -223,6 +223,12 @@ impl CallDriver for MeetDriver {
 
     async fn leave(&mut self) {
         if let Some(run) = self.run.take() {
+            if let Some(info) = run.meet.capture_info().await {
+                tracing::info!(
+                    "notetaker capture: {info}, frames dropped before admission {}",
+                    run.dropped_frames
+                );
+            }
             let _ = run.meet.leave().await; // best effort; closing the browser ends it anyway
             drop(run);
         }
