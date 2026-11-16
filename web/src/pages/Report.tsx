@@ -5,7 +5,9 @@ import { clock } from '../clock'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
-import { deleteMeeting, getMeeting, getReport, getTranscript, Unauthorized, type ReportData } from '../api'
+import { Button } from '../ui/Button'
+import { inputClass } from '../ui/Field'
+import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, Unauthorized, type MeetingDetail, type ReportData } from '../api'
 
 export function Report() {
   const { id = '' } = useParams()
@@ -27,6 +29,15 @@ export function Report() {
       toast('Meeting deleted')
       void qc.invalidateQueries({ queryKey: ['meetings'] })
       nav('/')
+    },
+  })
+  const [draft, setDraft] = useState<string | null>(null) // non-null while the title is being edited
+  const rename = useMutation({
+    mutationFn: (title: string) => renameMeeting(id, title),
+    onSuccess: ({ title }) => {
+      qc.setQueryData(['meeting', id], (m: MeetingDetail | undefined) => m && { ...m, title })
+      void qc.invalidateQueries({ queryKey: ['meetings'] })
+      setDraft(null)
     },
   })
   const audio = useRef<HTMLAudioElement>(null)
@@ -66,10 +77,25 @@ export function Report() {
       <div className="flex items-center justify-between">
         <Link to="/" className="text-sm text-mute hover:text-primary">← Meetings</Link>
         <Menu label="Meeting actions" side="below" trigger="⋯">
+          <MenuItem onClick={() => { rename.reset(); setDraft(m.title) }}>Rename</MenuItem>
           <MenuItem className="text-bad" onClick={() => { del.reset(); setConfirming(true) }}>Delete</MenuItem>
         </Menu>
       </div>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">{m.title}</h1>
+      {draft === null ? (
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight">{m.title}</h1>
+      ) : (
+        <form className="mt-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim() && !rename.isPending) rename.mutate(draft.trim()) }}>
+          <div className="flex gap-2">
+            <input autoFocus aria-label="Meeting title" maxLength={200} value={draft} className={`${inputClass} min-w-0 flex-1 text-lg font-semibold`}
+              aria-invalid={rename.isError || undefined}
+              onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setDraft(null) }}
+              onFocus={(e) => e.currentTarget.select()} />
+            <Button type="submit" variant="primary" disabled={!draft.trim() || rename.isPending}>Save</Button>
+            <Button onClick={() => setDraft(null)}>Cancel</Button>
+          </div>
+          {rename.error && <p role="alert" className="mt-1 text-xs text-bad">{rename.error.message.replace(/^\d+ /, '')}</p>}
+        </form>
+      )}
       <p className="font-mono text-xs text-mute">{m.platform} · {m.status}</p>
       {m.error && <p className="mt-3 text-sm text-bad">{m.error}</p>}
 

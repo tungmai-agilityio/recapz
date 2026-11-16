@@ -747,3 +747,108 @@ async fn delete_meeting_is_owner_or_admin_only_and_removes_everything() {
     assert_eq!(s, StatusCode::NO_CONTENT);
     assert_eq!(count(&t, "SELECT count(*) FROM meetings"), 2);
 }
+
+#[tokio::test]
+async fn rename_meeting_trims_validates_and_is_owner_or_admin_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let amy_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email = 'amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let mine = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "transcribing");
+    let other = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    t.execute(
+        "UPDATE meetings SET share='workspace' WHERE id=?1",
+        [&other],
+    )
+    .unwrap();
+    let title = |id: &str| -> String {
+        t.query_row("SELECT title FROM meetings WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+    let path = format!("/api/meetings/{mine}");
+    let patch = |p: &str, c: &str, b: &str| json_req("PATCH", p, c, b);
+
+    // Signed out, unseen private meeting, unknown id, bad titles: nothing changes.
+    let (s, ..) = send(
+        &app,
+        patch(&path, "recapz_session=nope", r#"{"title":"x"}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, ..) = send(&app, patch(&path, &bob, r#"{"title":"x"}"#)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(&app, patch("/api/meetings/nope", &amy, r#"{"title":"x"}"#)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    for body in [r#"{"title":"   "}"#, r#"{"title":""}"#] {
+        let (s, ..) = send(&app, patch(&path, &amy, body)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{body}");
+    }
+    let long = format!(r#"{{"title":"{}"}}"#, "a".repeat(201));
+    let (s, ..) = send(&app, patch(&path, &amy, &long)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert_eq!(title(&mine), "t");
+    // A member who can see a shared meeting but does not own it may not rename it.
+    let (s, ..) = send(
+        &app,
+        patch(&format!("/api/meetings/{other}"), &bob, r#"{"title":"x"}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(title(&other), "t");
+
+    // The owner renames (trimmed, 200 characters is allowed, even mid-processing); the response and the detail agree.
+    let (s, _, body) = send(&app, patch(&path, &amy, r#"{"title":"  Q3 planning  "}"#)).await;
+    assert_eq!(
+        (s, body.as_str()),
+        (StatusCode::OK, r#"{"title":"Q3 planning"}"#)
+    );
+    assert_eq!(title(&mine), "Q3 planning");
+    let (_, _, detail) = send(&app, get(&path, &amy)).await;
+    assert!(detail.contains(r#""title":"Q3 planning""#), "{detail}");
+    let max = format!(r#"{{"title":"{}"}}"#, "é".repeat(200));
+    let (s, ..) = send(&app, patch(&path, &amy, &max)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(title(&mine).chars().count(), 200);
+    // An admin may rename a workspace-shared meeting they do not own; the other meeting is untouched.
+    let (s, ..) = send(
+        &app,
+        patch(
+            &format!("/api/meetings/{other}"),
+            &boss,
+            r#"{"title":"Shared"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        (title(&other), title(&mine).chars().count()),
+        ("Shared".into(), 200)
+    );
+}

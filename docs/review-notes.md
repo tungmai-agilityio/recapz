@@ -187,3 +187,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The account menu was anchored to the trigger's right edge, so in the 208px rail it opened leftward off-screen, and the rail (scrolling vertically) grew a horizontal scrollbar. In the rail it now anchors to the left edge (`align="left"`), the email line truncates with an ellipsis, and the rail hides horizontal overflow. In the top bar (900px and under) it still anchors right, and the bar now wraps instead of running past narrow screens.
 - A user with no display name now sees their email once in the menu header (it was shown twice).
 - Checked by eye in Daylight and Ink with a stubbed API at 1024px and 360px (menu and page inside the viewport, no horizontal scroll). The unit test only asserts the anchor classes; jsdom has no layout. Not checked: Daylight dark / Ink light combinations separately (same classes, colours only), or a real signed-in session.
+
+## Rename a meeting
+- `PATCH /api/meetings/{id}` with `{"title": "..."}` returns `{"title": <saved>}`. The title is trimmed, must be 1 to 200 characters (counted as characters, not bytes), else 400.
+- Assumption: same permission as delete, owner or admin only (403 for a member who can merely see a shared meeting; 404 for a meeting they cannot see). Unlike delete it is allowed while the meeting is still processing, since the title is not an input to any job.
+- The meeting list reads titles from the same row, so the list and Ask citations show the new title on their next fetch; the Report page updates its cache at once and refetches the list.
+- Web: Rename sits in the "Meeting actions" menu on the Report page and turns the heading into an inline editor (Enter saves, Escape or Cancel discards, a server error shows under the field). The list page has no row menu, so there is no rename there.
+- Not done: the stored search rows (`chunks`) carry no title, so nothing else needs updating. Not checked by eye in the browser or in both skins; tested with a stubbed API and the Rust router.
