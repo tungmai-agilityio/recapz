@@ -203,11 +203,23 @@ impl MeetPage {
         }
         let prefix = serde_json::to_string(&notice.chars().take(24).collect::<String>()).unwrap();
         self.act("openChat()").await?;
+        // The panel is drawn a moment after the click: wait for its input before using it.
+        let start = Instant::now();
+        loop {
+            match self.act("focusChatInput()").await {
+                Err(DriverError::UiChanged(s)) if s == "chat_input" => {
+                    if start.elapsed() >= Duration::from_secs(3) {
+                        return Err(DriverError::UiChanged(s));
+                    }
+                    tokio::time::sleep(POLL).await;
+                }
+                other => break other?,
+            }
+        }
         // Someone else's message, or an earlier notice, must not count as ours.
         let before = self
             .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
             .await?;
-        self.act("focusChatInput()").await?;
         self.page
             .execute(InsertTextParams::new(notice))
             .await
@@ -378,6 +390,26 @@ mod browser_tests {
     async fn vietnamese_labels_and_lobby_text_are_recognised() {
         let _one_at_a_time = crate::test_support::exclusive().await;
         let Some((r, meet, _b)) = run("vi_lobby_admit", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn the_english_host_lobby_text_is_still_the_lobby() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("lobby_host", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn the_notice_is_confirmed_even_when_the_chat_log_has_no_label() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("log_unlabelled", Duration::from_secs(30)).await else {
             return;
         };
         assert_eq!(r, Ok(Joined::Admitted));

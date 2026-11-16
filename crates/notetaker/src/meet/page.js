@@ -13,11 +13,12 @@
     microphoneOff: { role: 'button', name: /^(turn off microphone|tắt micrô)$/i },
     leave: { role: 'button', name: /^(leave call|rời khỏi cuộc gọi)$/i },
     chatButton: { role: 'button', name: /^(chat with everyone|trò chuyện với mọi người)$/i },
-    chatInput: { role: 'textbox', name: /message/i },
-    chatSend: { role: 'button', name: /^send( a)? message$/i },
+    // "tin nhắn" (message) and "Gửi tin nhắn" (send message) are our reading of the Vietnamese page.
+    chatInput: { role: 'textbox', name: /message|tin nhắn/i },
+    chatSend: { role: 'button', name: /^(send( a)? message|gửi tin nhắn)$/i },
     chatLog: { role: 'list', name: /^chat messages$/i },
     signIn: { role: 'link', name: /^sign in$/i },
-    lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon|đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi/i,
+    lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon|please wait until a meeting host brings you into the call|đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi/i,
     deniedText: /denied your request|you can.?t join this call/i,
     rejoin: { role: 'button', name: /^rejoin$/i },
     participantCount: /^(\d+) participants?$/i,
@@ -43,9 +44,10 @@
     state() {
       if (S.removedText.test(text())) return 'removed';
       if (S.endedText.test(text()) || find(S.rejoin)) return 'ended';
+      // The lobby shows the leave button too, so its waiting text must win over it.
+      if (S.lobbyText.test(text())) return 'lobby';
       if (find(S.leave)) return 'admitted';
       if (S.deniedText.test(text())) return 'denied';
-      if (S.lobbyText.test(text())) return 'lobby';
       if (find(S.join)) return 'prejoin';
       if (find(S.signIn)) return 'signed_out';
       return 'unknown';
@@ -65,8 +67,9 @@
       const b = find(S.chatButton);
       if (!b) return fail('chat_button');
       if (disabled(b) || S.chatOffText.test(text())) return fail('chat_disabled');
+      // The panel is drawn after the click, so the caller waits for the input (`focusChatInput`).
       if (!find(S.chatInput)) b.click();
-      return find(S.chatInput) ? ok() : fail('chat_input');
+      return ok();
     },
     focusChatInput() {
       const i = find(S.chatInput);
@@ -106,18 +109,35 @@
     },
     // For the debug dump only: what the page offers right now, so a changed page can be fixed.
     snapshot() {
+      // Tooltips repeat every button's name and would push the chat panel out of the list.
       const controls = [...document.querySelectorAll('button,a,textarea,input,select,[role]')]
-        .slice(0, 80)
+        .filter((el) => roleOf(el) !== 'tooltip')
+        .slice(0, 120)
         .map((el) => ({
           tag: el.tagName.toLowerCase(),
           role: roleOf(el),
           name: nameOf(el).slice(0, 80),
           disabled: !!disabled(el),
         }));
+      // The chat panel's tags, roles and attribute names with every text replaced by its length, so
+      // the dump shows how messages are built without keeping what was said.
+      const shape = (el, depth = 0) => {
+        const tag = el.tagName.toLowerCase();
+        const attrs = [...el.attributes]
+          .filter((a) => a.name !== 'class' && a.name !== 'style')
+          .map((a) => (a.name === 'role' || a.name === 'aria-label' ? `${a.name}="${a.value.slice(0, 40)}"` : a.name));
+        const kids = depth > 9 ? '' : [...el.childNodes]
+          .map((n) => (n.nodeType === 3 ? (n.data.trim() ? `[${n.data.trim().length}]` : '') : n.nodeType === 1 ? shape(n, depth + 1) : ''))
+          .join('');
+        return `<${[tag, ...attrs].join(' ')}>${kids}</${tag}>`;
+      };
+      let panel = find(S.chatInput);
+      for (let i = 0; panel && i < 6 && panel.parentElement; i++) panel = panel.parentElement;
       return JSON.stringify({
         path: location.pathname,
         title: document.title,
         controls,
+        chatShape: panel ? shape(panel).slice(0, 6000) : '',
         text: text().slice(0, 600),
       });
     },
@@ -127,10 +147,10 @@
       b.click();
       return ok();
     },
-    // How many chat messages contain `prefix`; posting must raise it.
+    // How many times `prefix` shows on the page; posting must raise it. The live chat log has no
+    // label to look it up by, so this reads the page text (the input box's text is not part of it).
     chatCount(prefix) {
-      const log = find(S.chatLog);
-      return log ? [...log.children].filter((m) => m.textContent.includes(prefix)).length : 0;
+      return text().split(prefix).length - 1;
     },
   };
 })();
