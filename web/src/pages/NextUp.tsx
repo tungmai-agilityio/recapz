@@ -35,9 +35,10 @@ export function NextUp() {
               <p className="flex gap-2.5 text-xs text-mute">
                 <span className="font-mono min-[901px]:hidden">{dayLabel(e.starts_at)} {at(e.starts_at)}</span>
                 <span>{e.platform ?? 'No platform'}</span>
+                {e.join_url?.startsWith('https://') && <a href={e.join_url} target="_blank" rel="noreferrer" className="text-primary">Open link</a>}
               </p>
             </div>
-            {e.has_link
+            {e.join_url
               ? (
                 <span className="flex items-center gap-2">
                   <span aria-hidden className="text-xs text-mute">Auto-join</span>
