@@ -38,7 +38,12 @@ export function NextUp() {
               </p>
             </div>
             {e.has_link
-              ? <Switch label={`Auto-join ${e.title}`} checked={e.auto_join} onChange={(on) => flip.mutate({ id: e.id, on })} />
+              ? (
+                <span className="flex items-center gap-2">
+                  <span aria-hidden className="text-xs text-mute">Auto-join</span>
+                  <Switch label={`Auto-join ${e.title}`} checked={e.auto_join} onChange={(on) => flip.mutate({ id: e.id, on })} />
+                </span>
+              )
               : <span className="text-xs text-mute">No link</span>}
           </li>
         ))}
