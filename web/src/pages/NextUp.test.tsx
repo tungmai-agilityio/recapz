@@ -28,6 +28,7 @@ test('lists upcoming meetings with title, platform and an auto-join switch', asy
   expect(screen.getAllByText('meet')).toHaveLength(1)
   expect(screen.getByRole('switch', { name: 'Auto-join Design review' }).getAttribute('aria-checked')).toBe('false')
   expect(screen.getAllByRole('switch')).toHaveLength(1)
+  expect(screen.getAllByText('Auto-join')).toHaveLength(1)
   expect(screen.getByText('No link')).toBeTruthy()
 })
 
