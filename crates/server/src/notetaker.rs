@@ -132,6 +132,10 @@ pub async fn run_meeting<D: CallDriver>(
     let captured = capture(&c, &dir, id, url, max_call_ms, driver, &now).await;
     driver.leave().await; // always, even when capture hit a disk error
     let out = captured?;
+    if let Err(e) = &out.end {
+        // The meeting id and the error variant only: never the join link or anything said in the call.
+        tracing::warn!("notetaker call {id} ended with {e:?}");
+    }
     let ms = (out.samples / 16) as i64;
     let enough = |min: i64, why: &str| -> Result<()> {
         if ms >= min {

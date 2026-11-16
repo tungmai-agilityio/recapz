@@ -15,7 +15,7 @@ pub fn serve(html: &'static str) -> String {
             let _ = c.read(&mut buf);
             let _ = write!(
                 c,
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}",
                 html.len()
             );
         }

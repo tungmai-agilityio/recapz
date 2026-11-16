@@ -4,16 +4,27 @@
 const s = new URLSearchParams(location.search).get('s') || 'admit';
 const app = document.getElementById('app');
 const btn = (label, on, extra = '') => `<button aria-label="${label}" ${extra}>${label}</button>`;
+// `vi_` scenarios use the labels a Vietnamese-language account sees (seen on a live call page).
+const vi = s.startsWith('vi_');
+const L = vi
+  ? { join: 'Tham gia ngay', leave: 'Rời khỏi cuộc gọi', chat: 'Trò chuyện với mọi người' }
+  : { join: 'Join now', leave: 'Leave call', chat: 'Chat with everyone' };
+// The Vietnamese chat box and send labels are our best reading of the page: check them on a live call.
+const T = vi
+  ? { input: 'Gửi tin nhắn cho mọi người', send: 'Gửi tin nhắn' }
+  : { input: 'Send a message to everyone', send: 'Send message' };
+// The live chat log has no label we could find, so `log_unlabelled` draws it as a plain box.
+const LOG = s === 'log_unlabelled' ? '#log' : 'ul[aria-label="Chat messages"]';
 const prejoin = () => {
   if (s === 'signed_out') { app.innerHTML = '<a href="https://accounts.example/signin">Sign in</a>'; return; }
   if (s === 'no_join_button') { app.innerHTML = '<button>Enter</button>'; return; }
   app.innerHTML = '<h1>Ready to join?</h1>' + btn('Turn off camera') + btn('Turn off microphone')
-    + btn(s.startsWith('lobby') ? 'Ask to join' : 'Join now');
+    + btn(s.startsWith('lobby') ? 'Ask to join' : L.join);
   app.querySelectorAll('button').forEach((b) => (b.onclick = () => {
     const l = b.getAttribute('aria-label');
     if (l === 'Turn off camera') { b.setAttribute('aria-label', 'Turn on camera'); window.camOff = true; }
     else if (l === 'Turn off microphone') { b.setAttribute('aria-label', 'Turn on microphone'); window.micOff = true; }
-    else if (/join/i.test(l)) { if (s !== 'join_noop') joined(); }
+    else if (/join/i.test(l) || l === L.join) { if (s !== 'join_noop') joined(); }
   }));
 };
 const joined = () => {
@@ -21,38 +32,56 @@ const joined = () => {
   if (s === 'denied') { app.innerHTML = '<p>Someone in the call denied your request to join</p>'; return; }
   if (s === 'lobby_stuck') { app.innerHTML = '<p>Asking to be let in…</p>'; return; }
   if (s === 'lobby_admit') { app.innerHTML = '<p>Asking to be let in…</p>'; setTimeout(incall, 1200); return; }
+  // The live English lobby words (also with the leave and chat buttons showing).
+  if (s === 'lobby_host') { app.innerHTML = '<p>Please wait until a meeting host brings you into the call</p>' + btn(L.leave) + btn(L.chat); setTimeout(incall, 1200); return; }
+  // The live lobby already shows the leave and chat buttons, so they cannot tell us we are in.
+  if (s === 'vi_lobby_admit') { app.innerHTML = '<p>Vui lòng đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi</p>' + btn(L.leave) + btn(L.chat); setTimeout(incall, 1200); return; }
   incall();
 };
 const incall = () => {
-  app.innerHTML = btn('Leave call') + btn('Chat with everyone', null, s === 'chat_off' ? 'disabled' : '')
+  app.innerHTML = btn(L.leave) + btn(L.chat, null, s === 'chat_off' ? 'disabled' : '')
     + `<div role="status" aria-label="${s === 'alone' ? '1 participant' : '3 participants'}"></div>`
     + '<ul aria-label="Participants" role="list"><li aria-label="Ann, speaking"></li><li aria-label="Bo"></li></ul>'
     + '<div id="panel"></div>';
   const later = (ms, f) => setTimeout(f, ms);
-  const say = (who, t) => { const ul = document.querySelector('ul[aria-label="Chat messages"]');
+  const say = (who, t) => { const ul = document.querySelector(LOG);
     if (!ul) return; const li = document.createElement('li'); li.textContent = who + ': ' + t; ul.appendChild(li); };
   if (s === 'removed') later(1500, () => { app.innerHTML = '<p>You\'ve been removed from the call</p>'; });
   if (s === 'ended') later(1500, () => { app.innerHTML = '<p>The call has ended</p>' + btn('Rejoin'); });
   if (s === 'opt_out') later(1500, () => say('Sam', 'Please opt out, thanks'));
   if (s === 'name_you') later(1500, () => say('You Li', 'opt out'));
   if (s === 'chat_reopen') {
-    later(1500, () => document.querySelector('ul[aria-label="Chat messages"]').replaceChildren());
+    later(1500, () => document.querySelector(LOG).replaceChildren());
     later(2500, () => say('Sam', 'opt out please'));
   }
-  const chat = app.querySelector('[aria-label="Chat with everyone"]');
+  const chat = app.querySelector(`[aria-label="${L.chat}"]`);
   chat.onclick = () => {
-    document.getElementById('panel').innerHTML =
-      '<ul aria-label="Chat messages" role="list"></ul><textarea aria-label="Send a message to everyone"></textarea>'
-      + '<button aria-label="Send message">Send</button>';
-    const ta = document.querySelector('textarea');
-    if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector('ul[aria-label="Chat messages"]').appendChild(e); }
-    document.querySelector('[aria-label="Send message"]').onclick = () => {
-      if (s === 'chat_send_broken' || !ta.value) return;
-      const text = ta.value; ta.value = '';
-      const show = () => { const li = document.createElement('li'); li.textContent = 'You: ' + text;
-      document.querySelector('ul[aria-label="Chat messages"]').appendChild(li); };
-      if (s === 'slow_chat') setTimeout(show, 800); else show();
+    const render = () => {
+      document.getElementById('panel').innerHTML =
+        `${s === 'log_unlabelled' ? '<div id="log"></div>' : '<ul aria-label="Chat messages" role="list"></ul>'}<textarea aria-label="${T.input}"></textarea>`
+        + `<button aria-label="${T.send}">Send</button>`;
+      const ta = document.querySelector('textarea');
+      if (s === 'send_late') {
+        // The live send button turns on a moment after the text arrives; a click before that is lost.
+        const sb = document.querySelector(`[aria-label="${T.send}"]`);
+        sb.disabled = true;
+        ta.addEventListener('input', () => { sb.disabled = true; setTimeout(() => { sb.disabled = false; }, 500); });
+      }
+      if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector(LOG).appendChild(e); }
+      document.querySelector(`[aria-label="${T.send}"]`).onclick = () => {
+        if (s === 'chat_send_broken' || !ta.value) return;
+        const text = ta.value;
+        const show = () => { const li = document.createElement('li'); li.textContent = 'You: ' + text;
+        document.querySelector(LOG).appendChild(li); };
+        // The live page may clear the box and draw the message a moment after the click: a second
+        // click in between would post the notice again.
+        if (s === 'slow_both') { setTimeout(() => { ta.value = ''; show(); }, 800); return; }
+        ta.value = '';
+        if (s === 'slow_chat') setTimeout(show, 800); else show();
+      };
     };
+    // The live page draws the chat panel shortly after the click, not during it.
+    if (vi) setTimeout(render, 600); else render();
   };
 };
 prejoin();

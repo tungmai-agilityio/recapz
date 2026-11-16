@@ -75,6 +75,13 @@ fn parse_state(s: Option<&str>) -> PageState {
     }
 }
 
+/// The browser or page call failed: keep why in the log (the call's own script names and the
+/// DevTools error, never anything said in the call) before it becomes the one `Disconnected`.
+fn dropped(what: &str, e: impl std::fmt::Display) -> DriverError {
+    tracing::warn!("page call failed ({what}): {e}");
+    DriverError::Disconnected
+}
+
 pub struct MeetPage {
     page: Page,
     /// How long no known phase may show before the page counts as changed.
@@ -98,11 +105,12 @@ impl MeetPage {
         self.page
             .evaluate_on_new_document(SCRIPT)
             .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|e| dropped("evaluate_on_new_document", e))?;
+        // A navigation error can carry the join link, so it is not logged.
         self.page
             .goto(url)
             .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|_| dropped("goto", "navigation failed"))?;
         Ok(())
     }
 
@@ -133,19 +141,24 @@ impl MeetPage {
             .page
             .evaluate(expr)
             .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|e| dropped(expr, e))?;
         Ok(v.into_value::<Value>().unwrap_or(Value::Null))
     }
 
     /// Runs a page action that answers `{ok, step}`; a failed step is a changed page.
     async fn act(&self, call: &str) -> Result<(), DriverError> {
+        self.act_value(call).await.map(|_| ())
+    }
+
+    /// Like `act`, and gives back what the action answered.
+    async fn act_value(&self, call: &str) -> Result<Value, DriverError> {
         let v = self.eval(&format!("window.__recapzMeet?.{call}")).await?;
         let v: Value = match v {
             Value::String(s) => serde_json::from_str(&s).unwrap_or(Value::Null),
             other => other,
         };
         if v["ok"] == true {
-            return Ok(());
+            return Ok(v);
         }
         match v["step"].as_str() {
             Some("chat_disabled") => Err(DriverError::ChatOff),
@@ -199,18 +212,36 @@ impl MeetPage {
         }
         let prefix = serde_json::to_string(&notice.chars().take(24).collect::<String>()).unwrap();
         self.act("openChat()").await?;
+        // The panel is drawn a moment after the click: wait for its input before using it.
+        let start = Instant::now();
+        loop {
+            match self.act("focusChatInput()").await {
+                Err(DriverError::UiChanged(s)) if s == "chat_input" => {
+                    if start.elapsed() >= Duration::from_secs(3) {
+                        return Err(DriverError::UiChanged(s));
+                    }
+                    tokio::time::sleep(POLL).await;
+                }
+                other => break other?,
+            }
+        }
         // Someone else's message, or an earlier notice, must not count as ours.
         let before = self
             .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
             .await?;
-        self.act("focusChatInput()").await?;
         self.page
             .execute(InsertTextParams::new(notice))
             .await
-            .map_err(|_| DriverError::Disconnected)?;
-        self.act("clickSend()").await?;
+            .map_err(|e| dropped("insert_text", e))?;
         let start = Instant::now();
+        let mut clicked = false;
         while start.elapsed() < Duration::from_secs(3) {
+            // The send button turns on a moment after the text arrives, and a click before that is
+            // lost: try until one goes through, then only wait. The page may clear the box and draw
+            // the message late, so a second click could post the notice again.
+            if !clicked {
+                clicked = self.act_value("clickSend()").await?["clicked"] == true;
+            }
             let now = self
                 .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
                 .await?;
@@ -364,6 +395,65 @@ mod browser_tests {
     async fn waits_in_the_lobby_then_posts_the_notice_after_admission() {
         let _one_at_a_time = crate::test_support::exclusive().await;
         let Some((r, meet, _b)) = run("lobby_admit", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn vietnamese_labels_and_lobby_text_are_recognised() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("vi_lobby_admit", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn the_english_host_lobby_text_is_still_the_lobby() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("lobby_host", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn a_send_button_that_turns_on_late_still_posts_the_notice() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("send_late", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        // Exactly one notice: retrying the click must not post it twice.
+        let count = meet
+            .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
+            .await;
+        assert_eq!(count, Ok(serde_json::json!(1)));
+    }
+
+    #[tokio::test]
+    async fn a_page_that_clears_the_box_late_still_gets_the_notice_once() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("slow_both", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        // A repeated click draws its message 800 ms after it, so wait past all of them.
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        let count = meet
+            .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
+            .await;
+        assert_eq!(count, Ok(serde_json::json!(1)));
+    }
+
+    #[tokio::test]
+    async fn the_notice_is_confirmed_even_when_the_chat_log_has_no_label() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("log_unlabelled", Duration::from_secs(30)).await else {
             return;
         };
         assert_eq!(r, Ok(Joined::Admitted));
