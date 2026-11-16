@@ -211,3 +211,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `GET /api/meetings/upcoming` returns `attendees: [{name, email, status}]` per event, only for the signed-in member's own rows, like `join_url`. Emails of other people are therefore shown to someone who already saw them on their own invite.
 - Web: Next up shows up to four faces (name, or email when Google sent no name) with a "+N" count; nothing is drawn for an event with no invitees. The reply status is returned but not shown yet.
 - Tested with the mocked Google endpoints and seeded databases only. Real sync still returns 403 for the maintainer until the Calendar API is enabled on the Google project, so this has not been run against Google or checked by eye in either skin.
+
+## Audio capture on the live page (after "No audio was captured")
+- Theory tested and dropped: Meet's page policy blocking the blob worklet. A page with a Meet-shaped policy (nonce, `strict-dynamic`, trusted types, `eval` proven refused) still loaded the worklet and captured the tone, and Meet's own second policy header allows `blob:`. So the cause of the live run's zero frames is still unknown: either our hook never saw a Meet audio track, or the call ended early for another reason.
+- Added so the next run says which: at the end of a call the server logs `audio capture: peers=<n> tracks=<n> frames=<n> path=<worklet|processor: why>` plus how many frames were dropped before admission. Counts and one word only.
+- Added insurance: if the worklet is refused or fails, a script processor delivers the same audio (tested by making `addModule` reject). The hook also covers the `webkitRTCPeerConnection` alias, not tested against a page that uses it.
+- `notetaker` now depends on `tracing` (already used by the server) to log the capture line.
