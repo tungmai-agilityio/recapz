@@ -148,3 +148,60 @@ test('a failed delete keeps the dialog open and shows the server message in it',
   expect(deletes()).toHaveLength(1)
   expect(screen.queryByText('Meetings home')).toBeNull()
 })
+
+const renameSetup = (patch: (body: string) => Response) => {
+  const f = vi.fn(async (u: string, init?: RequestInit) =>
+    init?.method === 'PATCH' ? patch(String(init.body)) : new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : meeting)))
+  vi.stubGlobal('fetch', f)
+  show()
+  return () => f.mock.calls.filter(([, i]) => i?.method === 'PATCH')
+}
+const startRename = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+  return screen.getByRole('textbox', { name: 'Meeting title' }) as HTMLInputElement
+}
+
+test('Enter saves the trimmed title and the header shows it', async () => {
+  const patches = renameSetup((b) => new Response(JSON.stringify({ title: JSON.parse(b).title })))
+  const input = await startRename()
+  expect(input.value).toBe('Weekly sync')
+  fireEvent.change(input, { target: { value: '  Q3 planning ' } })
+  fireEvent.submit(input.form!)
+  expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Q3 planning')
+  expect(screen.queryByRole('textbox')).toBeNull()
+  expect(patches()).toHaveLength(1)
+  expect(patches()[0][0]).toBe('/api/meetings/m1')
+  expect(patches()[0][1]?.body).toBe('{"title":"Q3 planning"}')
+})
+
+test('Escape and Cancel leave the title alone without calling the API', async () => {
+  const patches = renameSetup(() => new Response('{}'))
+  const input = await startRename()
+  fireEvent.change(input, { target: { value: 'Other' } })
+  fireEvent.keyDown(input, { key: 'Escape' })
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Weekly sync')
+  await startRename()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Weekly sync')
+  expect(patches()).toHaveLength(0)
+})
+
+test('a blank title cannot be saved', async () => {
+  const patches = renameSetup(() => new Response('{}'))
+  const input = await startRename()
+  fireEvent.change(input, { target: { value: '   ' } })
+  expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.submit(input.form!)
+  expect(patches()).toHaveLength(0)
+})
+
+test('a failed rename keeps the editor open with the server message', async () => {
+  const patches = renameSetup(() => new Response('only the owner or an admin can rename', { status: 403 }))
+  const input = await startRename()
+  fireEvent.change(input, { target: { value: 'Nope' } })
+  fireEvent.submit(input.form!)
+  expect((await screen.findByRole('alert')).textContent).toBe('only the owner or an admin can rename')
+  expect((screen.getByRole('textbox', { name: 'Meeting title' }) as HTMLInputElement).value).toBe('Nope')
+  expect(patches()).toHaveLength(1)
+})
