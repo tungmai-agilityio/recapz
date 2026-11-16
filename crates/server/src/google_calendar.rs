@@ -144,6 +144,19 @@ pub fn list_query(
     q
 }
 
+/// Google's short error code from a failed calendar reply (for example `accessNotConfigured`), for
+/// the log. Only these code words are kept: no message text, nothing from the calendar itself.
+pub fn error_reason(body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let e = v.get("error")?;
+    let word = |x: Option<&serde_json::Value>| {
+        x.and_then(|x| x.as_str())
+            .filter(|w| w.len() <= 64 && w.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+            .map(str::to_string)
+    };
+    word(e.pointer("/errors/0/reason")).or_else(|| word(e.get("status")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +357,19 @@ mod tests {
             "t".repeat(MAX_PAGE_TOKEN)
         );
         assert!(parse_page(&body).unwrap().next_page_token.is_some());
+    }
+
+    #[test]
+    fn the_error_reason_is_a_code_word_only() {
+        let off = r#"{"error":{"code":403,"message":"Google Calendar API has not been used in project 123 before","errors":[{"reason":"accessNotConfigured"}],"status":"PERMISSION_DENIED"}}"#;
+        assert_eq!(error_reason(off).as_deref(), Some("accessNotConfigured"));
+        assert_eq!(
+            error_reason(r#"{"error":{"status":"PERMISSION_DENIED"}}"#).as_deref(),
+            Some("PERMISSION_DENIED")
+        );
+        let odd = r#"{"error":{"errors":[{"reason":"has spaces and a name: Ann"}]}}"#;
+        assert_eq!(error_reason(odd), None, "free text is never logged");
+        assert_eq!(error_reason("<html>"), None);
+        assert_eq!(error_reason("{}"), None);
     }
 }
