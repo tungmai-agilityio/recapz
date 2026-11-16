@@ -410,6 +410,15 @@ async fn upcoming_events_are_private_and_the_join_switch_needs_a_link() {
         ends_at: far + 1000,
         join_url: url.map(Into::into),
         platform: url.map(|_| "meet".into()),
+        attendees: if ext == "a" {
+            vec![recapz_core::calendar::Attendee {
+                name: Some("Ann Lee".into()),
+                email: "ann@example.com".into(),
+                status: Some("accepted".into()),
+            }]
+        } else {
+            vec![]
+        },
     };
     recapz_core::calendar::sync(
         &t,
@@ -433,6 +442,11 @@ async fn upcoming_events_are_private_and_the_join_switch_needs_a_link() {
         (Some("https://meet.google.com/abc-defg-hij"), Some(false))
     );
     assert!(rows[1]["join_url"].is_null());
+    assert_eq!(
+        rows[0]["attendees"],
+        serde_json::json!([{"name": "Ann Lee", "email": "ann@example.com", "status": "accepted"}])
+    );
+    assert_eq!(rows[1]["attendees"], serde_json::json!([]));
     let (a, b) = (
         rows[0]["id"].as_str().unwrap().to_string(),
         rows[1]["id"].as_str().unwrap().to_string(),
@@ -442,7 +456,7 @@ async fn upcoming_events_are_private_and_the_join_switch_needs_a_link() {
     assert_eq!(
         (s, body.as_str()),
         (StatusCode::OK, "[]"),
-        "another member sees none of it"
+        "another member sees none of it, attendees included"
     );
 
     let on = r#"{"auto_join":true}"#;

@@ -4,6 +4,40 @@ use crate::db::new_id;
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 
+/// One invitee of an event. `status` is the provider's reply word (accepted, declined, tentative,
+/// needsAction) when it gave one.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Attendee {
+    pub name: Option<String>,
+    pub email: String,
+    pub status: Option<String>,
+}
+
+fn attendees_to_json(a: &[Attendee]) -> String {
+    serde_json::Value::Array(
+        a.iter()
+            .map(|a| serde_json::json!({"name": a.name, "email": a.email, "status": a.status}))
+            .collect(),
+    )
+    .to_string()
+}
+
+fn attendees_from_json(s: &str) -> Vec<Attendee> {
+    let str_of =
+        |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
+    serde_json::from_str::<Vec<serde_json::Value>>(s)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|v| {
+            Some(Attendee {
+                email: str_of(v, "email")?,
+                name: str_of(v, "name"),
+                status: str_of(v, "status"),
+            })
+        })
+        .collect()
+}
+
 pub struct NewEvent {
     pub external_id: String,
     pub title: String,
@@ -11,6 +45,7 @@ pub struct NewEvent {
     pub ends_at: i64,
     pub join_url: Option<String>,
     pub platform: Option<String>,
+    pub attendees: Vec<Attendee>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -22,6 +57,7 @@ pub struct Event {
     pub join_url: Option<String>,
     pub platform: Option<String>,
     pub auto_join: bool,
+    pub attendees: Vec<Attendee>,
 }
 
 /// Replaces the member's events that start inside `[from, to)` with `events`.
@@ -41,11 +77,11 @@ pub fn sync(
         for e in events {
             c.execute(
                 "INSERT INTO calendar_events
-                   (id, member_id, external_id, title, starts_at, ends_at, join_url, platform, auto_join)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                   (id, member_id, external_id, title, starts_at, ends_at, join_url, platform, auto_join, attendees)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT (member_id, external_id) DO UPDATE SET
                    title = excluded.title, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
-                   join_url = excluded.join_url, platform = excluded.platform,
+                   join_url = excluded.join_url, platform = excluded.platform, attendees = excluded.attendees,
                    auto_join = CASE WHEN excluded.join_url IS NULL THEN 0 ELSE auto_join END",
                 params![
                     new_id(),
@@ -56,7 +92,8 @@ pub fn sync(
                     e.ends_at,
                     e.join_url,
                     e.platform,
-                    (default_auto_join && e.join_url.is_some()) as i64
+                    (default_auto_join && e.join_url.is_some()) as i64,
+                    attendees_to_json(&e.attendees)
                 ],
             )?;
         }
@@ -85,7 +122,7 @@ pub fn sync(
 /// The member's events that have not ended yet, soonest first.
 pub fn upcoming(c: &Connection, member_id: &str, now: i64, limit: u32) -> Result<Vec<Event>> {
     let mut s = c.prepare(
-        "SELECT id, title, starts_at, ends_at, join_url, platform, auto_join FROM calendar_events
+        "SELECT id, title, starts_at, ends_at, join_url, platform, auto_join, attendees FROM calendar_events
          WHERE member_id = ?1 AND ends_at > ?2 ORDER BY starts_at, id LIMIT ?3",
     )?;
     let rows = s
@@ -98,6 +135,7 @@ pub fn upcoming(c: &Connection, member_id: &str, now: i64, limit: u32) -> Result
                 join_url: r.get(4)?,
                 platform: r.get(5)?,
                 auto_join: r.get::<_, i64>(6)? != 0,
+                attendees: attendees_from_json(&r.get::<_, String>(7)?),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -184,6 +222,7 @@ mod tests {
             ends_at: start + 100,
             join_url: url.map(Into::into),
             platform: url.map(|_| "meet".into()),
+            attendees: vec![],
         }
     }
 
@@ -243,6 +282,22 @@ mod tests {
             ]
         );
         assert_eq!(list[0].id, id_a, "same row, not recreated");
+    }
+
+    #[test]
+    fn attendees_are_stored_replaced_on_resync_and_cleared_when_the_event_has_none() {
+        let (_d, c) = db();
+        let ann = Attendee {
+            name: Some("Ann".into()),
+            email: "ann@x.test".into(),
+            status: Some("accepted".into()),
+        };
+        let mut e = ev("a", 1000, None);
+        e.attendees = vec![ann.clone()];
+        sync(&c, "u1", &[e], 0, 10_000, false).unwrap();
+        assert_eq!(upcoming(&c, "u1", 0, 10).unwrap()[0].attendees, vec![ann]);
+        sync(&c, "u1", &[ev("a", 1000, None)], 0, 10_000, false).unwrap();
+        assert!(upcoming(&c, "u1", 0, 10).unwrap()[0].attendees.is_empty());
     }
 
     #[test]

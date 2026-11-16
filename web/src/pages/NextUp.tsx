@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { getCalendar, getUpcoming, setAutoJoin } from '../api'
+import { Faces } from '../ui/Face'
 import { Switch } from '../ui/Switch'
 import { dayLabel } from './meeting-days'
 
@@ -37,6 +38,11 @@ export function NextUp() {
                 <span>{e.platform ?? 'No platform'}</span>
                 {e.join_url?.startsWith('https://') && <a href={e.join_url} target="_blank" rel="noreferrer" className="text-primary">Open link</a>}
               </p>
+              {e.attendees.length > 0 && (
+                <span role="group" className="mt-1 flex" aria-label={`${e.attendees.length} invited`}>
+                  <Faces people={e.attendees.map((a) => a.name ?? a.email)} max={4} />
+                </span>
+              )}
             </div>
             {e.join_url
               ? (

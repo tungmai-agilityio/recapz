@@ -203,3 +203,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Calls `POST /api/meetings/join` with `{url, title}`; the title is left out when blank. While it runs the submit button reads "Sending…" and is disabled. On success the form closes, a toast says "Notetaker is on its way" and the list is refetched.
 - Errors show under the link field with the status prefix removed (400 "not a Meet or Zoom link", other server refusals the same way) and the typed values are kept so the member can fix and retry. No client-side check of the host: the server is the judge of what counts as a Meet or Zoom link.
 - Tested with a stubbed API only; not checked by eye in both skins or against a real server. The S2 rows in `docs/ui-parity.md` stay unticked (no side-by-side screenshot with the prototype state yet).
+
+## Attendees on upcoming meetings
+- Sync keeps each event's invitees (name, email, reply status) in a JSON `attendees` column on `calendar_events` (migration `tenant_005`), replaced on every sync. One column instead of a table because they are only ever read together with their event, through the owning member's query; a table can come later if invitees need to be searched.
+- Google already returns `attendees` for the events list under the existing calendar read scope, so no scope change; the request now also sends `maxAttendees=50`, and at most 50 are kept (names cut at 100 characters, emails at 254).
+- Left out on purpose: the calendar owner (`self`), rooms and other resources, and entries without a usable email. An event with no invitees returns `"attendees": []`. Guest lists Google hides from guests simply come back without the field.
+- `GET /api/meetings/upcoming` returns `attendees: [{name, email, status}]` per event, only for the signed-in member's own rows, like `join_url`. Emails of other people are therefore shown to someone who already saw them on their own invite.
+- Web: Next up shows up to four faces (name, or email when Google sent no name) with a "+N" count; nothing is drawn for an event with no invitees. The reply status is returned but not shown yet.
+- Tested with the mocked Google endpoints and seeded databases only. Real sync still returns 403 for the maintainer until the Calendar API is enabled on the Google project, so this has not been run against Google or checked by eye in either skin.

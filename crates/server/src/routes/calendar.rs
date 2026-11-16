@@ -23,9 +23,17 @@ pub(super) struct EventOut {
     platform: Option<String>,
     join_url: Option<String>,
     auto_join: bool,
+    attendees: Vec<AttendeeOut>,
 }
 
-/// The signed-in member's own events, with the join link they were invited with.
+#[derive(Serialize)]
+pub(super) struct AttendeeOut {
+    name: Option<String>,
+    email: String,
+    status: Option<String>,
+}
+
+/// The signed-in member's own events, with the join link and invitees their calendar gave them.
 pub(super) async fn upcoming(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<EventOut>>> {
     let u = app.current_user(&jar).await?;
     let uid = u.id.clone();
@@ -45,6 +53,15 @@ pub(super) async fn upcoming(State(app): State<App>, jar: CookieJar) -> Res<Json
                 platform: e.platform,
                 join_url: e.join_url,
                 auto_join: e.auto_join,
+                attendees: e
+                    .attendees
+                    .into_iter()
+                    .map(|a| AttendeeOut {
+                        name: a.name,
+                        email: a.email,
+                        status: a.status,
+                    })
+                    .collect(),
             })
             .collect(),
     ))

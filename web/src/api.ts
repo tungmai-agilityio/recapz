@@ -147,6 +147,12 @@ export const getCalendar = async (): Promise<CalendarStatus> => (await check(awa
 
 export const disconnectCalendar = async () => { await check(await fetch('/api/calendar', { method: 'DELETE', headers: csrf() })) }
 
+export interface Attendee {
+  name: string | null
+  email: string
+  status: string | null
+}
+
 export interface UpcomingEvent {
   id: string
   title: string
@@ -155,6 +161,7 @@ export interface UpcomingEvent {
   platform: string | null
   join_url: string | null
   auto_join: boolean
+  attendees: Attendee[]
 }
 
 export const getUpcoming = async (): Promise<UpcomingEvent[]> => (await check(await fetch('/api/meetings/upcoming'))).json()
