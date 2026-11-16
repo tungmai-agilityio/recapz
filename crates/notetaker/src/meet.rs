@@ -75,6 +75,13 @@ fn parse_state(s: Option<&str>) -> PageState {
     }
 }
 
+/// The browser or page call failed: keep why in the log (the call's own script names and the
+/// DevTools error, never anything said in the call) before it becomes the one `Disconnected`.
+fn dropped(what: &str, e: impl std::fmt::Display) -> DriverError {
+    tracing::warn!("page call failed ({what}): {e}");
+    DriverError::Disconnected
+}
+
 pub struct MeetPage {
     page: Page,
     /// How long no known phase may show before the page counts as changed.
@@ -98,11 +105,8 @@ impl MeetPage {
         self.page
             .evaluate_on_new_document(SCRIPT)
             .await
-            .map_err(|_| DriverError::Disconnected)?;
-        self.page
-            .goto(url)
-            .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|e| dropped("evaluate_on_new_document", e))?;
+        self.page.goto(url).await.map_err(|e| dropped("goto", e))?;
         Ok(())
     }
 
@@ -133,7 +137,7 @@ impl MeetPage {
             .page
             .evaluate(expr)
             .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|e| dropped(expr, e))?;
         Ok(v.into_value::<Value>().unwrap_or(Value::Null))
     }
 
@@ -207,7 +211,7 @@ impl MeetPage {
         self.page
             .execute(InsertTextParams::new(notice))
             .await
-            .map_err(|_| DriverError::Disconnected)?;
+            .map_err(|e| dropped("insert_text", e))?;
         self.act("clickSend()").await?;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(3) {
