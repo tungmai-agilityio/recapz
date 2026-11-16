@@ -80,7 +80,15 @@ async fn fetch(
             .send()
             .await?;
         if !res.status().is_success() {
-            bail!("calendar request failed: {}", res.status());
+            let status = res.status();
+            let reason = body(res)
+                .await
+                .ok()
+                .and_then(|b| google_calendar::error_reason(&b));
+            bail!(
+                "calendar request failed: {status}{}",
+                reason.map(|r| format!(" ({r})")).unwrap_or_default()
+            );
         }
         let page = google_calendar::parse_page(&body(res).await?)?;
         all.extend(page.events);
