@@ -21,11 +21,11 @@ pub(super) struct EventOut {
     starts_at: i64,
     ends_at: i64,
     platform: Option<String>,
-    has_link: bool,
+    join_url: Option<String>,
     auto_join: bool,
 }
 
-/// The signed-in member's own events; the link itself is not sent to the browser.
+/// The signed-in member's own events, with the join link they were invited with.
 pub(super) async fn upcoming(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<EventOut>>> {
     let u = app.current_user(&jar).await?;
     let uid = u.id.clone();
@@ -38,12 +38,12 @@ pub(super) async fn upcoming(State(app): State<App>, jar: CookieJar) -> Res<Json
     Ok(Json(
         rows.into_iter()
             .map(|e| EventOut {
-                has_link: e.join_url.is_some(),
                 id: e.id,
                 title: e.title,
                 starts_at: e.starts_at,
                 ends_at: e.ends_at,
                 platform: e.platform,
+                join_url: e.join_url,
                 auto_join: e.auto_join,
             })
             .collect(),

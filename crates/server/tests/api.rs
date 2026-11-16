@@ -426,20 +426,13 @@ async fn upcoming_events_are_private_and_the_join_switch_needs_a_link() {
 
     let (s, _, body) = send(&app, get("/api/meetings/upcoming", &boss)).await;
     assert_eq!(s, StatusCode::OK);
-    assert!(
-        !body.contains("meet.google.com"),
-        "the link must not reach the browser: {body}"
-    );
     let rows: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(rows.as_array().unwrap().len(), 2);
     assert_eq!(
-        (
-            rows[0]["has_link"].as_bool(),
-            rows[0]["auto_join"].as_bool()
-        ),
-        (Some(true), Some(false))
+        (rows[0]["join_url"].as_str(), rows[0]["auto_join"].as_bool()),
+        (Some("https://meet.google.com/abc-defg-hij"), Some(false))
     );
-    assert_eq!(rows[1]["has_link"], false);
+    assert!(rows[1]["join_url"].is_null());
     let (a, b) = (
         rows[0]["id"].as_str().unwrap().to_string(),
         rows[1]["id"].as_str().unwrap().to_string(),
