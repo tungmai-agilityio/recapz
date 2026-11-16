@@ -198,6 +198,12 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Web: Rename sits in the "Meeting actions" menu on the Report page and turns the heading into an inline editor (Enter saves, Escape or Cancel discards, a server error shows under the field). The list page has no row menu, so there is no rename there.
 - Not done: the stored search rows (`chunks`) carry no title, so nothing else needs updating. Not checked by eye in the browser or in both skins; tested with a stubbed API and the Rust router.
 
+## Send notetaker on Meetings
+- A "Send notetaker" button next to Upload opens an inline form above the list (not a modal: the page has no aside layout and the form needs no focus trap). Fields: meeting link (required, `type=url`) and optional title; Cancel closes it.
+- Calls `POST /api/meetings/join` with `{url, title}`; the title is left out when blank. While it runs the submit button reads "Sending…" and is disabled. On success the form closes, a toast says "Notetaker is on its way" and the list is refetched.
+- Errors show under the link field with the status prefix removed (400 "not a Meet or Zoom link", other server refusals the same way) and the typed values are kept so the member can fix and retry. No client-side check of the host: the server is the judge of what counts as a Meet or Zoom link.
+- Tested with a stubbed API only; not checked by eye in both skins or against a real server. The S2 rows in `docs/ui-parity.md` stay unticked (no side-by-side screenshot with the prototype state yet).
+
 ## Attendees on upcoming meetings
 - Sync keeps each event's invitees (name, email, reply status) in a JSON `attendees` column on `calendar_events` (migration `tenant_005`), replaced on every sync. One column instead of a table because they are only ever read together with their event, through the owning member's query; a table can come later if invitees need to be searched.
 - Google already returns `attendees` for the events list under the existing calendar read scope, so no scope change; the request now also sends `maxAttendees=50`, and at most 50 are kept (names cut at 100 characters, emails at 254).

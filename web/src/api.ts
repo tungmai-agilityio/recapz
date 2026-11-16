@@ -70,6 +70,13 @@ export const renameMeeting = async (id: string, title: string): Promise<{ title:
 
 export const deleteMeeting = async (id: string) => { await check(await fetch(`/api/meetings/${id}`, { method: 'DELETE', headers: csrf() })) }
 
+/** Sends the notetaker to a Meet or Zoom link; the server answers 400 for any other link. */
+export const joinMeeting = async (url: string, title: string) => {
+  await check(await fetch('/api/meetings/join', {
+    method: 'POST', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ url, title: title || undefined }),
+  }))
+}
+
 export async function uploadFile(file: File) {
   const body = new FormData()
   body.append('file', file)
