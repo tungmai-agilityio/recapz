@@ -210,7 +210,10 @@ impl CallDriver for MeetDriver {
                     if let (DriverError::UiChanged(_), Some(dir), Some(run)) =
                         (&e, &self.cfg.debug_dir, &self.run)
                     {
-                        run.meet.snapshot(dir).await;
+                        // A wedged browser must not delay the failure being reported.
+                        let _ =
+                            tokio::time::timeout(Duration::from_secs(10), run.meet.snapshot(dir))
+                                .await;
                     }
                     return Err(e);
                 }
