@@ -5,16 +5,19 @@
 (() => {
   if (window !== window.top || window.__recapzMeet) return;
   const S = {
-    join: { role: 'button', name: /^(join now|ask to join)$/i },
-    cameraOff: { role: 'button', name: /^turn off camera$/i },
-    microphoneOff: { role: 'button', name: /^turn off microphone$/i },
-    leave: { role: 'button', name: /^leave call$/i },
-    chatButton: { role: 'button', name: /^chat with everyone$/i },
+    // Vietnamese labels come from a Vietnamese-language account's call page. "Tham gia ngay" and
+    // "Yêu cầu tham gia" (join, ask to join) and the camera/microphone "Tắt" labels are not yet seen
+    // on a live page; check them on the next live call.
+    join: { role: 'button', name: /^(join now|ask to join|tham gia ngay|yêu cầu tham gia)$/i },
+    cameraOff: { role: 'button', name: /^(turn off camera|tắt máy ảnh)$/i },
+    microphoneOff: { role: 'button', name: /^(turn off microphone|tắt micrô)$/i },
+    leave: { role: 'button', name: /^(leave call|rời khỏi cuộc gọi)$/i },
+    chatButton: { role: 'button', name: /^(chat with everyone|trò chuyện với mọi người)$/i },
     chatInput: { role: 'textbox', name: /message/i },
     chatSend: { role: 'button', name: /^send( a)? message$/i },
     chatLog: { role: 'list', name: /^chat messages$/i },
     signIn: { role: 'link', name: /^sign in$/i },
-    lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon/i,
+    lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon|đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi/i,
     deniedText: /denied your request|you can.?t join this call/i,
     rejoin: { role: 'button', name: /^rejoin$/i },
     participantCount: /^(\d+) participants?$/i,

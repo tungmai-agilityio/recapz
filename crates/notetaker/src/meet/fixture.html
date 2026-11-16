@@ -4,16 +4,21 @@
 const s = new URLSearchParams(location.search).get('s') || 'admit';
 const app = document.getElementById('app');
 const btn = (label, on, extra = '') => `<button aria-label="${label}" ${extra}>${label}</button>`;
+// `vi_` scenarios use the labels a Vietnamese-language account sees (seen on a live call page).
+const vi = s.startsWith('vi_');
+const L = vi
+  ? { join: 'Tham gia ngay', leave: 'Rời khỏi cuộc gọi', chat: 'Trò chuyện với mọi người' }
+  : { join: 'Join now', leave: 'Leave call', chat: 'Chat with everyone' };
 const prejoin = () => {
   if (s === 'signed_out') { app.innerHTML = '<a href="https://accounts.example/signin">Sign in</a>'; return; }
   if (s === 'no_join_button') { app.innerHTML = '<button>Enter</button>'; return; }
   app.innerHTML = '<h1>Ready to join?</h1>' + btn('Turn off camera') + btn('Turn off microphone')
-    + btn(s.startsWith('lobby') ? 'Ask to join' : 'Join now');
+    + btn(s.startsWith('lobby') ? 'Ask to join' : L.join);
   app.querySelectorAll('button').forEach((b) => (b.onclick = () => {
     const l = b.getAttribute('aria-label');
     if (l === 'Turn off camera') { b.setAttribute('aria-label', 'Turn on camera'); window.camOff = true; }
     else if (l === 'Turn off microphone') { b.setAttribute('aria-label', 'Turn on microphone'); window.micOff = true; }
-    else if (/join/i.test(l)) { if (s !== 'join_noop') joined(); }
+    else if (/join/i.test(l) || l === L.join) { if (s !== 'join_noop') joined(); }
   }));
 };
 const joined = () => {
@@ -21,10 +26,11 @@ const joined = () => {
   if (s === 'denied') { app.innerHTML = '<p>Someone in the call denied your request to join</p>'; return; }
   if (s === 'lobby_stuck') { app.innerHTML = '<p>Asking to be let in…</p>'; return; }
   if (s === 'lobby_admit') { app.innerHTML = '<p>Asking to be let in…</p>'; setTimeout(incall, 1200); return; }
+  if (s === 'vi_lobby_admit') { app.innerHTML = '<p>Vui lòng đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi</p>'; setTimeout(incall, 1200); return; }
   incall();
 };
 const incall = () => {
-  app.innerHTML = btn('Leave call') + btn('Chat with everyone', null, s === 'chat_off' ? 'disabled' : '')
+  app.innerHTML = btn(L.leave) + btn(L.chat, null, s === 'chat_off' ? 'disabled' : '')
     + `<div role="status" aria-label="${s === 'alone' ? '1 participant' : '3 participants'}"></div>`
     + '<ul aria-label="Participants" role="list"><li aria-label="Ann, speaking"></li><li aria-label="Bo"></li></ul>'
     + '<div id="panel"></div>';
@@ -39,7 +45,7 @@ const incall = () => {
     later(1500, () => document.querySelector('ul[aria-label="Chat messages"]').replaceChildren());
     later(2500, () => say('Sam', 'opt out please'));
   }
-  const chat = app.querySelector('[aria-label="Chat with everyone"]');
+  const chat = app.querySelector(`[aria-label="${L.chat}"]`);
   chat.onclick = () => {
     document.getElementById('panel').innerHTML =
       '<ul aria-label="Chat messages" role="list"></ul><textarea aria-label="Send a message to everyone"></textarea>'

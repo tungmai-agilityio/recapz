@@ -371,6 +371,16 @@ mod browser_tests {
     }
 
     #[tokio::test]
+    async fn vietnamese_labels_and_lobby_text_are_recognised() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("vi_lobby_admit", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
     async fn the_end_states_are_reported_as_what_they_are() {
         let _one_at_a_time = crate::test_support::exclusive().await;
         let cases: [(&str, Duration, Result<Joined, DriverError>); 8] = [
