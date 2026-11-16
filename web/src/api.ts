@@ -65,6 +65,9 @@ export const getTranscript = async (id: string): Promise<Segment[]> =>
 export const getReport = async (id: string): Promise<ReportData | null> =>
   (await check(await fetch(`/api/meetings/${id}/report`))).json()
 
+export const renameMeeting = async (id: string, title: string): Promise<{ title: string }> =>
+  (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ title }) }))).json()
+
 export const deleteMeeting = async (id: string) => { await check(await fetch(`/api/meetings/${id}`, { method: 'DELETE', headers: csrf() })) }
 
 export async function uploadFile(file: File) {
