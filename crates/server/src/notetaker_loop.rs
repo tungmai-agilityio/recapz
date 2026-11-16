@@ -136,6 +136,9 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
                 headless: false,
             },
             notice: NOTICE.to_string(),
+            // Opt in with RECAPZ_NOTETAKER_DEBUG=1: a failing page step saves a screenshot.
+            debug_dir: (std::env::var("RECAPZ_NOTETAKER_DEBUG").as_deref() == Ok("1"))
+                .then(|| s.data_dir.join("notetaker-debug").join(&id)),
         });
         let max_call_ms = i64::from(s.max_call_minutes.max(1)) * 60_000;
         run_meeting(

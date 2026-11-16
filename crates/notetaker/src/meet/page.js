@@ -101,6 +101,23 @@
         messages,
       });
     },
+    // For the debug dump only: what the page offers right now, so a changed page can be fixed.
+    snapshot() {
+      const controls = [...document.querySelectorAll('button,a,textarea,input,select,[role]')]
+        .slice(0, 80)
+        .map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          role: roleOf(el),
+          name: nameOf(el).slice(0, 80),
+          disabled: !!disabled(el),
+        }));
+      return JSON.stringify({
+        path: location.pathname,
+        title: document.title,
+        controls,
+        text: text().slice(0, 600),
+      });
+    },
     leave() {
       const b = find(S.leave);
       if (!b) return fail('leave_button');

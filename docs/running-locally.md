@@ -54,3 +54,7 @@ cargo test --workspace   # Rust
 pnpm -C web test         # web
 make lint
 ```
+
+## Notetaker debug dump
+
+If a call fails with `meet_ui_changed: <step>`, start the server with `RECAPZ_NOTETAKER_DEBUG=1`. A failing page step then saves `page.png` (a screenshot) and `page.json` (the page's buttons and its first 600 characters of text) in `data/notetaker-debug/<meeting id>/`. The page can show participant names, so the folder is private (0700), excluded from backups, and should be deleted after use. Nothing is written without the variable.
