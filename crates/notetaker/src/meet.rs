@@ -143,13 +143,18 @@ impl MeetPage {
 
     /// Runs a page action that answers `{ok, step}`; a failed step is a changed page.
     async fn act(&self, call: &str) -> Result<(), DriverError> {
+        self.act_value(call).await.map(|_| ())
+    }
+
+    /// Like `act`, and gives back what the action answered.
+    async fn act_value(&self, call: &str) -> Result<Value, DriverError> {
         let v = self.eval(&format!("window.__recapzMeet?.{call}")).await?;
         let v: Value = match v {
             Value::String(s) => serde_json::from_str(&s).unwrap_or(Value::Null),
             other => other,
         };
         if v["ok"] == true {
-            return Ok(());
+            return Ok(v);
         }
         match v["step"].as_str() {
             Some("chat_disabled") => Err(DriverError::ChatOff),
@@ -225,11 +230,14 @@ impl MeetPage {
             .await
             .map_err(|e| dropped("insert_text", e))?;
         let start = Instant::now();
+        let mut clicked = false;
         while start.elapsed() < Duration::from_secs(3) {
             // The send button turns on a moment after the text arrives, and a click before that is
-            // lost. `clickSend` does nothing while it is off or the box is empty, so repeating it
-            // until the notice shows cannot post it twice.
-            self.act("clickSend()").await?;
+            // lost: try until one goes through, then only wait. The page may clear the box and draw
+            // the message late, so a second click could post the notice again.
+            if !clicked {
+                clicked = self.act_value("clickSend()").await?["clicked"] == true;
+            }
             let now = self
                 .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
                 .await?;
@@ -417,6 +425,21 @@ mod browser_tests {
         };
         assert_eq!(r, Ok(Joined::Admitted));
         // Exactly one notice: retrying the click must not post it twice.
+        let count = meet
+            .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
+            .await;
+        assert_eq!(count, Ok(serde_json::json!(1)));
+    }
+
+    #[tokio::test]
+    async fn a_page_that_clears_the_box_late_still_gets_the_notice_once() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("slow_both", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        // A repeated click draws its message 800 ms after it, so wait past all of them.
+        tokio::time::sleep(Duration::from_millis(2000)).await;
         let count = meet
             .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
             .await;

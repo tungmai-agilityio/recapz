@@ -70,9 +70,13 @@ const incall = () => {
       if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector(LOG).appendChild(e); }
       document.querySelector(`[aria-label="${T.send}"]`).onclick = () => {
         if (s === 'chat_send_broken' || !ta.value) return;
-        const text = ta.value; ta.value = '';
+        const text = ta.value;
         const show = () => { const li = document.createElement('li'); li.textContent = 'You: ' + text;
         document.querySelector(LOG).appendChild(li); };
+        // The live page may clear the box and draw the message a moment after the click: a second
+        // click in between would post the notice again.
+        if (s === 'slow_both') { setTimeout(() => { ta.value = ''; show(); }, 800); return; }
+        ta.value = '';
         if (s === 'slow_chat') setTimeout(show, 800); else show();
       };
     };
