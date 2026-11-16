@@ -80,7 +80,9 @@
     clickSend() {
       const b = find(S.chatSend);
       if (!b) return fail('chat_send');
-      b.click();
+      // Off until the page has seen the text, and nothing to send once the box is empty.
+      const i = find(S.chatInput);
+      if (!disabled(b) && i && i.value) b.click();
       return ok();
     },
     // Everything the follow loop needs in one round trip: phase, participant count, who is

@@ -224,9 +224,12 @@ impl MeetPage {
             .execute(InsertTextParams::new(notice))
             .await
             .map_err(|e| dropped("insert_text", e))?;
-        self.act("clickSend()").await?;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(3) {
+            // The send button turns on a moment after the text arrives, and a click before that is
+            // lost. `clickSend` does nothing while it is off or the box is empty, so repeating it
+            // until the notice shows cannot post it twice.
+            self.act("clickSend()").await?;
             let now = self
                 .eval(&format!("window.__recapzMeet.chatCount({prefix})"))
                 .await?;
@@ -404,6 +407,20 @@ mod browser_tests {
         };
         assert_eq!(r, Ok(Joined::Admitted));
         assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn a_send_button_that_turns_on_late_still_posts_the_notice() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, meet, _b)) = run("send_late", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Ok(Joined::Admitted));
+        // Exactly one notice: retrying the click must not post it twice.
+        let count = meet
+            .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
+            .await;
+        assert_eq!(count, Ok(serde_json::json!(1)));
     }
 
     #[tokio::test]

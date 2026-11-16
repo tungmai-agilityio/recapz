@@ -61,6 +61,12 @@ const incall = () => {
         `${s === 'log_unlabelled' ? '<div id="log"></div>' : '<ul aria-label="Chat messages" role="list"></ul>'}<textarea aria-label="${T.input}"></textarea>`
         + `<button aria-label="${T.send}">Send</button>`;
       const ta = document.querySelector('textarea');
+      if (s === 'send_late') {
+        // The live send button turns on a moment after the text arrives; a click before that is lost.
+        const sb = document.querySelector(`[aria-label="${T.send}"]`);
+        sb.disabled = true;
+        ta.addEventListener('input', () => { sb.disabled = true; setTimeout(() => { sb.disabled = false; }, 500); });
+      }
       if (s === 'chat_echo') { const e = document.createElement('li'); e.textContent = 'Sam: Recapz notetaker is recording this call, right?'; document.querySelector(LOG).appendChild(e); }
       document.querySelector(`[aria-label="${T.send}"]`).onclick = () => {
         if (s === 'chat_send_broken' || !ta.value) return;
