@@ -182,3 +182,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Calendar not connected shows a hint to Recording & privacy; a connected calendar with no events shows the empty line with the same link. A calendar that needs reconnecting is treated as connected here and its list will just be stale; the reconnect prompt lives on Recording & privacy.
 - No "Join rules" link and no paste-link box (own task). The S2 row in `docs/ui-parity.md` stays unticked.
 - Tested with a stubbed API only; not run against a seeded scratch database or checked by eye in both skins, because Calendar sync still returns 403 for the maintainer.
+
+## Sidebar footer overflow
+- The account menu was anchored to the trigger's right edge, so in the 208px rail it opened leftward off-screen, and the rail (scrolling vertically) grew a horizontal scrollbar. In the rail it now anchors to the left edge (`align="left"`), the email line truncates with an ellipsis, and the rail hides horizontal overflow. In the top bar (900px and under) it still anchors right, and the bar now wraps instead of running past narrow screens.
+- A user with no display name now sees their email once in the menu header (it was shown twice).
+- Checked by eye in Daylight and Ink with a stubbed API at 1024px and 360px (menu and page inside the viewport, no horizontal scroll). The unit test only asserts the anchor classes; jsdom has no layout. Not checked: Daylight dark / Ink light combinations separately (same classes, colours only), or a real signed-in session.
