@@ -39,7 +39,7 @@ export function NextUp() {
                 {e.join_url?.startsWith('https://') && <a href={e.join_url} target="_blank" rel="noreferrer" className="text-primary">Open link</a>}
               </p>
               {e.attendees.length > 0 && (
-                <span className="mt-1 flex" aria-label={`${e.attendees.length} invited`}>
+                <span role="group" className="mt-1 flex" aria-label={`${e.attendees.length} invited`}>
                   <Faces people={e.attendees.map((a) => a.name ?? a.email)} max={4} />
                 </span>
               )}

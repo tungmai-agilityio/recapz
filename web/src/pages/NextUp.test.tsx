@@ -79,5 +79,5 @@ test('shows invitees as faces with a +N count, and nothing for an event without 
   await screen.findByText('Design review')
   expect(screen.getAllByRole('img').map((i) => i.getAttribute('aria-label'))).toEqual(['Ann Lee', 'bob@x.test', 'Cy', 'Di'])
   expect(screen.getByText('+2')).toBeTruthy()
-  expect(screen.getAllByLabelText(/invited/)).toHaveLength(1)
+  expect(screen.getAllByRole('group', { name: '6 invited' })).toHaveLength(1)
 })
