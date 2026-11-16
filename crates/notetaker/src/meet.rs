@@ -194,6 +194,11 @@ impl MeetPage {
     }
 
     /// Clicks the leave button; the caller closes the browser either way.
+    /// What the capture saw (counts and a word), for the log when a call ends.
+    pub(crate) async fn capture_stats(&self) -> Option<String> {
+        crate::capture::stats(&self.page).await
+    }
+
     pub(crate) async fn leave(&self) -> Result<(), DriverError> {
         self.act("leave()").await
     }
