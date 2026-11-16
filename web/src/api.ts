@@ -136,3 +136,21 @@ export interface CalendarStatus { connected: boolean; needs_reconnect: boolean }
 export const getCalendar = async (): Promise<CalendarStatus> => (await check(await fetch('/api/calendar'))).json()
 
 export const disconnectCalendar = async () => { await check(await fetch('/api/calendar', { method: 'DELETE', headers: csrf() })) }
+
+export interface UpcomingEvent {
+  id: string
+  title: string
+  starts_at: number
+  ends_at: number
+  platform: string | null
+  has_link: boolean
+  auto_join: boolean
+}
+
+export const getUpcoming = async (): Promise<UpcomingEvent[]> => (await check(await fetch('/api/meetings/upcoming'))).json()
+
+export const setAutoJoin = async (id: string, auto_join: boolean) => {
+  await check(await fetch(`/api/calendar-events/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ auto_join }),
+  }))
+}
