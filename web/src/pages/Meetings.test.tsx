@@ -33,7 +33,7 @@ test('shows a day heading, the status badge and the month count for each meeting
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
   show()
   expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy()
-  expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Next up', 'Today'])
   expect(screen.getByText('Ready').className).toContain('text-good')
   expect(screen.getByText('Failed').className).toContain('text-bad')
   expect(screen.getByText('Transcribing').className).toContain('text-signal-ink')

@@ -175,3 +175,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 
 ## Meet page debug dump (after the first live run)
 - The first live run failed with `meet_ui_changed: join_button` and the failure left no trace of what the page showed. `RECAPZ_NOTETAKER_DEBUG=1` now saves a screenshot and the page's buttons when a page step fails (private folder, off by default, excluded from backups). Tested on our own fixture page only.
+
+## Next up on Meetings
+- Shown as a section above the day list, not an aside: the page has no aside layout yet. It lists the next 5 events from `GET /api/meetings/upcoming` (the server returns up to 50) with day and time, title, platform and the auto-join switch. Not "today only": the API returns all coming events, so the day label shows when it is not today.
+- Events with no join link show "No link" instead of a switch, since `PATCH /api/calendar-events/{id}` refuses them (404).
+- Calendar not connected shows a hint to Recording & privacy; a connected calendar with no events shows the empty line with the same link. A calendar that needs reconnecting is treated as connected here and its list will just be stale; the reconnect prompt lives on Recording & privacy.
+- No "Join rules" link and no paste-link box (own task). The S2 row in `docs/ui-parity.md` stays unticked.
+- Tested with a stubbed API only; not run against a seeded scratch database or checked by eye in both skins, because Calendar sync still returns 403 for the maintainer.
