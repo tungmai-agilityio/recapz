@@ -86,7 +86,9 @@ pub fn router_with_llm(
         .route("/api/calendar-events/{id}", patch(calendar::set_join))
         .route(
             "/api/meetings/{id}",
-            get(meeting_detail).delete(delete_meeting),
+            get(meeting_detail)
+                .patch(rename_meeting)
+                .delete(delete_meeting),
         )
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
@@ -524,6 +526,50 @@ async fn meeting_detail(
         })
         .await?;
     Ok(Json(m.ok_or(ApiError::NotFound)?))
+}
+
+const MAX_TITLE_CHARS: usize = 200;
+
+#[derive(Deserialize)]
+struct Rename {
+    title: String,
+}
+
+/// Owner or admin only, like delete. Allowed in any status: a title is not part of processing.
+async fn rename_meeting(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    Json(body): Json<Rename>,
+) -> Res<Json<serde_json::Value>> {
+    let title = body.title.trim().to_string();
+    if title.is_empty() || title.chars().count() > MAX_TITLE_CHARS {
+        return Err(ApiError::BadRequest("title must be 1 to 200 characters"));
+    }
+    let u = app.current_user(&jar).await?;
+    let saved = title.clone();
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        if visible_meeting(c, &u.id, &id)?.is_none() {
+            return Ok(Err(ApiError::NotFound));
+        }
+        let owner: Option<String> =
+            c.query_row("SELECT owner_id FROM meetings WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })?;
+        if owner.as_deref() != Some(u.id.as_str()) && u.role != "admin" {
+            return Ok(Err(ApiError::Denied(
+                "only the owner or an admin can rename",
+            )));
+        }
+        c.execute(
+            "UPDATE meetings SET title = ?1 WHERE id = ?2",
+            params![title, id],
+        )?;
+        Ok(Ok(()))
+    })
+    .await??;
+    Ok(Json(serde_json::json!({ "title": saved })))
 }
 
 /// Hard delete. Owner or admin only, and not while the meeting is still being captured or processed.

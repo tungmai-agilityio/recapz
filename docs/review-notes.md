@@ -191,3 +191,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Join link in upcoming meetings
 - `GET /api/meetings/upcoming` now returns `join_url` (replacing `has_link`) so Next up can show "Open link". It is only the signed-in member's own events, so nobody sees a link they were not invited with. The earlier rule "the link must not reach the browser" is dropped on the maintainer's request; the server test now checks the link is returned and that another member's list has none of it.
 - The link only renders when it starts with `https://`. Participants are not included: nothing stores attendees yet.
+## Rename a meeting
+- `PATCH /api/meetings/{id}` with `{"title": "..."}` returns `{"title": <saved>}`. The title is trimmed, must be 1 to 200 characters (counted as characters, not bytes), else 400.
+- Assumption: same permission as delete, owner or admin only (403 for a member who can merely see a shared meeting; 404 for a meeting they cannot see). Unlike delete it is allowed while the meeting is still processing, since the title is not an input to any job.
+- The meeting list reads titles from the same row, so the list and Ask citations show the new title on their next fetch; the Report page updates its cache at once and refetches the list.
+- Web: Rename sits in the "Meeting actions" menu on the Report page and turns the heading into an inline editor (Enter saves, Escape or Cancel discards, a server error shows under the field). The list page has no row menu, so there is no rename there.
+- Not done: the stored search rows (`chunks`) carry no title, so nothing else needs updating. Not checked by eye in the browser or in both skins; tested with a stubbed API and the Rust router.
