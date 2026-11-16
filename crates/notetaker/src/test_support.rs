@@ -7,6 +7,11 @@ use std::{
 /// Serves `html` for every request on localhost (a secure context, which audio worklets need) and
 /// returns its base URL.
 pub fn serve(html: &'static str) -> String {
+    serve_with(html, "")
+}
+
+/// Like `serve`, with extra response header lines (each ending in `\r\n`).
+pub fn serve_with(html: &'static str, headers: &'static str) -> String {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/", l.local_addr().unwrap());
     std::thread::spawn(move || {
@@ -15,7 +20,7 @@ pub fn serve(html: &'static str) -> String {
             let _ = c.read(&mut buf);
             let _ = write!(
                 c,
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{html}",
                 html.len()
             );
         }
