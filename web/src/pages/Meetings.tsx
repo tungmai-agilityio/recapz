@@ -6,6 +6,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
+import { NextUp } from './NextUp'
 import { groupByDay, meetingTime, statusBadge } from './meeting-days'
 import { deleteMeeting, devLogin, getMeetings, Unauthorized, uploadFile } from '../api'
 
@@ -84,6 +85,7 @@ export function Meetings() {
             />
           </label>
         } />
+      <NextUp />
       {upload.isError && <p className="text-sm text-bad">Upload failed. Try again.</p>}
       {isLoading && <p className="text-mute">Loading…</p>}
       {error && !(error instanceof Unauthorized) && <p className="text-bad">Could not load meetings.</p>}
