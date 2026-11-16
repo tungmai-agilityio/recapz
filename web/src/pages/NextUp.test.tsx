@@ -53,3 +53,18 @@ test('not connected: says so and does not ask for events', async () => {
   expect(await screen.findByText(/calendar is not connected/)).toBeTruthy()
   expect(calls.map(([u]) => u)).toEqual(['/api/calendar'])
 })
+
+test('flipping the switch refetches the list', async () => {
+  const calls: [string, RequestInit | undefined][] = []
+  api(true, [ev()], calls)
+  show()
+  fireEvent.click(await screen.findByRole('switch', { name: 'Auto-join Design review' }))
+  await waitFor(() => expect(calls.filter(([u, i]) => u === '/api/meetings/upcoming' && !i?.method)).toHaveLength(2))
+})
+
+test('a failed events request shows an error', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+    url === '/api/calendar' ? new Response(JSON.stringify({ connected: true, needs_reconnect: false })) : new Response('boom', { status: 500 })))
+  show()
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not load upcoming meetings.')
+})
