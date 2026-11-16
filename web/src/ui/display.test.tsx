@@ -87,3 +87,11 @@ test('Menu side="below" opens downward, the default stays above', () => {
   expect(screen.getByRole('menu', { name: 'Down' }).className).toContain('top-full')
   expect(screen.getByRole('menu', { name: 'Up' }).className).toContain('bottom-full')
 })
+
+test('Menu align="left" anchors the panel to the trigger start, the default to its end', () => {
+  render(<><Menu label="L" align="left" trigger="L"><MenuItem>x</MenuItem></Menu><Menu label="R" trigger="R"><MenuItem>y</MenuItem></Menu></>)
+  fireEvent.click(screen.getByRole('button', { name: 'L' }))
+  fireEvent.click(screen.getByRole('button', { name: 'R' }))
+  expect(screen.getByRole('menu', { name: 'L' }).className).toContain('left-0')
+  expect(screen.getByRole('menu', { name: 'R' }).className).toContain('right-0')
+})
