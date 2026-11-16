@@ -39,7 +39,11 @@ fn ev(id: &str, title: &str, minute: i64) -> serde_json::Value {
     };
     serde_json::json!({"id": id, "summary": title,
         "start": {"dateTime": t(minute)}, "end": {"dateTime": t(minute + 30)},
-        "hangoutLink": "https://meet.google.com/abc-defg-hij"})
+        "hangoutLink": "https://meet.google.com/abc-defg-hij",
+        "attendees": if id == "e1" {
+            serde_json::json!([{"email": "boss@example.com", "self": true},
+                               {"email": "ann@example.com", "displayName": "Ann Lee", "responseStatus": "accepted"}])
+        } else { serde_json::json!([]) }})
 }
 
 async fn mock_google(events_mode: &'static str) -> (Google, Mock) {
@@ -138,6 +142,24 @@ async fn sync_refreshes_the_token_follows_pages_and_stores_events_without_auto_j
         .map(|e| e.auto_join)
         .collect();
     assert_eq!(auto, vec![false, false], "the default join rule is manual");
+    let who: Vec<Vec<(String, Option<String>)>> = calendar::upcoming(&c, "u1", NOW, 50)
+        .unwrap()
+        .into_iter()
+        .map(|e| {
+            e.attendees
+                .into_iter()
+                .map(|a| (a.email, a.status))
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        who,
+        vec![
+            vec![("ann@example.com".to_string(), Some("accepted".to_string()))],
+            vec![]
+        ],
+        "the owner is not listed; an event with no invitees has none"
+    );
     // A second run updates in place and does not duplicate.
     assert_eq!(run(&dir, &tenant, &g).await.unwrap(), Outcome::Synced(2));
     assert_eq!(titles(&dir, &tenant).len(), 2);

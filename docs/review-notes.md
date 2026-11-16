@@ -197,3 +197,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The meeting list reads titles from the same row, so the list and Ask citations show the new title on their next fetch; the Report page updates its cache at once and refetches the list.
 - Web: Rename sits in the "Meeting actions" menu on the Report page and turns the heading into an inline editor (Enter saves, Escape or Cancel discards, a server error shows under the field). The list page has no row menu, so there is no rename there.
 - Not done: the stored search rows (`chunks`) carry no title, so nothing else needs updating. Not checked by eye in the browser or in both skins; tested with a stubbed API and the Rust router.
+
+## Attendees on upcoming meetings
+- Sync keeps each event's invitees (name, email, reply status) in a JSON `attendees` column on `calendar_events` (migration `tenant_005`), replaced on every sync. One column instead of a table because they are only ever read together with their event, through the owning member's query; a table can come later if invitees need to be searched.
+- Google already returns `attendees` for the events list under the existing calendar read scope, so no scope change; the request now also sends `maxAttendees=50`, and at most 50 are kept (names cut at 100 characters, emails at 254).
+- Left out on purpose: the calendar owner (`self`), rooms and other resources, and entries without a usable email. An event with no invitees returns `"attendees": []`. Guest lists Google hides from guests simply come back without the field.
+- `GET /api/meetings/upcoming` returns `attendees: [{name, email, status}]` per event, only for the signed-in member's own rows, like `join_url`. Emails of other people are therefore shown to someone who already saw them on their own invite.
+- Web: Next up shows up to four faces (name, or email when Google sent no name) with a "+N" count; nothing is drawn for an event with no invitees. The reply status is returned but not shown yet.
+- Tested with the mocked Google endpoints and seeded databases only. Real sync still returns 403 for the maintainer until the Calendar API is enabled on the Google project, so this has not been run against Google or checked by eye in either skin.
