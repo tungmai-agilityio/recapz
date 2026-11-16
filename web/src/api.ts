@@ -143,7 +143,7 @@ export interface UpcomingEvent {
   starts_at: number
   ends_at: number
   platform: string | null
-  has_link: boolean
+  join_url: string | null
   auto_join: boolean
 }
 

@@ -12,7 +12,7 @@ const show = () =>
       <MemoryRouter><NextUp /></MemoryRouter>
     </QueryClientProvider>,
   )
-const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 3_600_000, ends_at: Date.now() + 7_200_000, platform: 'meet', has_link: true, auto_join: false, ...o })
+const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 3_600_000, ends_at: Date.now() + 7_200_000, platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, ...o })
 const api = (connected: boolean, events: unknown[], calls: [string, RequestInit | undefined][] = []) =>
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push([url, init])
@@ -22,7 +22,7 @@ const api = (connected: boolean, events: unknown[], calls: [string, RequestInit 
   }))
 
 test('lists upcoming meetings with title, platform and an auto-join switch', async () => {
-  api(true, [ev(), ev({ id: 'e2', title: 'Hallway chat', platform: null, has_link: false })])
+  api(true, [ev(), ev({ id: 'e2', title: 'Hallway chat', platform: null, join_url: null })])
   show()
   expect(await screen.findByText('Design review')).toBeTruthy()
   expect(screen.getAllByText('meet')).toHaveLength(1)
@@ -30,6 +30,8 @@ test('lists upcoming meetings with title, platform and an auto-join switch', asy
   expect(screen.getAllByRole('switch')).toHaveLength(1)
   expect(screen.getAllByText('Auto-join')).toHaveLength(1)
   expect(screen.getByText('No link')).toBeTruthy()
+  expect(screen.getAllByRole('link', { name: 'Open link' })).toHaveLength(1)
+  expect(screen.getByRole('link', { name: 'Open link' }).getAttribute('href')).toBe('https://meet.google.com/abc-defg-hij')
 })
 
 test('flipping the switch sends PATCH with auto_join', async () => {
