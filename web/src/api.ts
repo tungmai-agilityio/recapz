@@ -16,6 +16,7 @@ export interface MeetingDetail extends Meeting {
 export interface Segment {
   id: number
   speaker_id: string | null
+  speaker_name: string | null
   start_ms: number
   end_ms: number
   text: string
