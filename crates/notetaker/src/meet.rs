@@ -165,16 +165,6 @@ impl MeetPage {
         }
     }
 
-    /// What the audio capture script reports about itself (counts and names only), for the log of
-    /// a call that recorded nothing. `None` when the page has no such report.
-    pub async fn capture_info(&self) -> Option<String> {
-        let v = self
-            .eval("window.__recapzCaptureInfo ? JSON.stringify(window.__recapzCaptureInfo) : null")
-            .await
-            .ok()?;
-        v.as_str().map(str::to_string)
-    }
-
     /// One round trip with everything the follow loop needs.
     pub(crate) async fn observe(&self) -> Result<Observation, DriverError> {
         let v = self.eval("window.__recapzMeet?.observe() ?? null").await?;
@@ -199,6 +189,11 @@ impl MeetPage {
                 })
                 .collect(),
         })
+    }
+
+    /// What the capture saw (counts and a word), for the log when a call ends.
+    pub(crate) async fn capture_stats(&self) -> Option<String> {
+        crate::capture::stats(&self.page).await
     }
 
     /// Clicks the leave button; the caller closes the browser either way.

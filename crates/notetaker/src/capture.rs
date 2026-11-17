@@ -39,6 +39,25 @@ pub fn decode_frame(payload: &str) -> Option<Vec<i16>> {
     Some(pairs.iter().map(|b| i16::from_le_bytes(*b)).collect())
 }
 
+/// What the capture script saw so far: `peers=2 tracks=3 frames=120 path=worklet`. Counts and one
+/// word only, so it is safe to log.
+pub async fn stats(page: &Page) -> Option<String> {
+    let v = page
+        .evaluate("JSON.stringify(window.__recapzCapture ?? null)")
+        .await
+        .ok()?
+        .into_value::<String>()
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_str(&v).ok()?;
+    Some(format!(
+        "peers={} tracks={} frames={} path={}",
+        v["peers"],
+        v["tracks"],
+        v["frames"],
+        v["path"].as_str()?
+    ))
+}
+
 /// Adds the capture script to every document the page loads from now on (and the current one),
 /// and starts forwarding its frames.
 pub async fn start(page: &Page) -> Result<AudioCapture> {
@@ -105,7 +124,13 @@ mod browser_tests {
         time::{Duration, Instant},
     };
 
-    const FIXTURE: &str = r#"<!doctype html><title>tone</title><script>
+    macro_rules! fixture {
+        ($attr:literal) => {
+            concat!(
+                r#"<!doctype html><title>tone</title><script"#,
+                $attr,
+                r#">
+    try { eval('window.__e = 1'); } catch (e) { window.__e = e.name; }
     (async () => {
       const a = new AudioContext(), osc = a.createOscillator(), dest = a.createMediaStreamDestination();
       osc.frequency.value = 440; osc.connect(dest); osc.start();
@@ -118,7 +143,16 @@ mod browser_tests {
       await pc2.setLocalDescription(await pc2.createAnswer());
       await pc1.setRemoteDescription(pc2.localDescription);
     })();
-    </script>"#;
+    </script>"#
+            )
+        };
+    }
+    const FIXTURE: &str = fixture!("");
+    /// Carries the nonce of the policy below, like the call page's own scripts do.
+    const NONCED: &str = fixture!(r#" nonce="n1""#);
+    /// The shape of the call page's policy: only nonced scripts run, nothing else loads a script,
+    /// and strings may not become scripts.
+    const STRICT: &str = "Content-Security-Policy: script-src 'nonce-n1' 'strict-dynamic'; require-trusted-types-for 'script'\r\n";
 
     /// Signal power at one frequency (Goertzel).
     fn power(samples: &[i16], hz: f64) -> f64 {
@@ -133,14 +167,18 @@ mod browser_tests {
         s1 * s1 + s2 * s2 - k * s1 * s2
     }
 
-    #[tokio::test]
-    async fn captures_a_tone_played_over_an_in_page_connection() {
-        let _one_at_a_time = crate::test_support::exclusive().await;
+    /// Opens `url` with capture installed and returns three seconds of samples plus the capture's
+    /// own stats. `refuse_worklet` makes loading a worklet fail, as a page policy could.
+    async fn capture_tone(url: String, refuse_worklet: bool) -> Option<(Vec<i16>, String)> {
         if find_chromium(None).is_none() {
             println!("SKIPPED: no Chromium found");
-            return;
+            return None;
         }
-        let work = std::env::temp_dir().join(format!("recapz-capture-{}", std::process::id()));
+        let work = std::env::temp_dir().join(format!(
+            "recapz-capture-{}-{refuse_worklet}-{}",
+            std::process::id(),
+            url.len()
+        ));
         let _ = std::fs::remove_dir_all(&work);
         let b = Browser::launch(Launch {
             chromium: None,
@@ -151,10 +189,15 @@ mod browser_tests {
         .await
         .unwrap();
         let page = b.inner.new_page("about:blank").await.unwrap();
-        let mut cap = start(&page).await.unwrap();
-        page.goto(crate::test_support::serve(FIXTURE))
+        if refuse_worklet {
+            page.evaluate_on_new_document(
+                "AudioWorklet.prototype.addModule = () => Promise.reject(new DOMException('refused', 'SecurityError'))",
+            )
             .await
             .unwrap();
+        }
+        let mut cap = start(&page).await.unwrap();
+        page.goto(url).await.unwrap();
 
         // Collect three seconds of frames, starting at the first one.
         let mut samples: Vec<i16> = Vec::new();
@@ -177,8 +220,18 @@ mod browser_tests {
             (audio_ms - wall_ms).abs() <= 200,
             "audio {audio_ms} ms vs wall {wall_ms} ms"
         );
+        let st = stats(&page).await.expect("capture stats");
+        let eval_result = page
+            .evaluate("String(window.__e)")
+            .await
+            .unwrap()
+            .into_value::<String>()
+            .unwrap();
+        Some((samples, format!("{st} eval={eval_result}")))
+    }
 
-        // The tone is 440 Hz: after the first second, that bin dominates the others by far.
+    fn assert_440_dominates(samples: &[i16]) {
+        // After the first second, the 440 Hz bin dominates the others by far.
         let tail = &samples[16_000..];
         let at = |hz| power(tail, hz);
         for other in [220.0, 300.0, 600.0, 1000.0, 2000.0] {
@@ -187,27 +240,54 @@ mod browser_tests {
                 "440 Hz not dominant over {other} Hz"
             );
         }
+    }
 
+    #[tokio::test]
+    async fn captures_a_tone_played_over_an_in_page_connection() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((samples, st)) = capture_tone(crate::test_support::serve(FIXTURE), false).await
+        else {
+            return;
+        };
+        assert_440_dominates(&samples);
+        assert!(st.starts_with("peers=2 tracks=1 frames="), "{st}");
+        assert!(
+            st.contains("path=worklet eval=1"),
+            "{st}: no policy, eval works"
+        );
         // The frames make a valid recording of the same length.
         let mut w = WavWriter::new(Cursor::new(Vec::new())).unwrap();
         w.write(&samples).unwrap();
         let wav = w.finish().unwrap().into_inner();
         assert_eq!(wav.len(), 44 + samples.len() * 2);
+    }
 
-        // What the script says about itself, logged for a call that recorded nothing.
-        let info = page
-            .evaluate(
-                "window.__recapzCaptureInfo ? JSON.stringify(window.__recapzCaptureInfo) : ''",
-            )
-            .await
-            .unwrap()
-            .into_value::<String>()
-            .unwrap();
-        let info: serde_json::Value = serde_json::from_str(&info).expect("no capture info");
-        assert_eq!(info["worklet"], "ok");
-        assert_eq!(info["pcs"], 2); // the fixture opens two connections
-        assert_eq!(info["tracks"], 1); // and one audio track arrives
-        assert!(info["frames"].as_u64().unwrap() >= 30);
-        assert_eq!(info["ctx"], "running");
+    /// A page policy shaped like the call page's (nonces, strict-dynamic, trusted types) is in force
+    /// (the tests prove it by `eval` being refused) and the worklet still loads.
+    #[tokio::test]
+    async fn captures_on_a_page_with_a_strict_script_policy() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let url = crate::test_support::serve_with(NONCED, STRICT);
+        let Some((samples, st)) = capture_tone(url, false).await else {
+            return;
+        };
+        assert_440_dominates(&samples);
+        assert!(
+            st.ends_with("path=worklet eval=EvalError"),
+            "{st}: the policy must be in force"
+        );
+    }
+
+    /// If the worklet is refused, the script processor still delivers the audio, and the stats say
+    /// which path was used and why.
+    #[tokio::test]
+    async fn falls_back_to_a_script_processor_when_the_worklet_is_refused() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let url = crate::test_support::serve(FIXTURE);
+        let Some((samples, st)) = capture_tone(url, true).await else {
+            return;
+        };
+        assert_440_dominates(&samples);
+        assert!(st.contains("path=processor: SecurityError"), "{st}");
     }
 }

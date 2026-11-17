@@ -223,12 +223,18 @@ impl CallDriver for MeetDriver {
 
     async fn leave(&mut self) {
         if let Some(run) = self.run.take() {
-            if let Some(info) = run.meet.capture_info().await {
-                tracing::info!(
-                    "notetaker capture: {info}, frames dropped before admission {}",
-                    run.dropped_frames
-                );
-            }
+            // Counts only, so a call that recorded nothing says where the audio stopped.
+            let stats =
+                tokio::time::timeout(Duration::from_secs(3), run.meet.capture_stats()).await;
+            let s = match stats {
+                Ok(Some(s)) => s,
+                _ => "stats unavailable".to_string(), // the page was already gone
+            };
+            tracing::info!(
+                "audio capture: {s} dropped_before_admission={} dropped={}",
+                run.dropped_at_admission,
+                run.dropped_frames
+            );
             let _ = run.meet.leave().await; // best effort; closing the browser ends it anyway
             drop(run);
         }
