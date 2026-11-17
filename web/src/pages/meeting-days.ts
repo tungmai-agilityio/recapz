@@ -39,3 +39,7 @@ export const statusBadge: Record<string, { tone: 'good' | 'signal' | 'bad' | 'ne
   transcribing: { tone: 'signal', label: 'Transcribing' },
   reporting: { tone: 'signal', label: 'Writing report' },
 }
+
+export const minutesLabel = (ms: number) => `${Math.max(1, Math.round(ms / 60_000))} min`
+/** Whole hours from 1 h up, minutes below. */
+export const hoursLabel = (ms: number) => (ms >= 3_600_000 ? `${Math.round(ms / 3_600_000)} h` : minutesLabel(ms))
