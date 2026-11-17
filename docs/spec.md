@@ -14,6 +14,7 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Speaker ribbon | Strip showing who spoke when; used as scrubber and in lists |
 | Ask | Question box over all accessible meetings, answers cite exact moments |
 | Live view | Running transcript and talk time during a call |
+| Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/live-ask-plan.md`) |
 | Upload | Process an audio or video file the notetaker did not record |
 | Members | Google sign-in; admins invite by email, remove people, change roles |
 | Recording & privacy | Join rules, notetaker name/message, retention, purge one participant |
@@ -48,7 +49,7 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 
 Two adapters (Anthropic Messages, OpenAI-compatible Chat Completions) behind a `Provider` trait and a
 per-task `Router`. Reports are written once and stored. Ask sends only top retrieved chunks. Outputs are
-JSON validated against a schema. Only transcript text goes to providers; audio never leaves the server.
+JSON validated against a schema. Only transcript text, and text of documents the uploader marked "May be sent to the language model", go to providers; audio never leaves the server.
 
 ## Web
 
