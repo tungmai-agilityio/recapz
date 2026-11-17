@@ -58,7 +58,7 @@ export function Upload() {
                 const state = status === 'failed' ? (i < 1 ? 'done' : '') : status === 'ready' || i < at ? 'done' : i === at ? 'run' : ''
                 return (
                   <li key={s} data-state={state} className={`flex flex-col gap-1.5 text-[.8rem] ${state ? 'text-ink' : 'text-mute'}`}>
-                    <span className={`h-1 rounded-sm ${state === 'done' ? 'bg-ink' : state === 'run' ? 'animate-pulse bg-signal' : 'bg-hair'}`} />
+                    <span className={`h-1 rounded-sm ${state === 'done' ? 'bg-ink' : state === 'run' ? 'animate-pulse bg-ink-2' : 'bg-hair'}`} />
                     {label}
                   </li>
                 )
@@ -75,7 +75,7 @@ export function Upload() {
           <Field label="Title" hint="Defaults to the file name.">
             {(p) => <input {...p} className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />}
           </Field>
-          <Button variant="primary" className="justify-center" disabled={!file || !!bad || send.isPending} onClick={() => send.mutate()}>
+          <Button variant="primary" className="justify-center" disabled={!file || !!bad || send.isPending} onClick={() => { send.reset(); send.mutate() }}>
             {send.isPending ? 'Uploading…' : 'Process recording'}
           </Button>
         </aside>
