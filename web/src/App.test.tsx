@@ -107,6 +107,26 @@ test('the report route shows its breadcrumb', async () => {
   expect(document.querySelector('header')?.textContent).toContain('Meetings / Meeting report')
 })
 
+test('signing in with dev login switches the shell to signed in without a reload', async () => {
+  let signedInNow = false
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/auth/dev-login') { signedInNow = true; return new Response('') }
+    if (!signedInNow) return new Response('', { status: 401 })
+    return url === '/api/me' ? signedIn() : new Response('[]')
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+  // the page remounts once /api/me answers 401, so retry until the form is stable
+  await waitFor(() => {
+    fireEvent.change(screen.getByLabelText(/Dev login/), { target: { value: 'ana@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+  })
+  expect(await screen.findByRole('navigation', { name: 'Screens' })).toBeTruthy()
+})
+
 test('a 401 shows only the sign-in card, with no rail', async () => {
   mount('/', new Response('', { status: 401 }))
   expect(await screen.findByText('Sign in to Recapz')).toBeTruthy()
