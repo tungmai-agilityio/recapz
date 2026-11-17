@@ -17,19 +17,19 @@ definition of done for every web PR.
 ## Global
 - [x] Skins Daylight (default) and Ink; modes Light (default), Dark, Auto; `data-skin` and `data-theme` on `<html>`;
       stored in localStorage `recapz-skin` and `recapz-mode`
-      Covered by theme.test.tsx.
+      Covered by theme.test.tsx (#135).
 - [x] Tokens: paper, sheet, wash, ink, ink-2, mute, hair, hair-2, rail, rail-fg, rail-on, btn, btn-fg, signal,
       signal-ink, signal-wash, good, good-wash, bad, bad-wash, speaker-1..5, radius 6px
-      Checked in index.css; btn and btn-fg are named primary and primary-fg there. Not checked by eye.
+      Checked in index.css; btn and btn-fg are named primary and primary-fg there. Not checked by eye (#135).
 - [x] Be Vietnam Pro for UI, JetBrains Mono with tabular numerals for times and counts
-      Fonts loaded in index.html; `.font-mono` gets tabular numerals in index.css.
+      Fonts loaded in index.html; `.font-mono` gets tabular numerals in index.css (#135).
 - [ ] Primitives in `web/src/ui/`: Button (default, primary, ghost, danger), Badge (good, signal, bad), Face, Faces,
       Ribbon (list, scrubber, live), Switch, Tabs, Choice group, Field, Table, Toast, Menu, PageHead
       Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.
 - [ ] Amber (`signal`) only on the playhead, recording state and focus ring
 - [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` that stack at 900 px, rail becomes a top strip
 - [x] Reduced motion honoured (recording dot, pipeline fill)
-      Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet.
+      Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet (#135).
 - [ ] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus
 
 ## S1 Shell
@@ -42,7 +42,7 @@ definition of done for every web PR.
 - [ ] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
       mode switch (group label "Light or dark mode"; Light, Dark, Auto)
 - [x] Signed-out state shows the sign-in card; a 401 returns to it
-      Covered by App.test.tsx.
+      Covered by App.test.tsx (#135).
 - [ ] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
 
 ## S2 Meetings
