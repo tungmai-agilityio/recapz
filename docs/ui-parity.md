@@ -32,6 +32,7 @@ definition of done for every web PR.
       Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.
 - [ ] Amber (`signal`) only on the playhead, recording state and focus ring
 - [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` that stack at 900 px, rail becomes a top strip
+      Rail, columns and the 900 px stacking were checked by eye on 2026-11-17; the 1120 px page maximum was not exercised (content is narrower than that at 1280 px), so the row stays open.
 - [x] Reduced motion honoured (recording dot, pipeline fill)
       Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet (#135).
 - [ ] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus
@@ -43,20 +44,24 @@ definition of done for every web PR.
       Open: Live meeting, Upload and Members stay out of the rail until their screens exist; v1 dots and the glyph are in.
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
-- [ ] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
+- [x] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
       mode switch (group label "Light or dark mode"; Light, Dark, Auto)
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Group labels are covered by tests (#135).
 - [x] Signed-out state shows the sign-in card; a 401 returns to it
       Covered by App.test.tsx (#135).
-- [ ] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
+- [x] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). The strip wraps onto a second line at 390 px; the prototype scrolls it sideways.
 
 ## S2 Meetings
-- [ ] Header "Meetings" with a counts line, Upload link, Send notetaker button (built: counts line shows meetings this month and
+- [x] Header "Meetings" with a counts line, Upload link, Send notetaker button (built: counts line shows meetings this month and
       hours recorded from `duration_ms`, hours omitted when no meeting has a duration; no screenshot yet)
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
 - [ ] Send notetaker dialog: paste a meeting link; bad link shows an error (modal dialog, server message shown) (built in #137; no screenshot yet)
-- [ ] Days grouped (Today, Yesterday, weekday and date); row: time, title, duration, platform, action-item count,
+- [x] Days grouped (Today, Yesterday, weekday and date); row: time, title, duration, platform, action-item count,
       ribbon, faces; ribbon moves under the title on mobile (built: duration, platform, action-item count (hidden at 0), equal-weight
       speaker ribbon and faces from `speakers` (hidden when empty); no screenshot yet. The ribbon is one segment per
       speaker, not a timeline, because the list API has no speaking times)
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Speaker colours match the Report (#150).
 - [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
       no opted-out state exists in the list data)
 - [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
@@ -64,7 +69,7 @@ definition of done for every web PR.
       view route does not exist yet; rows with status `recording` show a Recording badge)
 - [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
-`GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built; a later screenshot pass ticks Header counts and Days grouped.
+`GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built and ticked after the screenshot pass.
 
 No screenshot attached and not checked by eye: no browser tool was available. A per-row Delete with confirm is
 done, shown on every row because the list API has no owner info (a refusal appears in the dialog). Hide it for
@@ -80,8 +85,8 @@ non-owners once the list returns the owner.
       clicking the ribbon seeks; Space toggles
       (built: play/pause, ribbon scrubber with chapter ticks and playhead, times, click and arrow-key seek, Space;
       left unticked only because no screenshot at 1280 and 390 px was taken, so not checked by eye)
-- [ ] Tabs Summary and Transcript (`role=tablist`)
-      (built; same reason: no screenshot)
+- [x] Tabs Summary and Transcript (`role=tablist`)
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
 - [ ] Summary: prose, Decisions, Open questions with timestamp link, Action items "n/m done" with checkbox, owner
       face, due date, strike-through when done
       (built except owner face: the report API has no owner. Done state is shown read-only: no endpoint saves it)
