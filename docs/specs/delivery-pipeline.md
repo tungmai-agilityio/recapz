@@ -1,7 +1,7 @@
 # Delivery pipeline
 
-Status: **design agreed with the maintainer (2026-11-17); nothing is built.** Rollout steps below are separate
-PRs, each one concern.
+Status: **design agreed with the maintainer (2026-11-17); rollout steps 0 to 8 are merged.** The skills have not
+all run for real yet; see Rollout status.
 
 ## Problem
 
@@ -152,6 +152,25 @@ Auto-merge stays off until steps 2, 5 and 6 have merged.
 8. `ship-epic <spec>`, built only after several single-ticket runs have merged cleanly (see Epic runs).
 
 Then run the pipeline on the next real feature.
+
+### Rollout status
+
+| Step | Delivered by | Run for real |
+|---|---|---|
+| 0 test-runner and `cargo` | #155, #157 (hook fixes) | yes; `cargo` was found, shared `CARGO_TARGET_DIR` not set |
+| 1 templates, labels, CONTRIBUTING | #156, #159 | labels created; forms not yet filed through the UI |
+| 2 CI | #162, #164, #165 | yes, on every PR |
+| 3 `grill-spec` | #166 | no |
+| 4 `plan-tickets` | #167 | no |
+| 5 `ship-ticket`, merge rule | #169 | first run on ticket #174 |
+| 6 allowlist, check and pause scripts | #168, #173, #172 | check script run against a real PR; pause on revert not triggered |
+| 7 `release` | #170 | no |
+| 8 `ship-epic` | #171 | no; build on it only after several single-ticket runs |
+
+Known gaps:
+- `ci.yml` cancels in-progress runs per ref, so quick successive merges cancel the earlier `main` runs; only the
+  latest commit gets a full result.
+- Project skills load at session start; whether they load inside subagents (needed by `ship-epic`) is unconfirmed.
 
 ## Epic runs
 
