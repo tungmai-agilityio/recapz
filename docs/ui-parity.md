@@ -23,6 +23,10 @@ definition of done for every web PR.
       Checked in index.css; btn and btn-fg are named primary and primary-fg there. Not checked by eye (#135).
 - [x] Be Vietnam Pro for UI, JetBrains Mono with tabular numerals for times and counts
       Fonts loaded in index.html; `.font-mono` gets tabular numerals in index.css (#135).
+- Daylight section framing: the `.frame` class in index.css (skin variables `--frame-*`, none in Ink) wraps the Meetings
+  list and aside, the report summary column, sidebar and transcript, the Ask conversation and the Upload columns.
+  Recording & privacy already had its own card. Per-section cards inside a column (as in the prototype `.sec`) are not
+  split yet. No rows ticked.
 - [ ] Primitives in `web/src/ui/`: Button (default, primary, ghost, danger), Badge (good, signal, bad), Face, Faces,
       Ribbon (list, scrubber, live), Switch, Tabs, Choice group, Field, Table, Toast, Menu, PageHead
       Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.

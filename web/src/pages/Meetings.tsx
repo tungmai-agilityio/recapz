@@ -137,7 +137,7 @@ export function Meetings() {
         </>} />
       {sending && <SendNotetaker onClose={() => setSending(false)} />}
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
-      <div className="flex min-w-0 flex-col gap-7">
+      <div className="frame flex min-w-0 flex-col gap-7">
       {isLoading && <p className="text-mute">Loading…</p>}
       {error && !(error instanceof Unauthorized) && <p role="alert" className="text-bad">Could not load meetings.</p>}
       {data?.length === 0 && <p className="text-mute">No meetings yet. <Link to="/upload" className="text-primary">Upload a recording</Link> or send the notetaker to a call.</p>}
