@@ -1,0 +1,68 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE" "$BRANCH"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+  size:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: node scripts/pr-size.mjs "origin/${{ github.base_ref }}"
+        env:
+          SIZE_EXCEPTION: ${{ contains(github.event.pull_request.labels.*.name, 'size-exception') }}
+  guards:
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/test-push-guards.sh
+  rust:
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: rust-
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+  web:
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: lts/* }
+      - run: corepack enable
+      # Run inside web/ so corepack reads the pinned packageManager from web/package.json.
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm lint
+        working-directory: web
+      - run: pnpm test
+        working-directory: web
