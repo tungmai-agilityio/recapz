@@ -2,7 +2,7 @@
 
 Status: **design agreed with the maintainer (2026-11-17); nothing is built.** Starts after the Meet live
 check passes (`docs/specs/meet-notetaker.md` row 16), before Zoom. Meet only until the Zoom notetaker exists.
-Intent: #TBD (filed before `plan-tickets` runs)
+Intent: #184
 
 ## What it is
 
