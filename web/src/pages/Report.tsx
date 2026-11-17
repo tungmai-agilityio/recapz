@@ -6,7 +6,7 @@ import { meetingTime } from './meeting-days'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Face } from '../ui/Face'
 import { Ribbon, SpeakerBar } from '../ui/Ribbon'
-import { colour } from '../ui/speaker-colour'
+import { colour, speakerIndex } from '../ui/speaker-colour'
 import { Tabs } from '../ui/Tabs'
 import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
@@ -93,11 +93,11 @@ export function Report() {
 
   const segs = transcript.data ?? []
   const ids = [...new Set(segs.map((s) => s.speaker_id).filter((x): x is string => x !== null))]
-  const speakerOf = (id: string | null) => (id === null ? null : ids.indexOf(id))
+  const speakerOf = (id: string | null) => speakerIndex(meeting.data?.speakers, id)
   const ribbon = segs.map((s) => ({ speaker: speakerOf(s.speaker_id), weight: Math.max(s.end_ms - s.start_ms, 1) }))
   const names = new Map(segs.filter((s) => s.speaker_id !== null).map((s) => [s.speaker_id, s.speaker_name ?? 'Unknown']))
   const spoken = ids.map((sid) => ({
-    index: ids.indexOf(sid), name: names.get(sid)!,
+    id: sid, index: speakerOf(sid), name: names.get(sid)!,
     ms: segs.filter((s) => s.speaker_id === sid).reduce((n, s) => n + Math.max(s.end_ms - s.start_ms, 0), 0),
   })).sort((a, b) => b.ms - a.ms)
   const talk = { people: spoken, all: segs.reduce((n, s) => n + Math.max(s.end_ms - s.start_ms, 0), 0) }
@@ -136,7 +136,7 @@ export function Report() {
         {total > 0 && <> · {clock(total)}</>} · {m.platform}
         {spoken.length > 0 && (
           <span className="ml-2 inline-flex translate-y-1.5">
-            {[...spoken].sort((a, b) => a.index - b.index).map((p, i) => <span key={p.index} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={p.index} /></span>)}
+            {[...spoken].sort((a, b) => (a.index ?? 99) - (b.index ?? 99)).map((p, i) => <span key={p.id} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={p.index} /></span>)}
           </span>
         )}
       </p>
@@ -232,7 +232,7 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk: { people: { index: number; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
   const time = (ms: number) => (
     <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
@@ -292,7 +292,7 @@ function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk
             <Heading>Talk time</Heading>
             <ul>
               {talk.people.map((p) => (
-                <li key={p.index} className="grid grid-cols-[70px_1fr_38px] items-center gap-2.5 py-0.5 text-[0.84rem]">
+                <li key={p.id} className="grid grid-cols-[70px_1fr_38px] items-center gap-2.5 py-0.5 text-[0.84rem]">
                   <span className="truncate">{p.name}</span>
                   <span data-testid="talk-bar" style={{ width: `${(p.ms / talk.people[0].ms) * 100}%` }} className={`h-1.5 rounded-[2px] ${colour(p.index)}`} />
                   <span className="font-mono text-mute">{Math.round((p.ms / talk.all) * 100)}%</span>
