@@ -14,6 +14,7 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
   Build only from docs/spec.md and the Recapz prototype. Ask the maintainer when unsure.
 
 ## Commands
+- make hooks    # once per clone: pre-push hook that refuses pushes to main
 - make dev      # server on :8080 + vite on :5173
 - make test     # all Rust and web tests
 - make lint     # cargo fmt --check, clippy -D warnings, pnpm lint, banned-names check
@@ -44,7 +45,7 @@ A PR that breaks any of these, or a Conventions rule above, is rejected.
 
 - The clean-room rules above, in every file, commit, branch and PR text.
 - Never skip, disable or delete a test to make CI pass.
-- Never push to `main` or force-push a shared branch. Never use `git commit --no-verify`.
+- Never push to `main` or force-push a shared branch; on your own branch use `--force-with-lease` only. Never use `git commit --no-verify`.
 - Never commit `config.toml`, API keys, recordings or real meeting data. Logs hold IDs, never transcript text.
 - Only transcript text, and text of documents the uploader marked "May be sent to the language model", go to LLM and embedding providers; audio never leaves the server.
 - A web PR ticks its screen's rows in docs/ui-parity.md and attaches a screenshot next to the prototype state; an unticked row needs a written reason.

@@ -5,6 +5,8 @@
 - Name: `<type>/<short-kebab-description>`, using the same types as commits: `feat/google-sign-in`,
   `fix/upload-size-limit`, `chore/ci-cache`, `docs/spec-update`. No user or tool prefixes.
 - Delete the branch after merge (local and remote).
+- Run `make hooks` once per clone: the pre-push hook refuses pushes to `main`.
+  Rewrite your own branch with `git push --force-with-lease`, never `--force`.
 
 ## Commits (Conventional Commits)
 - Subject: `type(scope): imperative summary`, at most 72 characters, no trailing period. Scope is optional.

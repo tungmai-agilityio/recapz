@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuses any push that updates or deletes main; main only changes through a merged PR.
+# Enable once per clone with `make hooks`.
+while read -r _ _ remote_ref _; do
+  if [ "$remote_ref" = refs/heads/main ]; then
+    echo "pre-push: pushing to main is blocked; merge through a PR" >&2
+    exit 1
+  fi
+done
+exit 0
