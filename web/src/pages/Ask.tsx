@@ -50,11 +50,9 @@ export function Ask() {
         <div key={ti} className="flex flex-col gap-3.5">
           {ti > 0 && <div className="h-px bg-hair" />}
           <p className="text-xl font-semibold leading-snug tracking-tight">{t.q}</p>
-          {t.state === 'error' ? (
-            <p role="alert" className="text-sm text-bad">{t.error}</p>
-          ) : (
+          {(t.state !== 'error' || t.a) && (
             <p className="whitespace-pre-wrap leading-7" aria-live="polite">
-              {t.a || (t.state === 'streaming' && <span className="text-mute">Searching your meetings…</span>)}
+              {t.a || <span className="text-mute">Searching your meetings…</span>}
               {t.cites.slice(0, 3).map((_, i) => (
                 <sup key={i} className="ml-0.5 text-[0.68rem]">
                   <a href={`#cite-${ti}-${i}`} className="rounded-sm bg-hair-2 px-1 font-mono no-underline">{i + 1}</a>
@@ -62,6 +60,7 @@ export function Ask() {
               ))}
             </p>
           )}
+          {t.state === 'error' && <p role="alert" className="text-sm text-bad">{t.error}</p>}
           {t.state === 'done' && t.cites.length === 0 && <p className="text-sm text-mute">No matching moments found.</p>}
           {t.cites.length > 0 && (
             <div className="grid gap-2.5 sm:grid-cols-3">

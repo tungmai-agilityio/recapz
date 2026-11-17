@@ -48,6 +48,27 @@ test('an error event ends the answer with an error', async () => {
   expect((await screen.findByRole('alert')).textContent).toBe('Could not get an answer.')
 })
 
+test('a stream error keeps the partial answer above the alert', async () => {
+  await askWith(() => new Response('event: token\ndata: {"text":"Par"}\n\nevent: error\ndata: {"message":"m"}\n\n'))
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not get an answer.')
+  expect(screen.getByText('Par')).toBeTruthy()
+})
+
+test('a failed request puts the typed question back', async () => {
+  await askWith(() => new Response('', { status: 429 }))
+  await screen.findByRole('alert')
+  expect((screen.getByLabelText('Question') as HTMLInputElement).value).toBe('x')
+})
+
+test('only three markers are shown for four citations', async () => {
+  const c = [1, 2, 3, 4].map((n) => ({ meeting_id: `m${n}`, title: `T${n}`, start_ms: n * 1000, quote: `q${n}` }))
+  await askWith(() => new Response(`event: token\ndata: {"text":"A"}\n\nevent: citations\ndata: ${JSON.stringify(c)}\n\nevent: done\ndata: {}\n\n`))
+  await screen.findByText('q3')
+  expect(screen.queryByText('q4')).toBeNull()
+  expect(screen.queryByRole('link', { name: '4' })).toBeNull()
+  expect(screen.getByRole('link', { name: '3' })).toBeTruthy()
+})
+
 test('no citations says so', async () => {
   await askWith(() => new Response('event: token\ndata: {"text":"Nothing."}\n\nevent: citations\ndata: []\n\nevent: done\ndata: {}\n\n'))
   expect(await screen.findByText('No matching moments found.')).toBeTruthy()
