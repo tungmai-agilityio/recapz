@@ -5,7 +5,8 @@ on:
     branches: [main]
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only superseded pull request runs are cancelled; every push to main keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
