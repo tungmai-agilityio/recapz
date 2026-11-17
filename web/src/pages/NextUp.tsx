@@ -19,22 +19,23 @@ export function NextUp() {
   })
 
   if (cal.isLoading || cal.isError) return null
+  const today = (events.data ?? []).filter((e) => dayLabel(e.starts_at) === 'Today')
   const connectHint = <>Connect Google Calendar on <Link to="/recording" className="text-primary">Recording &amp; privacy</Link>.</>
   let body
   if (!cal.data?.connected) body = <p className="text-sm text-mute">Your calendar is not connected. {connectHint}</p>
   else if (events.isError) body = <p role="alert" className="text-sm text-bad">Could not load upcoming meetings.</p>
   else if (!events.data) body = <p className="text-sm text-mute">Loading…</p>
-  else if (events.data.length === 0) body = <p className="text-sm text-mute">No upcoming meetings. {connectHint}</p>
+  else if (today.length === 0) body = <p className="text-sm text-mute">Nothing else today. {connectHint}</p>
   else
     body = (
       <ul>
-        {events.data.slice(0, SHOWN).map((e) => (
-          <li key={e.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 border-t border-hair px-1.5 py-3 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
-            <span className="font-mono text-xs text-mute max-[900px]:hidden">{dayLabel(e.starts_at)} {at(e.starts_at)}</span>
+        {today.slice(0, SHOWN).map((e) => (
+          <li key={e.id} className="grid grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-4 border-t border-hair px-1.5 py-3 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
+            <span className="font-mono text-xs text-mute max-[900px]:hidden">{at(e.starts_at)}</span>
             <div className="min-w-0">
               <p className="truncate font-semibold tracking-tight">{e.title}</p>
               <p className="flex gap-2.5 text-xs text-mute">
-                <span className="font-mono min-[901px]:hidden">{dayLabel(e.starts_at)} {at(e.starts_at)}</span>
+                <span className="font-mono min-[901px]:hidden">{at(e.starts_at)}</span>
                 <span>{e.platform ?? 'No platform'}</span>
                 {e.join_url?.startsWith('https://') && <a href={e.join_url} target="_blank" rel="noreferrer" className="text-primary">Open link</a>}
               </p>
@@ -57,10 +58,13 @@ export function NextUp() {
       </ul>
     )
   return (
-    <div className="flex flex-col">
-      <h2 className="pb-2 text-xs font-semibold tracking-[0.08em] text-mute uppercase">Next up</h2>
+    <aside className="flex flex-col">
+      <div className="flex items-center justify-between pb-2">
+        <h2 className="text-xs font-semibold tracking-[0.08em] text-mute uppercase">Next up today</h2>
+        <Link to="/recording" className="text-xs font-medium text-primary">Join rules</Link>
+      </div>
       {flip.isError && <p role="alert" className="pb-2 text-sm text-bad">Could not change that switch. Try again.</p>}
       {body}
-    </div>
+    </aside>
   )
 }

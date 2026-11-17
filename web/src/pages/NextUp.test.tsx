@@ -12,7 +12,7 @@ const show = () =>
       <MemoryRouter><NextUp /></MemoryRouter>
     </QueryClientProvider>,
   )
-const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 3_600_000, ends_at: Date.now() + 7_200_000, platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, attendees: [], ...o })
+const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: new Date().setHours(12, 0, 0, 0), ends_at: new Date().setHours(13, 0, 0, 0), platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, attendees: [], ...o })
 const api = (connected: boolean, events: unknown[], calls: [string, RequestInit | undefined][] = []) =>
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push([url, init])
@@ -45,7 +45,7 @@ test('flipping the switch sends PATCH with auto_join', async () => {
 test('empty state points to Recording & privacy', async () => {
   api(true, [])
   show()
-  expect(await screen.findByText(/No upcoming meetings/)).toBeTruthy()
+  expect(await screen.findByText(/Nothing else today/)).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Recording & privacy' }).getAttribute('href')).toBe('/recording')
 })
 
@@ -80,4 +80,13 @@ test('shows invitees as faces with a +N count, and nothing for an event without 
   expect(screen.getAllByRole('img').map((i) => i.getAttribute('aria-label'))).toEqual(['Ann Lee', 'bob@x.test', 'Cy', 'Di'])
   expect(screen.getByText('+2')).toBeTruthy()
   expect(screen.getAllByRole('group', { name: '6 invited' })).toHaveLength(1)
+})
+
+test('shows only today, with a Join rules link to Recording & privacy', async () => {
+  api(true, [ev(), ev({ id: 'e9', title: 'Tomorrow thing', starts_at: new Date().setHours(12, 0, 0, 0) + 86_400_000 })])
+  show()
+  expect(await screen.findByText('Design review')).toBeTruthy()
+  expect(screen.queryByText('Tomorrow thing')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Next up today' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'Join rules' }).getAttribute('href')).toBe('/recording')
 })

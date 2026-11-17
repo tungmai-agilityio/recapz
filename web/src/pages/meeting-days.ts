@@ -27,10 +27,15 @@ export function groupByDay(meetings: Meeting[], now = Date.now()): { label: stri
   return groups
 }
 
-export const statusBadge: Record<string, { tone: 'good' | 'signal' | 'bad'; label: string }> = {
+export const statusBadge: Record<string, { tone: 'good' | 'signal' | 'bad' | 'neutral'; label: string }> = {
   ready: { tone: 'good', label: 'Ready' },
   failed: { tone: 'bad', label: 'Failed' },
   uploaded: { tone: 'signal', label: 'Uploaded' },
+  scheduled: { tone: 'neutral', label: 'Scheduled' },
+  joining: { tone: 'signal', label: 'Joining' },
+  recording: { tone: 'signal', label: 'Recording' },
+  labelling: { tone: 'signal', label: 'Labelling speakers' },
+  indexing: { tone: 'signal', label: 'Indexing' },
   transcribing: { tone: 'signal', label: 'Transcribing' },
   reporting: { tone: 'signal', label: 'Writing report' },
 }
