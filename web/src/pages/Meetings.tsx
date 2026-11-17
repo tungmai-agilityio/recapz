@@ -155,7 +155,7 @@ export function Meetings() {
                     {m.action_item_count ? <span>{m.action_item_count} action {m.action_item_count === 1 ? 'item' : 'items'}</span> : null}</p>
                 </div>
                 <span className="max-[900px]:col-span-full max-[900px]:row-start-2 max-[900px]:empty:hidden">
-                  {m.speakers?.length ? <Ribbonsegments={m.speakers.map((_, i) => ({ speaker: i, weight: 1 }))} /> : null}
+                  {m.speakers?.length ? <Ribbon segments={m.speakers.map((_, i) => ({ speaker: i, weight: 1 }))} /> : null}
                 </span>
                 <div className="flex shrink-0 items-center gap-3">
                   {m.speakers?.length ? <span className="flex">{m.speakers.map((p, i) => <span key={p.id} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={i} /></span>)}</span> : null}
