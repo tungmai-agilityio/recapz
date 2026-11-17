@@ -26,12 +26,48 @@ test('shows the streamed answer and a citation card that opens the moment', asyn
   expect(JSON.parse(call[1].body as string)).toEqual({ question: 'when does pricing ship?' })
 })
 
-test('tells the user when asking fails', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
+async function askWith(res: () => Response) {
+  vi.stubGlobal('fetch', vi.fn(async () => res()))
   render(<MemoryRouter><Ask /></MemoryRouter>)
   fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'x' } })
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+}
+
+test.each([
+  [401, 'Sign in to ask.'],
+  [429, 'Too many questions. Try again in a minute.'],
+  [503, 'Ask needs a language model. Ask an admin to configure one.'],
+  [500, 'Could not get an answer.'],
+])('status %i shows its message', async (status, text) => {
+  await askWith(() => new Response('', { status }))
+  expect((await screen.findByRole('alert')).textContent).toBe(text)
+})
+
+test('an error event ends the answer with an error', async () => {
+  await askWith(() => new Response('event: token\ndata: {"text":"Par"}\n\nevent: error\ndata: {"message":"m"}\n\n'))
   expect((await screen.findByRole('alert')).textContent).toBe('Could not get an answer.')
+})
+
+test('no citations says so', async () => {
+  await askWith(() => new Response('event: token\ndata: {"text":"Nothing."}\n\nevent: citations\ndata: []\n\nevent: done\ndata: {}\n\n'))
+  expect(await screen.findByText('No matching moments found.')).toBeTruthy()
+})
+
+test('answer markers link to cards, and a chip asks a second question below a divider', async () => {
+  const fetchMock = vi.fn(async () => new Response(sse))
+  vi.stubGlobal('fetch', fetchMock)
+  const { container } = render(<MemoryRouter><Ask /></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button', { name: 'What are the open action items?' }))
+  const marker = await screen.findByRole('link', { name: '1' })
+  expect(marker.getAttribute('href')).toBe('#cite-0-0')
+  expect(container.querySelector('#cite-0-0')!.getAttribute('href')).toBe('/meetings/m1?t=65000')
+  await screen.findByText('1:05')
+  fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'again' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+  await vi.waitFor(() => expect(screen.getAllByText('1:05')).toHaveLength(2))
+  expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ question: 'What are the open action items?' })
+  expect(screen.getByText('again')).toBeTruthy()
 })
 
 test('parseEvents keeps an unfinished event for the next read', () => {
