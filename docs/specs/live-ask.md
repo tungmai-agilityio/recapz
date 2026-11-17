@@ -75,16 +75,16 @@ best guesses and are checked by the ticket's author. Testing scope follows the m
 
 | # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|
-| 1 | `fix(build): build whisper with CUDA for release` | tooling | none | `Makefile`, `crates/server/Cargo.toml` | small | `make release` builds; a GPU run is logged; fmt and clippy |
-| 2 | `docs(speech): measure windowed live whisper` | speech | 1 | `docs/live-ask-spike.md` | small | docs only; no product code merged. Latency and Vietnamese/English WER per window size |
-| 3 | `feat(llm): add hosted embeddings` | llm | none | `crates/llm/` | medium | `-p llm` with mock HTTP tests; `[llm]` config; meetings re-index on the new embedder id |
-| 4 | `feat(core): store and ingest member documents` | core | 3 | `crates/core/` | medium | Full workspace. Migration, upload limits, per-document toggle, hard delete of file, chunks and vectors |
-| 5 | `feat(core): search documents with meetings` | core | 4 | `crates/core/src/search.rs` | medium | Full workspace. Uploader-only rule; toggle-off documents keyword only; another member's documents never appear |
-| 6 | `feat(server): stream the live transcript` | server | 2 | `crates/server/` | medium | Full workspace. In-memory windows, `GET /api/meetings/{id}/live` SSE, GPU priority, opt-out clears it |
-| 7 | `feat(llm): add the live answer prompt` | llm | 5 | `crates/llm/prompts/`, `crates/eval/` | medium | `cargo run -p eval` meets the bar; `live_answer.v1` with schema; 30-question eval set |
-| 8 | `feat(server): answer live questions` | server | 6, 7 | `crates/server/` | medium | Full workspace. `POST /api/meetings/{id}/live-ask`; access, rate limit and toggle tests |
-| 9 | `feat(web): live view with Ask now` | web | 8 | `web/src/` | medium | Web tests and lint; matches the prototype per `docs/ui-parity.md` S6, both skins, mobile |
-| 10 | `feat(web): manage my documents` | web | 4 | `web/src/` | medium | Web tests and lint; upload, toggle, delete; matches the prototype |
+| 1 (#186) | `fix(build): build whisper with CUDA for release` | tooling | none | `Makefile`, `crates/server/Cargo.toml` | small | `make release` builds; a GPU run is logged; fmt and clippy |
+| 2 (#187) | `docs(speech): measure windowed live whisper` | speech | 1 | `docs/live-ask-spike.md` | small | docs only; no product code merged. Latency and Vietnamese/English WER per window size |
+| 3 (#188) | `feat(llm): add hosted embeddings` | llm | none | `crates/llm/` | medium | `-p llm` with mock HTTP tests; `[llm]` config; meetings re-index on the new embedder id |
+| 4 (#189) | `feat(core): store and ingest member documents` | core | 3 | `crates/core/` | medium | Full workspace. Migration, upload limits, per-document toggle, hard delete of file, chunks and vectors |
+| 5 (#190) | `feat(core): search documents with meetings` | core | 4 | `crates/core/src/search.rs` | medium | Full workspace. Uploader-only rule; toggle-off documents keyword only; another member's documents never appear |
+| 6 (#191) | `feat(server): stream the live transcript` | server | 2 | `crates/server/` | medium | Full workspace. In-memory windows, `GET /api/meetings/{id}/live` SSE, GPU priority, opt-out clears it |
+| 7 (#192) | `feat(llm): add the live answer prompt` | llm | 5 | `crates/llm/prompts/`, `crates/eval/` | medium | `cargo run -p eval` meets the bar; `live_answer.v1` with schema; 30-question eval set |
+| 8 (#193) | `feat(server): answer live questions` | server | 6, 7 | `crates/server/` | medium | Full workspace. `POST /api/meetings/{id}/live-ask`; access, rate limit and toggle tests |
+| 9 (#194) | `feat(web): live view with Ask now` | web | 8 | `web/src/` | medium | Web tests and lint; matches the prototype per `docs/ui-parity.md` S6, both skins, mobile |
+| 10 (#195) | `feat(web): manage my documents` | web | 4 | `web/src/` | medium | Web tests and lint; upload, toggle, delete; matches the prototype |
 
 New dependencies, each with its reason in its PR: a PDF text extractor in row 4.
 
