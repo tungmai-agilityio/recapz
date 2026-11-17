@@ -14,14 +14,15 @@ and who owns each step.
 | Stage | Entry point | Output | Gate |
 |---|---|---|---|
 | Intake | `idea` issue template | Issue `kind:idea`, `status:backlog` | none |
-| Grill | `grill-spec` skill | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | the maintainer's confirmation that ends the grilling |
+| Grill | an explicit grilling session with the maintainer | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | the maintainer's confirmation that ends the grilling |
 | Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the idea once every ticket exists | none |
 | Ship | `ship-ticket` skill | Implement, test, verify, review, open the PR | auto-merge or escalate (below) |
 | Deliver | `release` skill, on demand | `v0.x` tag, GitHub release, upgrade checklist | asks before tagging |
 
 - Each stage is a skill in the project's skill directory, started by the maintainer. No CI orchestrator.
-- The maintainer's approval of a spec is the confirmation that ends the grilling. `grill-spec` then merges its
-  docs-only spec PR itself once CI is green, and tickets are created only after that merge.
+- The grilling is an explicit brainstorming session with the maintainer, not a skill. The maintainer's confirmation
+  ends it; the author of the spec then opens the docs-only spec PR and merges it once CI is green (`pull-request`
+  skill), and tickets are created only after that merge.
 - Spec files use one template: problem, decisions, out of scope, acceptance, ticket list. `docs/spec.md` stays
   the product spec and is amended by the PR that ships the feature. The older `docs/*-plan.md` files move into `docs/specs/`, and the decision records into
   `docs/decisions/`, in a separate PR; they are not rewritten to the template.
@@ -48,7 +49,7 @@ ticket missing a required label.
 | Event | Owner | Change |
 |---|---|---|
 | Idea filed | template | `status:backlog` |
-| Grill starts | `grill-spec` | `status:planning` |
+| Grill starts | whoever runs the session | `status:planning` |
 | Spec PR merges | n/a | idea stays `status:planning` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
 | Tickets created | `plan-tickets` | tickets `status:ready`; idea closed after the last ticket exists |
 | Ticket claimed | `ship-ticket` | `status:in-progress` |
@@ -142,7 +143,7 @@ Auto-merge stays off until steps 2, 5 and 6 have merged.
 2. Minimal CI (fmt, clippy, `cargo test`, web test and lint). The repository is private on the free plan, where
    branch protection, rulesets and GitHub's own auto-merge are unavailable (checked 2026-11-17: the API returns
    403 and `allow_auto_merge` is false), so the check is enforced by the merge step, see Merge.
-3. Spec template and `grill-spec`.
+3. Spec template (`docs/specs/_template.md`). There is no grill skill; grilling is explicit.
 4. `plan-tickets`.
 5. `ship-ticket`, the reviewer's acceptance and risk grading, merge-when-green. Updates the `pull-request`
    skill, which currently forbids `--auto` and requires approval per merge, and the `CLAUDE.md` line "The
@@ -160,7 +161,7 @@ Then run the pipeline on the next real feature.
 | 0 test-runner and `cargo` | #155, #157 (hook fixes) | yes; `cargo` was found, shared `CARGO_TARGET_DIR` not set |
 | 1 templates, labels, CONTRIBUTING | #156, #159 | labels created; forms not yet filed through the UI |
 | 2 CI | #162, #164, #165 | yes, on every PR |
-| 3 `grill-spec` | #166 | no |
+| 3 spec template | #166 (its `grill-spec` skill was removed later) | template not yet used |
 | 4 `plan-tickets` | #167 | no |
 | 5 `ship-ticket`, merge rule | #169 | first run on ticket #174 |
 | 6 allowlist, check and pause scripts | #168, #173, #172 | check script run against a real PR; pause on revert not triggered |
