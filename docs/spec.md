@@ -14,7 +14,7 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Speaker ribbon | Strip showing who spoke when; used as scrubber and in lists |
 | Ask | Question box over all accessible meetings, answers cite exact moments |
 | Live view | Running transcript and talk time during a call |
-| Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/live-ask-plan.md`) |
+| Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/specs/live-ask.md`) |
 | Upload | Process an audio or video file the notetaker did not record |
 | Members | Google sign-in; admins invite by email, remove people, change roles |
 | Recording & privacy | Join rules, notetaker name/message, retention, purge one participant |
