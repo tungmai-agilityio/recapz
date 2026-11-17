@@ -1,7 +1,8 @@
-# Live Ask plan
+# Live Ask
 
 Status: **design agreed with the maintainer (2026-11-17); nothing is built.** Starts after the Meet live
 check passes (`docs/specs/meet-notetaker.md` row 16), before Zoom. Meet only until the Zoom notetaker exists.
+Intent: #TBD (filed before `plan-tickets` runs)
 
 ## What it is
 
@@ -31,9 +32,8 @@ answer they can say back to the client. Answers are private to the member who as
 
 ## Rule change
 
-`CLAUDE.md` and `docs/spec.md` change from "only transcript text goes to LLM providers" to "only transcript
-text, and text of documents the uploader marked 'May be sent to the language model', go to LLM and
-embedding providers". This PR makes that change.
+`CLAUDE.md` and `docs/spec.md` already say that only transcript text, and text of documents the uploader marked
+"May be sent to the language model", go to LLM and embedding providers.
 
 ## What exists today
 
@@ -55,30 +55,47 @@ embedding providers". This PR makes that change.
   eval set built from one real client's documents.
 
 If the spike (row 2) misses the latency target, stop and write up the numbers. The maintainer then decides
-between shorter windows, a smaller model or hosted speech (`docs/decisions/hosted-speech.md`). No later rows start
-before that.
+between shorter windows, a smaller model or hosted speech (`docs/decisions/hosted-speech.md`). Only the live rows
+(6 to 9) wait for the spike; the document rows (3 to 5 and 10) do not depend on live audio and may run in parallel.
 
-## PR breakdown
+## Acceptance
 
-Each row is one concern of about 300 source lines or fewer, in dependency order.
+- [ ] Ask now returns a cited answer card in 6 s or less from the button press.
+- [ ] At least 80% of a 30-question eval set built from one real client's documents is answered correctly with the
+      right citation, or with a correct "not in your documents".
+- [ ] A member never sees another member's documents or asks, in search, citations or answers.
+- [ ] Documents with "May be sent to the language model" off are found by keyword search only and never sent to a
+      provider.
+- [ ] A chat opt-out stops live transcription at once, clears the in-memory transcript and ends running answers.
 
-| # | PR | Depends on | Done when |
-|---|---|---|---|
-| 0 | `docs: plan Live Ask` (this) | — | Approved by the maintainer |
-| 1 | `fix(build): build whisper with CUDA for release` | — | `make release` enables `whisper` and the CUDA feature; a GPU run is logged |
-| 2 | Spike: tap live audio and run windowed whisper | 1 | Latency and Vietnamese/English WER per window size written to `docs/live-ask-spike.md`; no product code merged |
-| 3 | `feat(llm): add hosted embeddings` | 0 | Mock HTTP tests; `[llm]` config; meetings re-index on the new embedder id |
-| 4 | `feat(core): store and ingest member documents` | 3 | Migration, upload with limits, per-document toggle, hard delete of file, chunks and vectors. Full workspace tests |
-| 5 | `feat(core): search documents with meetings` | 4 | Uploader-only rule; toggle-off documents keyword only; a test that another member's documents never appear |
-| 6 | `feat(server): stream the live transcript` | 2 | In-memory windows, `GET /api/meetings/{id}/live` SSE, GPU priority, opt-out clears it, notice text |
-| 7 | `feat(llm): add the live answer prompt` | 5 | `live_answer.v1` with schema; 30-question eval set; `cargo run -p eval` meets the bar |
-| 8 | `feat(server): answer live questions` | 6, 7 | `POST /api/meetings/{id}/live-ask`; access, rate limit and toggle tests |
-| 9 | `feat(web): live view with Ask now` | 8 | Matches the prototype per `docs/ui-parity.md` S6, both skins, mobile |
-| 10 | `feat(web): manage my documents` | 4 | Upload, toggle, delete; matches the prototype |
+## Tickets
+
+One ticket is one PR (about 300 source lines small, 600 medium), in dependency order. Paths in `Touches` are
+best guesses and are checked by the ticket's author. Testing scope follows the merge rule in `CLAUDE.md`.
+
+| # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
+|---|---|---|---|---|---|---|
+| 1 | `fix(build): build whisper with CUDA for release` | tooling | none | `Makefile`, `crates/server/Cargo.toml` | small | `make release` builds; a GPU run is logged; fmt and clippy |
+| 2 | `docs(speech): measure windowed live whisper` | speech | 1 | `docs/live-ask-spike.md` | small | docs only; no product code merged. Latency and Vietnamese/English WER per window size |
+| 3 | `feat(llm): add hosted embeddings` | llm | none | `crates/llm/` | medium | `-p llm` with mock HTTP tests; `[llm]` config; meetings re-index on the new embedder id |
+| 4 | `feat(core): store and ingest member documents` | core | 3 | `crates/core/` | medium | Full workspace. Migration, upload limits, per-document toggle, hard delete of file, chunks and vectors |
+| 5 | `feat(core): search documents with meetings` | core | 4 | `crates/core/src/search.rs` | medium | Full workspace. Uploader-only rule; toggle-off documents keyword only; another member's documents never appear |
+| 6 | `feat(server): stream the live transcript` | server | 2 | `crates/server/` | medium | Full workspace. In-memory windows, `GET /api/meetings/{id}/live` SSE, GPU priority, opt-out clears it |
+| 7 | `feat(llm): add the live answer prompt` | llm | 5 | `crates/llm/prompts/`, `crates/eval/` | medium | `cargo run -p eval` meets the bar; `live_answer.v1` with schema; 30-question eval set |
+| 8 | `feat(server): answer live questions` | server | 6, 7 | `crates/server/` | medium | Full workspace. `POST /api/meetings/{id}/live-ask`; access, rate limit and toggle tests |
+| 9 | `feat(web): live view with Ask now` | web | 8 | `web/src/` | medium | Web tests and lint; matches the prototype per `docs/ui-parity.md` S6, both skins, mobile |
+| 10 | `feat(web): manage my documents` | web | 4 | `web/src/` | medium | Web tests and lint; upload, toggle, delete; matches the prototype |
 
 New dependencies, each with its reason in its PR: a PDF text extractor in row 4.
 
-## Later
+## Open questions
+
+- Meet live check (`docs/specs/meet-notetaker.md` row 16) must pass before any ticket starts. The maintainer runs it
+  and reports the result.
+- `CLAUDE.md` describes `make release` as a production build with CUDA, but the target runs a plain
+  `cargo build --release` with no `whisper` feature. Row 1 settles which is right.
+
+## Out of scope
 
 - Automatic question detection from other participants' speech.
 - Linking documents to clients and calendar events; per-call filters.
