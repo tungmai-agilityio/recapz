@@ -37,8 +37,30 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
 - Tickets: plan them with the `plan-tickets` skill and ship each with `ship-ticket` (docs/specs/delivery-pipeline.md).
 - Docs-only PRs (Markdown and `CLAUDE.md` only, no code, config or scripts) skip `test-runner` and `code-reviewer`; say "docs only, no tests run" under Testing.
 - Implement, then `test-runner` once when done (give it the folder and scope). On FAIL fix the code, never the test; re-run only if code changed since the last PASS. On `STATUS: PASS` for the current HEAD, run `code-reviewer` (docs-only PRs skip it), fix blockers, then open the PR with the `pull-request` skill. `explore-code` for broad searches.
-- Branches `<type>/<name>`, commits and PR titles `type(scope): summary` (Conventional Commits, CONTRIBUTING.md). The maintainer approves each merge, except ticket PRs that pass `scripts/automerge-check.sh` (docs/specs/delivery-pipeline.md). After a merge, clean up the local branch as the `pull-request` skill says.
+- Branches `<type>/<name>`, commits and PR titles `type(scope): summary` (Conventional Commits, CONTRIBUTING.md). Merge your own PRs under "Merging and escalation" below. After a merge, clean up the local branch as the `pull-request` skill says.
 - `gh`: never `gh auth switch`; pass the work account's token per command (see `pull-request`).
+
+## Merging and escalation
+
+Work autonomously. Merge your own PR (squash, `--match-head-commit` on the commit you checked) once CI is green on
+the current HEAD, `code-reviewer` has approved that HEAD (docs-only PRs skip the reviewer) and the PR body has no
+open decision. Do not wait for the maintainer.
+
+Escalate only when the change is critical: leave the PR open, set the ticket `status:needs-human` with a comment
+saying why, and notify the maintainer. Critical means any of:
+- it breaks, or needs to bend, a hard rule or the clean-room rules;
+- meeting access, sign-in, sessions, secrets, or anything that decides who can see data;
+- data leaving the server, data deletion, or a migration that rewrites or drops data;
+- a production deploy, a new dependency with a doubtful licence or security record, or a new system requirement;
+- the guard rails themselves: `CLAUDE.md`, the push and test guards, `scripts/git-hooks/`, the auto-merge scripts, CI;
+- a product decision the spec does not make, or a spec that turns out to be wrong;
+- CI still red or reviewer blockers still open after the retry caps in `docs/specs/delivery-pipeline.md`.
+
+`scripts/automerge-check.sh` is a signal, not the rule: read its reasons. A reason that is only a denylisted path,
+for a change that is not critical by the list above, may be merged anyway; name the overridden paths in the audit
+comment. Every other reason (paused, `human-merge`, high risk, open decisions, CI or HEAD problems, unreadable
+data) escalates. Never use `--admin`, `--auto`, a merge commit or any flag that skips checks, and never push to
+`main`.
 
 ## Hard rules
 

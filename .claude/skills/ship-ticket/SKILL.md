@@ -51,8 +51,10 @@ language-model providers, meeting access, or you were unsure of anything. Then r
   audit comment, which must start with `Auto-merged:` and list the CI jobs, the reviewed commit, both risk grades
   and "Decisions: None". Clean up as the `pull-request` skill says, and remove the leftover `status:` label from the
   closed issue.
-- Prints `ESCALATE: ...`: do not merge. Comment the reasons on the PR, set the issue `status:needs-human`, stop.
-  The maintainer merges or decides.
+- Prints `ESCALATE: ...`: if every reason is a denylisted path and the change is not critical under "Merging and
+  escalation" in `CLAUDE.md`, merge anyway with the same command and name the overridden paths in the audit comment.
+  Any other reason (paused, `human-merge`, high risk, open decisions, CI or HEAD problems, unreadable data), or a
+  critical change, means do not merge: comment the reasons on the PR, set the issue `status:needs-human`, stop.
 - Before starting any ticket, run `scripts/automerge-pause.sh detect`; if a revert of an auto-merged PR exists it pauses
   auto-merge and you hand every PR to the maintainer until they run `scripts/automerge-pause.sh resume`. When the
   revert is of the PR you are looking at, also reopen its ticket as `status:needs-human` with a comment.
