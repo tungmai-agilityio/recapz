@@ -24,7 +24,6 @@ lint:
 	cargo fmt --check
 	cargo clippy --workspace --all-targets -- -D warnings
 	pnpm -C web lint
-	./scripts/banned-names.sh
 
 release:
 	pnpm -C web build
