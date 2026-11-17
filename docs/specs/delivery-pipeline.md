@@ -35,7 +35,7 @@ Issues own status; Markdown holds specs and decisions only. A PR says `Closes #N
 | `status:` | `backlog`, `planning`, `ready`, `in-progress`, `review`, `needs-human` | exactly one on an open issue |
 | `type:` | `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`, `test` | exactly one per ticket; gives branch prefix and commit type. `ci`, `build`, `revert` use `chore` |
 | `priority:` | `p0`, `p1`, `p2`, `p3` | exactly one; default `p2`. `p0` is security, data loss or a broken `main` |
-| `area:` | `server`, `core`, `web`, `auth`, `jobs`, `meetings`, `deploy` | at least one; the first is the commit scope |
+| `area:` | `server`, `core`, `web`, `auth`, `jobs`, `meetings`, `notetaker`, `speech`, `llm`, `deploy`, `tooling` | at least one; the first is the commit scope. `tooling` covers hooks, scripts, `.github` and dependency updates |
 | `human-merge` | n/a | forces a manual merge |
 
 `done` is a closed issue. `blocked` is computed from open `blocked by #N` links, never stored.
