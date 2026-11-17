@@ -14,13 +14,14 @@ and who owns each step.
 | Stage | Entry point | Output | Gate |
 |---|---|---|---|
 | Intake | `idea` issue template | Issue `kind:idea`, `status:backlog` | none |
-| Grill | `grill-spec` skill | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | **maintainer merges the spec PR** |
+| Grill | `grill-spec` skill | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | the maintainer's confirmation that ends the grilling |
 | Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the idea once every ticket exists | none |
 | Ship | `ship-ticket` skill | Implement, test, verify, review, open the PR | auto-merge or escalate (below) |
 | Deliver | `release` skill, on demand | `v0.x` tag, GitHub release, upgrade checklist | asks before tagging |
 
 - Each stage is a skill in the project's skill directory, started by the maintainer. No CI orchestrator.
-- A spec PR is always merged by the maintainer; merging it is the approval, and tickets are created only after.
+- The maintainer's approval of a spec is the confirmation that ends the grilling. `grill-spec` then merges its
+  docs-only spec PR itself once CI is green, and tickets are created only after that merge.
 - Spec files use one template: problem, decisions, out of scope, acceptance, ticket list. `docs/spec.md` stays
   the product spec and is amended by the PR that ships the feature. The older `docs/*-plan.md` files move into `docs/specs/`, and the decision records into
   `docs/decisions/`, in a separate PR; they are not rewritten to the template.
@@ -81,7 +82,8 @@ ticket missing a required label.
 
 ## Merge
 
-A ticket PR merges without the maintainer only when **all** hold:
+`CLAUDE.md` (Merging and escalation) is the rule: PRs merge themselves and only critical changes go to the
+maintainer. This section is how a ticket PR is checked. It merges without the maintainer when **all** hold:
 
 1. Every CI check passed on the current HEAD, read by the merge step itself with `gh pr checks`: no pending, failed or
    skipped job. Editing a PR's title or labels must not replace the heavy results, so `ci.yml` (rust, web, guards)
@@ -95,10 +97,12 @@ A ticket PR merges without the maintainer only when **all** hold:
    containing auth, access, session, csrf, privacy or purge, dependency manifests, lockfiles and toolchain files,
    `deploy/`, `scripts/`, `Makefile`, `config.example.toml`, the project's skill and helper directory, `.github/`,
    `CLAUDE.md`, `CONTRIBUTING.md`, `docs/specs/` and `docs/decisions/`. Both names of a renamed file are checked.
-   The denylist can only force escalation, never grant a merge. `scripts/automerge-lib.sh` holds the list.
+   The denylist is a signal and never grants a merge by itself: a path-only reason for a change that is not critical
+   under `CLAUDE.md` may be overridden, naming the overridden paths in the audit comment. `scripts/automerge-lib.sh`
+   holds the list.
 6. No `human-merge` label.
 
-Otherwise the PR gets `status:needs-human` and the maintainer merges or decides. Merging is a squash merge;
+Otherwise, and for any critical change, the PR gets `status:needs-human` and the maintainer merges or decides. Merging is a squash merge;
 the guards against pushing to `main` are unchanged.
 
 **How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
@@ -110,8 +114,8 @@ merging a red PR by hand.
 **Safety net:** every auto-merged PR gets a comment listing what was checked. If an auto-merged PR is
 reverted, auto-merge pauses until the maintainer resumes it. The audit comment starts with `Auto-merged:`; the
 pause flag is the repository variable `AUTOMERGE_PAUSED`, set by `scripts/automerge-pause.sh`, which detects a
-merged revert PR that mentions an auto-merged PR. A variable that cannot be read counts as paused. Docs-only spec PRs and anything on the denylist
-are never auto-merged.
+merged revert PR that mentions an auto-merged PR. A variable that cannot be read counts as paused. Critical changes (`CLAUDE.md`, Merging and
+escalation) are never merged without the maintainer.
 
 **Accepted risk:** risk is judged by the implementer and reviewer, not only by script, and auto-merge starts on
 the full non-risky set with no trial period. CI covers lint and tests, not behaviour; the acceptance checks
