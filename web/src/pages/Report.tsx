@@ -196,7 +196,7 @@ export function Report() {
           )}
         </div>
       ) : (
-        <div role="tabpanel" className="mt-4">
+        <div role="tabpanel" className="frame mt-4">
           {transcript.isLoading && <p className="text-mute">Loading…</p>}
           {transcript.isError && <p className="text-bad">Could not load the transcript.</p>}
           {transcript.data?.length === 0 && (
@@ -210,7 +210,7 @@ export function Report() {
               return (
                 <li key={s.id}>
                   <button type="button" aria-current={active || undefined} onClick={() => seek(s.start_ms)}
-                    className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-sheet ${active ? 'bg-signal-wash' : ''}`}>
+                    className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-inset ${active ? 'bg-signal-wash' : ''}`}>
                     <SpeakerBar speaker={speakerOf(s.speaker_id)} />
                     <time className="pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
                     <span>
@@ -239,7 +239,7 @@ function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk
   )
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
-      <div className="space-y-6">
+      <div className="frame space-y-6">
         <p className="max-w-[66ch] leading-7">{r.summary}</p>
         {r.decisions.length > 0 && (
           <section className="space-y-2">
@@ -271,7 +271,7 @@ function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk
           </section>
         )}
       </div>
-      <aside className="space-y-6">
+      <aside className="frame space-y-6">
         {r.chapters.length > 0 && (
           <section className="space-y-1">
             <Heading>Chapters</Heading>

@@ -40,10 +40,10 @@ export function Upload() {
       <PageHead title="Upload a recording"
         lede="For in-person meetings or calls the notetaker didn't join. Processed on your server." />
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
-        <div className="flex flex-col gap-5">
+        <div className="frame flex flex-col gap-5">
           <label htmlFor="file" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); setFile(e.dataTransfer.files[0] ?? null); send.reset() }}
-            className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-sheet px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-inset px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
             <b>{file ? file.name : 'Drop a file or choose one'}</b>
             <span className="text-[.82rem] text-mute">
               {EXTENSIONS.map((e) => e.toUpperCase()).join(' · ')} · up to 2 GB
@@ -71,7 +71,7 @@ export function Upload() {
           {send.isError && <p role="alert" className="text-sm text-bad">Upload failed. Try again.</p>}
           {id && status === 'ready' && <Link to={`/meetings/${id}`} className="text-sm font-medium">Open the meeting</Link>}
         </div>
-        <aside className="flex flex-col gap-4">
+        <aside className="frame flex flex-col gap-4">
           <Field label="Title" hint="Defaults to the file name.">
             {(p) => <input {...p} className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />}
           </Field>
