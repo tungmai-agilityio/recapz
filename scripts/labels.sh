@@ -23,6 +23,6 @@ label priority:p0 b60205 "Security, data loss or a broken main"
 label priority:p1 d93f0b "Next up"
 label priority:p2 fbca04 "Normal (default)"
 label priority:p3 cfd3d7 "Someday"
-for a in server core web auth jobs meetings deploy; do label "area:$a" bfd4f2 "Commit scope: $a"; done
+for a in server core web auth jobs meetings notetaker speech llm deploy tooling; do label "area:$a" bfd4f2 "Commit scope: $a"; done
 label human-merge 000000 "Forces a manual merge"
 [ "$dry" = 1 ] && echo "$n labels (dry run)" || echo "$n labels created or updated"
