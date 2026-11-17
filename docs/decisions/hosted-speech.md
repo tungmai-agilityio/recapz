@@ -18,7 +18,7 @@ Status: **decided, not implemented.** Local whisper (`ggml-small` first) stays t
 2. **Not now: OpenAI** (its only diarization model is being retired, and click-to-seek needs timestamps) and **AssemblyAI** (cheaper, but upload-and-poll code and no confirmed speaker labels for `vi`). Revisit when the eval set exists.
 3. **Privacy rule amendment.** "Audio never leaves the server" becomes "Audio never leaves the server unless the deployment opts in to a hosted speech provider." It is off by default, explicitly opted in per deployment and shown in the UI. The wording change in `docs/spec.md`, `CLAUDE.md` and `config.example.toml` lands in PR 1 below, not before.
 
-No provider has been measured on Vietnamese. Accuracy waits on the consented test set described in `docs/speech-model-comparison.md`.
+No provider has been measured on Vietnamese. Accuracy waits on the consented test set described in `docs/decisions/speech-model-comparison.md`.
 
 ## Design
 

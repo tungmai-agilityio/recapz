@@ -1,4 +1,4 @@
-//! Word and character error rates for comparing speech models (see docs/speech-model-comparison.md).
+//! Word and character error rates for comparing speech models (see docs/decisions/speech-model-comparison.md).
 use unicode_normalization::UnicodeNormalization;
 
 pub mod ask;

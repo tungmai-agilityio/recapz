@@ -25,9 +25,9 @@ Goals for this plan: a notetaker that joins a Meet call from a pasted link or a 
 itself, records the call audio to `audio/<meeting id>/`, leaves on the existing rules, and hands the
 recording to the same `transcribe` job uploads use.
 
-Non-goals: Zoom (comes after Meet; the join path in `docs/zoom-join-path.md` will be revisited then,
+Non-goals: Zoom (comes after Meet; the join path in `docs/decisions/zoom-join-path.md` will be revisited then,
 with Zoom's real-time media streams as a candidate that needs no bot), Teams, live view streaming, video capture,
-hosted speech (opt-in per `docs/hosted-speech.md`, unaffected by this plan).
+hosted speech (opt-in per `docs/decisions/hosted-speech.md`, unaffected by this plan).
 
 ## 1. Join path
 
@@ -91,7 +91,7 @@ and labels over class names, and every lookup that fails reports a named step (`
   without the notice there is no consent and no way to opt out. Decision (maintainer, 2026-11-13).
 - Opt-out works from the lobby onward (already in `Session`) and calls `purge_meeting`.
 - If a hosted speech provider is enabled, the join message also names it (open question in
-  `docs/hosted-speech.md`, proposed yes).
+  `docs/decisions/hosted-speech.md`, proposed yes).
 - Meet's own recording indicator does not appear for this kind of capture *(unverified)*; the chat
   notice and the visible participant name are the disclosure. Local recording-consent law (including
   Vietnam's personal data decree) is the maintainer's call; this plan is not legal advice.
