@@ -45,7 +45,7 @@ A PR that breaks any of these, or a Conventions rule above, is rejected.
 - Never skip, disable or delete a test to make CI pass.
 - Never push to `main` or force-push a shared branch. Never use `git commit --no-verify`.
 - Never commit `config.toml`, API keys, recordings or real meeting data. Logs hold IDs, never transcript text.
-- Only transcript text goes to LLM providers; audio never leaves the server.
+- Only transcript text, and text of documents the uploader marked "May be sent to the language model", go to LLM and embedding providers; audio never leaves the server.
 - A web PR ticks its screen's rows in docs/ui-parity.md and attaches a screenshot next to the prototype state; an unticked row needs a written reason.
 
 ## Things Claude gets wrong
