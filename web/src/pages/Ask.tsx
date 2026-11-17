@@ -46,7 +46,7 @@ export function Ask() {
         <h1 className="text-2xl font-semibold tracking-tight">Ask</h1>
         <p className="mt-1 text-sm text-mute">Searches every transcript and report you can access. Each answer links to the moment it came from.</p>
       </div>
-      {turns.map((t, ti) => (
+      {turns.length > 0 && <div className="frame flex flex-col gap-5">{turns.map((t, ti) => (
         <div key={ti} className="flex flex-col gap-3.5">
           {ti > 0 && <div className="h-px bg-hair" />}
           <p className="text-xl font-semibold leading-snug tracking-tight">{t.q}</p>
@@ -69,7 +69,7 @@ export function Ask() {
                   key={i}
                   id={`cite-${ti}-${i}`}
                   to={`/meetings/${c.meeting_id}?t=${c.start_ms}`}
-                  className="flex min-w-0 flex-col gap-2 rounded-lg border border-hair bg-sheet p-3 hover:border-ink-2"
+                  className="flex min-w-0 flex-col gap-2 rounded-lg border border-hair bg-inset p-3 hover:border-ink-2"
                 >
                   <span className="flex justify-between font-mono text-xs"><span>{i + 1}</span><time className="text-mute">{clock(c.start_ms)}</time></span>
                   <b className="text-sm font-semibold">{c.title}</b>
@@ -79,7 +79,7 @@ export function Ask() {
             </div>
           )}
         </div>
-      ))}
+      ))}</div>}
       <div className="flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
           <button key={s} type="button" disabled={busy} onClick={() => submit(s)}

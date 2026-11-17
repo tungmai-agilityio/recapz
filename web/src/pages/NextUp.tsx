@@ -61,7 +61,7 @@ export function NextUp() {
       </ul>
     )
   return (
-    <aside className="flex flex-col">
+    <aside className="frame flex flex-col">
       <div className="flex items-center justify-between pb-2">
         <h2 className="text-xs font-semibold tracking-[0.08em] text-mute uppercase">Next up today</h2>
         <Link to="/recording" className="text-xs font-medium text-primary">Join rules</Link>
