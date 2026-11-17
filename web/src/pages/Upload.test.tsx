@@ -49,6 +49,24 @@ test('progress follows the polled status and links to the meeting when ready', a
   expect(document.querySelectorAll('[data-state="done"]').length).toBe(4)
 })
 
+test('pressing Process recording again clears the old failed message while the new upload is pending', async () => {
+  let posts = 0
+  vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      if (++posts === 2) return new Promise<Response>(() => {})
+      return new Response(JSON.stringify({ id: 'm9' }), { status: 201 })
+    }
+    return new Response(JSON.stringify({ id: 'm9', status: 'failed', error: 'bad audio' }))
+  }))
+  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Upload /></MemoryRouter></QueryClientProvider>)
+  pick('call.mp3')
+  fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
+  await screen.findByText(/Processing failed: bad audio/)
+  fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
+  await waitFor(() => expect(posts).toBe(2))
+  expect(screen.queryByText(/Processing failed/)).toBeNull()
+})
+
 test('failed shows the error; pressing the button again re-uploads', async () => {
   const calls: string[] = []
   run(['failed'], calls)

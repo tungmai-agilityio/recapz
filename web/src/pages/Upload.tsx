@@ -75,7 +75,7 @@ export function Upload() {
           <Field label="Title" hint="Defaults to the file name.">
             {(p) => <input {...p} className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />}
           </Field>
-          <Button variant="primary" className="justify-center" disabled={!file || !!bad || send.isPending} onClick={() => { send.reset(); send.mutate() }}>
+          <Button variant="primary" className="justify-center" disabled={!file || !!bad || send.isPending} onClick={() => send.mutate()}>
             {send.isPending ? 'Uploading…' : 'Process recording'}
           </Button>
         </aside>
