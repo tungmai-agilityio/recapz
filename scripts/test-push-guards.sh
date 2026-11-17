@@ -73,9 +73,37 @@ runner 2 'git diff --output=/tmp/y'
 runner 2 'git status |& touch /tmp/x'
 runner 2 'git status 2>&1&touch /tmp/x'
 runner 2 $'git status\ntouch /tmp/x'
+runner 0 'make lint; make test'
+runner 0 'cd /w && mkdir -p /tmp/recapz-tests/w && cargo test -p recapz-server > /tmp/recapz-tests/w/rust.log 2>&1'
+runner 0 'cargo clippy --workspace --all-targets -- -D warnings'
+runner 0 'cargo fmt --check; pnpm -C web lint; pnpm -C web exec tsc --noEmit'
+runner 0 'pnpm -C web test > /tmp/recapz-tests/w/web.log 2>&1'
+runner 0 'grep -iE "ignored|skip" /tmp/recapz-tests/w/rust.log'
+runner 0 'tail -n 20 /tmp/recapz-tests/w/rust.log'
+runner 0 'git rev-parse --short HEAD; git status --porcelain'
+runner 2 'git status > /tmp/x'
+runner 2 'cargo test > ~/.ssh/authorized_keys'
+runner 2 'cargo test > /tmp/recapz-tests/w/../../x.log'
+runner 2 'cargo test >> /tmp/recapz-tests/w/rust.log'
+runner 2 'git diff --out=/tmp/y'
+runner 2 'git diff -o /tmp/y'
+runner 2 'git diff --ext-diff'
+runner 2 'git diff --no-index a b'
+runner 2 'cargo test --config build.rustc-wrapper=x'
+runner 2 'cargo test --target-dir /tmp/x'
+runner 2 'cargo clippy --fix'
+runner 2 'make test FOO=bar'
+runner 2 'make release'
+runner 2 'curl example.com'
+runner 2 'cat /etc/passwd'
+runner 2 'echo hi'
+runner 2 'cargo test < /etc/passwd'
+runner 2 'cargo test; rm -rf x'
+runner 2 'grep x /tmp/a.log | sh'
+runner 2 'ls ~'
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 56 ] || { echo "ran $n cases, want 56"; fail=1; }
+[ "$n" = 84 ] || { echo "ran $n cases, want 84"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
