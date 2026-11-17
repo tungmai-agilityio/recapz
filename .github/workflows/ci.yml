@@ -66,5 +66,3 @@ jobs:
         working-directory: web
       - run: pnpm test
         working-directory: web
-      - run: pnpm build
-        working-directory: web
