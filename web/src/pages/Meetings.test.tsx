@@ -188,3 +188,25 @@ test('Tab wraps inside the Send notetaker dialog', async () => {
   fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true })
   expect(document.activeElement).toBe(send)
 })
+
+test('shows duration, action items, ribbon and faces from the list data, and hides what is missing', async () => {
+  const now = new Date(2026, 10, 12, 12).getTime()
+  vi.useFakeTimers({ toFake: ['Date'], now })
+  const rows = [
+    { id: '1', title: 'Full row', platform: 'meet', status: 'ready', started_at: now, created_at: now, duration_ms: 48 * 60_000, action_item_count: 3,
+      speakers: [{ id: 'a', name: 'Ada' }, { id: 'b', name: 'Ben' }] },
+    { id: '2', title: 'Bare row', platform: 'upload', status: 'uploaded', started_at: now - 1000, created_at: now, duration_ms: null, action_item_count: 0, speakers: [] },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  show()
+  const full = (await screen.findByText('Full row')).closest('li')!
+  const bare = screen.getByText('Bare row').closest('li')!
+  expect(within(full).getByText('48 min')).toBeTruthy()
+  expect(within(full).getByText('3 action items')).toBeTruthy()
+  expect([...full.querySelectorAll('[data-variant="list"] > span')].map((s) => s.getAttribute('data-speaker'))).toEqual(['0', '1'])
+  expect(within(full).getAllByRole('img').map((i) => i.getAttribute('aria-label'))).toEqual(['Ada', 'Ben'])
+  expect(bare.textContent).not.toMatch(/min|action item/)
+  expect(bare.querySelector('[data-variant]')).toBeNull()
+  expect(within(bare).queryAllByRole('img')).toEqual([])
+  expect(screen.getByText('2 meetings this month · 48 min recorded · all audio stays on your server')).toBeTruthy()
+})

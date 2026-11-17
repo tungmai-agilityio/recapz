@@ -7,12 +7,20 @@ import { Button } from '../ui/Button'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { NextUp } from './NextUp'
-import { groupByDay, meetingTime, statusBadge } from './meeting-days'
+import { Face } from '../ui/Face'
+import { Ribbon } from '../ui/Ribbon'
+import { groupByDay, hoursLabel, meetingTime, minutesLabel, statusBadge } from './meeting-days'
 import { Field, inputClass } from '../ui/Field'
-import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized } from '../api'
+import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized, type Meeting } from '../api'
 
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const thisMonth = (ms: number) => { const a = new Date(ms), b = new Date(); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() }
+
+const counts = (all: Meeting[]) => {
+  const month = all.filter((m) => thisMonth(meetingTime(m)))
+  const ms = month.reduce((n, m) => n + (m.duration_ms ?? 0), 0)
+  return [`${month.length} meetings this month`, ms > 0 && `${hoursLabel(ms)} recorded`, 'all audio stays on your server'].filter(Boolean).join(' · ')
+}
 
 /** Shown only by the Vite dev server (`import.meta.env.DEV`), never in a production build. */
 function DevLogin({ onDone }: { onDone: () => void }) {
@@ -122,7 +130,7 @@ export function Meetings() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="Meetings"
-        lede={data ? `${data.filter((m) => thisMonth(meetingTime(m))).length} meetings this month · all audio stays on your server` : undefined}
+        lede={data ? counts(data) : undefined}
         actions={<>
           <Link to="/upload" className="inline-flex items-center gap-2 rounded-md border border-hair bg-sheet px-3 py-1.5 text-sm font-medium hover:border-ink-2">Upload</Link>
           <Button variant="primary" onClick={() => setSending(true)}>Send notetaker</Button>
@@ -138,13 +146,19 @@ export function Meetings() {
           <h2 className="pb-2 text-xs font-semibold tracking-[0.08em] text-mute uppercase">{g.label}</h2>
           <ul>
             {g.items.map((m) => (
-              <li key={m.id} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-4 rounded border-t border-hair px-1.5 py-3 hover:bg-hair-2 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
+              <li key={m.id} className="grid grid-cols-[64px_minmax(0,1fr)_120px_auto] items-center gap-4 rounded border-t border-hair px-1.5 py-3 hover:bg-hair-2 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
                 <span className="font-mono text-xs text-mute max-[900px]:hidden">{at(meetingTime(m))}</span>
                 <div className="min-w-0">
                   <Link to={`/meetings/${m.id}`} className="block truncate font-semibold tracking-tight hover:text-primary">{m.title}</Link>
-                  <p className="flex gap-2.5 text-xs text-mute"><span className="font-mono min-[901px]:hidden">{at(meetingTime(m))}</span><span>{m.platform}</span></p>
+                  <p className="flex flex-wrap gap-x-2.5 text-xs text-mute"><span className="font-mono min-[901px]:hidden">{at(meetingTime(m))}</span>
+                    {m.duration_ms ? <span>{minutesLabel(m.duration_ms)}</span> : null}<span>{m.platform}</span>
+                    {m.action_item_count ? <span>{m.action_item_count} action items</span> : null}</p>
                 </div>
+                <span className="max-[900px]:col-span-full max-[900px]:row-start-2 max-[900px]:empty:hidden">
+                  {m.speakers?.length ? <Ribbon label="" segments={m.speakers.map((_, i) => ({ speaker: i, weight: 1 }))} /> : null}
+                </span>
                 <div className="flex shrink-0 items-center gap-3">
+                  {m.speakers?.length ? <span className="flex">{m.speakers.map((p, i) => <span key={p.id} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={i} /></span>)}</span> : null}
                   {Object.hasOwn(statusBadge, m.status)
                     ? <Badge tone={statusBadge[m.status].tone}>{statusBadge[m.status].label}</Badge>
                     : <Badge>{m.status}</Badge>}
