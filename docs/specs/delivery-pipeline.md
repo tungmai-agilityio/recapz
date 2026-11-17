@@ -90,20 +90,27 @@ A ticket PR merges without the maintainer only when **all** hold:
 3. The PR's "Decisions needing the maintainer" section is empty. Anything touching privacy, data deletion or
    data sent to language-model providers escalates regardless.
 4. Both the implementer and the reviewer grade the risk as low; any disagreement escalates.
-5. The path denylist does not match: `crates/core`, migrations, auth, meeting access, shared API types,
-   `crates/llm/prompts`, dependency manifests and lockfiles, `deploy/`, `scripts/`, the project's skill and
-   helper directory, `.github/`, `CLAUDE.md`. The denylist can only force escalation, never grant a merge.
+5. The path denylist does not match: `crates/core`, `crates/server`, `crates/llm` and `crates/eval` (meeting
+   access, API handlers, prompts and model routing), migrations, `web/src/api.ts` (shared API types), any path
+   containing auth, access, session, csrf, privacy or purge, dependency manifests, lockfiles and toolchain files,
+   `deploy/`, `scripts/`, `Makefile`, `config.example.toml`, the project's skill and helper directory, `.github/`,
+   `CLAUDE.md`, `CONTRIBUTING.md`, `docs/specs/` and `docs/decisions/`. Both names of a renamed file are checked.
+   The denylist can only force escalation, never grant a merge. `scripts/automerge-lib.sh` holds the list.
 6. No `human-merge` label.
 
 Otherwise the PR gets `status:needs-human` and the maintainer merges or decides. Merging is a squash merge;
 the guards against pushing to `main` are unchanged.
 
-**How the merge runs:** `ship-ticket` runs `gh pr merge --squash` itself, only after it has read the checks and
-the other conditions on the current HEAD. Never `--auto`. Nothing server-side stops someone with push access from
+**How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
+reasons to escalate; any failure to read data counts as a reason. The caller passes the full reviewed commit id and
+both risk grades. `ship-ticket` then runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push
+after the check cannot slip in. Never `--auto`. Nothing server-side stops someone with push access from
 merging a red PR by hand.
 
 **Safety net:** every auto-merged PR gets a comment listing what was checked. If an auto-merged PR is
-reverted, auto-merge pauses until the maintainer resumes it. Docs-only spec PRs and anything on the denylist
+reverted, auto-merge pauses until the maintainer resumes it. The audit comment starts with `Auto-merged:`; the
+pause flag is the repository variable `AUTOMERGE_PAUSED`, set by `scripts/automerge-pause.sh`, which detects a
+merged revert PR that mentions an auto-merged PR. A variable that cannot be read counts as paused. Docs-only spec PRs and anything on the denylist
 are never auto-merged.
 
 **Accepted risk:** risk is judged by the implementer and reviewer, not only by script, and auto-merge starts on
@@ -162,4 +169,3 @@ Project boards, parallelism above 3, automated deployment, migrating the content
 ## Open questions
 
 - Move to GitHub Pro (required checks, branch protection) if a second committer joins.
-- Where the pause-on-revert flag lives (repo file or label); decide in step 6.
