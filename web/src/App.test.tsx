@@ -37,6 +37,16 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   fireEvent.click(screen.getByRole('button', { name: 'Account' }))
   expect(screen.getByRole('menu').textContent).toContain('Admin')
   expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
+  expect(screen.getAllByTestId('v1-dot').length).toBe(3)
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('menu')).toBeNull()
+})
+
+test('the account menu links to Recording & privacy', async () => {
+  mount('/', signedIn())
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Recording & privacy' }))
+  expect(await screen.findByRole('heading', { name: 'Recording & privacy' })).toBeTruthy()
 })
 
 test('the top bar has the Ask box, and Cmd+K or Ctrl+K opens Ask with the question focused', async () => {
