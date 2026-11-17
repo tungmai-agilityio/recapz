@@ -83,6 +83,16 @@ once the list returns the owner.
 ## S6 Live meeting (blocked: events API and notetaker driver)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
 - [ ] Live ribbon, live transcript, speaking now, talk time, noted so far
+- [ ] Live Ask panel ("Only you see these"): context line (last 60 s, or a clicked transcript line, with "use last 60 s"),
+      optional extra words, Ask now button and `A` hotkey; answer cards newest first with asker, quote, time taken, answer,
+      and Document or Meeting sources with page or time; "Passages only" card for documents not sent to the language model;
+      waiting state (`docs/live-ask-plan.md`)
+
+## S9 My documents (blocked: documents API, `docs/live-ask-plan.md` row 4)
+- [ ] Drop zone: PDF with selectable text, Markdown, TXT, up to 20 MB each
+- [ ] Table: name, type, size, added date; status Indexed, Indexing, or No text found (scanned); "Send to language model"
+      switch per row (`role=switch`, off by default, disabled when no text); Delete with inline confirm
+- [ ] Aside: storage meter (of 500 MB) and what the switch means when off and on
 
 ## S7 Members (blocked: members API)
 - [ ] Invite form (email, role) with validation errors, disabled for non-admins
