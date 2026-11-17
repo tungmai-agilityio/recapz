@@ -1,7 +1,7 @@
 # Live Ask plan
 
 Status: **design agreed with the maintainer (2026-11-17); nothing is built.** Starts after the Meet live
-check passes (`docs/meet-notetaker-plan.md` row 16), before Zoom. Meet only until the Zoom notetaker exists.
+check passes (`docs/specs/meet-notetaker.md` row 16), before Zoom. Meet only until the Zoom notetaker exists.
 
 ## What it is
 
@@ -41,7 +41,7 @@ embedding providers". This PR makes that change.
   `crates/notetaker/src/meet/capture.js` through `DriverEvent::Audio`. Only the WAV writer in
   `crates/server/src/notetaker.rs` reads them.
 - Whisper runs once over the finished file (`crates/core/src/transcribe_job.rs`). No timings are recorded
-  (`docs/speech-model-comparison.md`). The build has no GPU feature, and `make release` does not enable
+  (`docs/decisions/speech-model-comparison.md`). The build has no GPU feature, and `make release` does not enable
   `whisper`.
 - Ask: `POST /api/ask` streams `token`, `citations`, `done`. `crates/core/src/search.rs` merges FTS5 and
   vector results with reciprocal rank fusion, filtered by `m.owner_id = ? OR m.share = 'workspace'`.
@@ -55,7 +55,7 @@ embedding providers". This PR makes that change.
   eval set built from one real client's documents.
 
 If the spike (row 2) misses the latency target, stop and write up the numbers. The maintainer then decides
-between shorter windows, a smaller model or hosted speech (`docs/hosted-speech.md`). No later rows start
+between shorter windows, a smaller model or hosted speech (`docs/decisions/hosted-speech.md`). No later rows start
 before that.
 
 ## PR breakdown
