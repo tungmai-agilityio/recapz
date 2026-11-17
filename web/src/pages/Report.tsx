@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
+import { meetingTime } from './meeting-days'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Ribbon, SpeakerBar, type RibbonSegment } from '../ui/Ribbon'
+import { Tabs } from '../ui/Tabs'
 import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
@@ -42,6 +45,10 @@ export function Report() {
   })
   const audio = useRef<HTMLAudioElement>(null)
   const [now, setNow] = useState(params.has('t') && Number.isFinite(at) ? at : 0) // playhead, ms
+  const [playing, setPlaying] = useState(false)
+  const [noAudio, setNoAudio] = useState(false)
+  const [length, setLength] = useState(0) // ms, from the audio file
+  const [tab, setTab] = useState(params.has('t') ? 'transcript' : 'summary')
   const transcript = useQuery({
     queryKey: ['transcript', id],
     queryFn: () => getTranscript(id),
@@ -54,12 +61,27 @@ export function Report() {
     enabled: meeting.isSuccess,
     refetchInterval: meeting.data?.status === 'reporting' ? 3000 : false,
   })
-  const seek = (ms: number) => {
+  const seek = (ms: number, play = true) => {
     if (!audio.current) return
     audio.current.currentTime = ms / 1000
     setNow(ms)
-    void audio.current.play().catch(() => {})
+    if (play) void audio.current.play()?.catch(() => {})
   }
+  const toggle = () => {
+    const a = audio.current
+    if (!a || noAudio) return
+    if (a.paused) void a.play()?.catch(() => {})
+    else a.pause()
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || (e.target as HTMLElement).closest('input,textarea,select,button,a,[role=tab],[role=slider]')) return
+      e.preventDefault()
+      toggle()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  })
   // Open at the cited moment once the transcript is on screen.
   useEffect(() => {
     if (!transcript.data || !params.has('t') || !Number.isFinite(at)) return
@@ -67,6 +89,11 @@ export function Report() {
     document.querySelector('[aria-current]')?.scrollIntoView?.({ block: 'center' })
   }, [transcript.data, at, params])
 
+  const segs = transcript.data ?? []
+  const ids = [...new Set(segs.map((s) => s.speaker_id).filter((x): x is string => x !== null))]
+  const speakerOf = (id: string | null) => (id === null ? null : ids.indexOf(id))
+  const ribbon: RibbonSegment[] = segs.map((s) => ({ start_ms: s.start_ms, end_ms: s.end_ms, speaker: speakerOf(s.speaker_id) }))
+  const total = length || (segs.length ? Math.max(...segs.map((s) => s.end_ms)) : 0)
   if (meeting.error instanceof Unauthorized) return <Link to="/" className="text-primary">Sign in</Link>
   if (meeting.isError) return <p className="text-mute">Meeting not found.</p>
   if (!meeting.data) return <p className="text-mute">Loading…</p>
@@ -75,7 +102,7 @@ export function Report() {
   return (
     <article>
       <div className="flex items-center justify-between">
-        <Link to="/" className="text-sm text-mute hover:text-primary">← Meetings</Link>
+        <Link to="/" className="text-sm text-mute hover:text-primary">← All meetings</Link>
         <Menu label="Meeting actions" side="below" trigger="⋯">
           <MenuItem onClick={() => { rename.reset(); setDraft(m.title) }}>Rename</MenuItem>
           <MenuItem className="text-bad" onClick={() => { del.reset(); setConfirming(true) }}>Delete</MenuItem>
@@ -96,8 +123,11 @@ export function Report() {
           {rename.error && <p role="alert" className="mt-1 text-xs text-bad">{rename.error.message.replace(/^\d+ /, '')}</p>}
         </form>
       )}
-      <p className="font-mono text-xs text-mute">{m.platform} · {m.status}</p>
-      {m.error && <p className="mt-3 text-sm text-bad">{m.error}</p>}
+      <p className="mt-2 text-sm text-mute">
+        {new Date(meetingTime(m)).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+        {total > 0 && <> · {clock(total)}</>} · {m.platform}
+      </p>
+      {m.status === 'failed' && <p role="alert" className="mt-3 text-sm text-bad">{m.error ?? 'Processing failed.'}</p>}
 
       {confirming && (
         <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}
@@ -109,103 +139,143 @@ export function Report() {
 
       <audio
         ref={audio}
-        controls
         preload="metadata"
         src={`/api/meetings/${id}/audio`}
         onTimeUpdate={(e) => setNow(e.currentTarget.currentTime * 1000)}
-        className="mt-4 w-full"
+        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLength(e.currentTarget.duration * 1000)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onError={() => setNoAudio(true)}
       />
-
-      {report.data ? (
-        <ReportSections r={report.data} seek={seek} />
+      {noAudio ? (
+        <p className="mt-5 text-sm text-mute">No audio is available for this meeting yet.</p>
       ) : (
-        m.status === 'reporting' && <p className="mt-6 text-mute">The report will appear when processing finishes.</p>
+        <div className="mt-5 flex items-center gap-3.5">
+          <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}
+            className="flex size-9 flex-none items-center justify-center rounded-full bg-primary text-primary-fg">
+            <svg viewBox="0 0 24 24" className="size-3.5 fill-current" aria-hidden>
+              <path d={playing ? 'M6 5h4v14H6zM14 5h4v14h-4z' : 'M7 4l13 8-13 8z'} />
+            </svg>
+          </button>
+          <div className="min-w-0 flex-1">
+            {total > 0 && (
+              <Ribbon segments={ribbon} total={total} height={28} now={now} onSeek={(ms) => seek(ms, false)}
+                ticks={report.data?.chapters.map((c) => ({ ms: c.start_ms, title: c.title }))} />
+            )}
+          </div>
+          <span className="font-mono text-sm tabular-nums">{clock(now)} <span className="text-mute">/ {clock(total)}</span></span>
+        </div>
       )}
 
-      <h2 className="mt-8 text-lg font-semibold">Transcript</h2>
-      {transcript.isLoading && <p className="mt-3 text-mute">Loading…</p>}
-      {transcript.isError && <p className="mt-3 text-bad">Could not load the transcript.</p>}
-      {transcript.data?.length === 0 && (
-        <p className="mt-3 text-mute">
-          {m.status === 'ready' ? 'No speech was found.' : 'The transcript will appear when processing finishes.'}
-        </p>
+      <div className="mt-6">
+        <Tabs label="Report sections" value={tab} onChange={setTab} tabs={[{ value: 'summary', label: 'Summary' }, { value: 'transcript', label: 'Transcript' }]} />
+      </div>
+      {tab === 'summary' ? (
+        <div role="tabpanel" className="mt-6">
+          {report.data ? (
+            <ReportSections r={report.data} language={m.language} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+          ) : (
+            <p className="text-mute">
+              {m.status === 'ready' ? 'No report was written for this meeting.'
+                : m.status === 'failed' ? 'No report, because processing failed.'
+                : 'The report will appear when processing finishes.'}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div role="tabpanel" className="mt-4">
+          {transcript.isLoading && <p className="text-mute">Loading…</p>}
+          {transcript.isError && <p className="text-bad">Could not load the transcript.</p>}
+          {transcript.data?.length === 0 && (
+            <p className="text-mute">
+              {m.status === 'ready' ? 'No speech was found.' : 'The transcript will appear when processing finishes.'}
+            </p>
+          )}
+          <ol>
+            {segs.map((s) => {
+              const active = now >= s.start_ms && now < s.end_ms
+              return (
+                <li key={s.id}>
+                  <button type="button" aria-current={active || undefined} onClick={() => seek(s.start_ms)}
+                    className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-sheet ${active ? 'bg-signal-wash' : ''}`}>
+                    <SpeakerBar speaker={speakerOf(s.speaker_id)} />
+                    <time className="pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
+                    <span>{s.text}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
       )}
-      <ol className="mt-3 space-y-3">
-        {transcript.data?.map((s) => {
-          const active = now >= s.start_ms && now < s.end_ms
-          return (
-            <li key={s.id}>
-              <button
-                type="button"
-                aria-current={active || undefined}
-                onClick={() => seek(s.start_ms)}
-                className={`flex w-full gap-4 rounded-md border-l-2 px-2 py-1 text-left hover:bg-sheet ${active ? 'border-signal bg-sheet' : 'border-transparent'}`}
-              >
-                <time className="w-14 shrink-0 pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
-                <span>{s.text}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ol>
     </article>
   )
 }
 
 const Heading = ({ children }: { children: string }) => (
-  <h2 className="mt-8 text-lg font-semibold">{children}</h2>
+  <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ r, seek }: { r: ReportData; seek: (ms: number) => void }) {
+function ReportSections({ r, language, seek, open }: { r: ReportData; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+  const done = r.action_items.filter((a) => a.done).length
+  const time = (ms: number) => (
+    <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
+  )
   return (
-    <>
-      <Heading>Summary</Heading>
-      <p className="mt-2 max-w-prose">{r.summary}</p>
-      {r.decisions.length > 0 && (
-        <>
-          <Heading>Decisions</Heading>
-          <ul className="mt-2 list-disc space-y-1 pl-5">{r.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul>
-        </>
-      )}
-      {r.open_questions.length > 0 && (
-        <>
-          <Heading>Open questions</Heading>
-          <ul className="mt-2 list-disc space-y-1 pl-5">{r.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ul>
-        </>
-      )}
-      {r.chapters.length > 0 && (
-        <>
-          <Heading>Chapters</Heading>
-          <ol className="mt-2 space-y-1">
-            {r.chapters.map((c) => (
-              <li key={`${c.start_ms}-${c.title}`}>
-                <button type="button" onClick={() => seek(c.start_ms)} className="flex gap-4 text-left hover:text-primary">
-                  <time className="w-14 shrink-0 font-mono text-xs text-mute">{clock(c.start_ms)}</time>
-                  <span>{c.title}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
-      {r.action_items.length > 0 && (
-        <>
-          <Heading>Action items</Heading>
-          <ul className="mt-2 space-y-2">
-            {r.action_items.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-baseline gap-x-3">
-                <span>{a.text}</span>
-                {a.due_date && <span className="font-mono text-xs text-mute">due {a.due_date}</span>}
-                {a.source_ms !== null && (
-                  <button type="button" onClick={() => seek(a.source_ms!)} className="font-mono text-xs text-primary">
-                    {clock(a.source_ms)}
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="space-y-6">
+        <p className="max-w-[66ch] leading-7">{r.summary}</p>
+        {r.decisions.length > 0 && (
+          <section className="space-y-2">
+            <Heading>Decisions</Heading>
+            <ul className="list-disc space-y-1 pl-5">{r.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul>
+          </section>
+        )}
+        {r.open_questions.length > 0 && (
+          <section className="space-y-2">
+            <Heading>Open questions</Heading>
+            <ul className="list-disc space-y-1 pl-5">{r.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ul>
+          </section>
+        )}
+        {r.action_items.length > 0 && (
+          <section className="space-y-2">
+            <Heading>{`Action items · ${done}/${r.action_items.length} done`}</Heading>
+            <ul>
+              {r.action_items.map((a) => (
+                <li key={a.id} className="flex items-start gap-2.5 border-t border-hair-2 py-2.5 first:border-t-0">
+                  <span aria-hidden className={`mt-1 size-3.5 flex-none rounded-sm border ${a.done ? 'border-ink bg-ink' : 'border-mute'}`} />
+                  <span className={a.done ? 'text-mute line-through' : ''}>
+                    {a.done && <span className="sr-only">Done: </span>}{a.text}
+                    {a.due_date && <span className="block font-mono text-xs text-mute">due {a.due_date}</span>}
+                  </span>
+                  {a.source_ms !== null && <span className="ml-auto">{time(a.source_ms)}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+      <aside className="space-y-6">
+        {r.chapters.length > 0 && (
+          <section className="space-y-1">
+            <Heading>Chapters</Heading>
+            <ol>
+              {r.chapters.map((c) => (
+                <li key={`${c.start_ms}-${c.title}`}>
+                  <button type="button" onClick={() => open(c.start_ms)} className="grid w-full grid-cols-[3rem_1fr] gap-2 py-1.5 text-left text-sm hover:underline">
+                    <span className="font-mono text-mute">{clock(c.start_ms)}</span>
+                    <span>{c.title}</span>
                   </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        <section className="space-y-1">
+          <Heading>Details</Heading>
+          <p className="text-sm text-mute">Language: {language}</p>
+        </section>
+      </aside>
+    </div>
   )
 }
