@@ -4,7 +4,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
 import { meetingTime } from './meeting-days'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Face } from '../ui/Face'
 import { Ribbon, SpeakerBar } from '../ui/Ribbon'
+import { colour } from '../ui/speaker-colour'
 import { Tabs } from '../ui/Tabs'
 import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
@@ -93,6 +95,12 @@ export function Report() {
   const ids = [...new Set(segs.map((s) => s.speaker_id).filter((x): x is string => x !== null))]
   const speakerOf = (id: string | null) => (id === null ? null : ids.indexOf(id))
   const ribbon = segs.map((s) => ({ speaker: speakerOf(s.speaker_id), weight: Math.max(s.end_ms - s.start_ms, 1) }))
+  const names = new Map(segs.filter((s) => s.speaker_id !== null).map((s) => [s.speaker_id, s.speaker_name ?? 'Unknown']))
+  const spoken = ids.map((sid) => ({
+    index: ids.indexOf(sid), name: names.get(sid)!,
+    ms: segs.filter((s) => s.speaker_id === sid).reduce((n, s) => n + Math.max(s.end_ms - s.start_ms, 0), 0),
+  })).sort((a, b) => b.ms - a.ms)
+  const talk = { people: spoken, all: segs.reduce((n, s) => n + Math.max(s.end_ms - s.start_ms, 0), 0) }
   const total = length || (segs.length ? Math.max(...segs.map((s) => s.end_ms)) : 0)
   if (meeting.error instanceof Unauthorized) return <Link to="/" className="text-primary">Sign in</Link>
   if (meeting.isError) return <p className="text-mute">Meeting not found.</p>
@@ -126,6 +134,11 @@ export function Report() {
       <p className="mt-2 text-sm text-mute">
         {new Date(meetingTime(m)).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
         {total > 0 && <> · {clock(total)}</>} · {m.platform}
+        {spoken.length > 0 && (
+          <span className="ml-2 inline-flex translate-y-1.5">
+            {[...spoken].sort((a, b) => a.index - b.index).map((p, i) => <span key={p.index} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={p.index} /></span>)}
+          </span>
+        )}
       </p>
       {m.status === 'failed' && <p role="alert" className="mt-3 text-sm text-bad">{m.error ?? 'Processing failed.'}</p>}
 
@@ -173,7 +186,7 @@ export function Report() {
       {tab === 'summary' ? (
         <div role="tabpanel" className="mt-6">
           {report.data ? (
-            <ReportSections r={report.data} language={m.language} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+            <ReportSections r={report.data} talk={talk} language={m.language} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
           ) : (
             <p className="text-mute">
               {m.status === 'ready' ? 'No report was written for this meeting.'
@@ -200,7 +213,10 @@ export function Report() {
                     className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-sheet ${active ? 'bg-signal-wash' : ''}`}>
                     <SpeakerBar speaker={speakerOf(s.speaker_id)} />
                     <time className="pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
-                    <span>{s.text}</span>
+                    <span>
+                      {s.speaker_id !== null && <span className="mr-2 text-[0.82rem] font-semibold">{s.speaker_name ?? 'Unknown'}</span>}
+                      {s.text}
+                    </span>
                   </button>
                 </li>
               )
@@ -216,7 +232,7 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ r, language, seek, open }: { r: ReportData; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk: { people: { index: number; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
   const time = (ms: number) => (
     <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
@@ -269,6 +285,20 @@ function ReportSections({ r, language, seek, open }: { r: ReportData; language: 
                 </li>
               ))}
             </ol>
+          </section>
+        )}
+        {talk.people.length > 0 && talk.all > 0 && (
+          <section className="space-y-1">
+            <Heading>Talk time</Heading>
+            <ul>
+              {talk.people.map((p) => (
+                <li key={p.index} className="grid grid-cols-[70px_1fr_38px] items-center gap-2.5 py-0.5 text-[0.84rem]">
+                  <span className="truncate">{p.name}</span>
+                  <span data-testid="talk-bar" style={{ width: `${(p.ms / talk.people[0].ms) * 100}%` }} className={`h-1.5 rounded-[2px] ${colour(p.index)}`} />
+                  <span className="font-mono text-mute">{Math.round((p.ms / talk.all) * 100)}%</span>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
         <section className="space-y-1">
