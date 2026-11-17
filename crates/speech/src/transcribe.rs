@@ -93,8 +93,11 @@ mod real {
     fn detect_vi_en(state: &mut whisper_rs::WhisperState, samples: &[f32]) -> Result<&'static str> {
         let id = |l| whisper_rs::get_lang_id(l).context("language id");
         let (vi, en) = (id("vi")? as usize, id("en")? as usize);
-        state.pcm_to_mel(samples, 4)?;
-        let (_, probs) = state.lang_detect(loudest_window_ms(samples), 4)?;
+        let from = loudest_window_ms(samples) * crate::decode::TARGET_RATE as usize / 1000;
+        let window =
+            &samples[from..(from + 30 * crate::decode::TARGET_RATE as usize).min(samples.len())];
+        state.pcm_to_mel(window, 4)?;
+        let (_, probs) = state.lang_detect(0, 4)?;
         Ok(if probs[vi] > probs[en] { "vi" } else { "en" })
     }
 
@@ -107,7 +110,9 @@ mod real {
             p.set_language(match language {
                 "vi" => Some("vi"),
                 "en" => Some("en"),
-                _ => Some(detect_vi_en(&mut state, samples)?),
+                // a failed detection falls back to Whisper's own, as before
+                "vi+en" => detect_vi_en(&mut state, samples).ok(),
+                _ => None,
             });
             // Do not feed each window's text to the next: one wrong line otherwise repeats for the whole call.
             p.set_no_context(true);
