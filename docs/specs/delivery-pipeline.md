@@ -83,7 +83,7 @@ ticket missing a required label.
 
 A ticket PR merges without the maintainer only when **all** hold:
 
-1. The required CI check is green on the current HEAD.
+1. Every CI check is green on the current HEAD, read by the merge step itself with `gh pr checks`.
 2. `code-reviewer` returns APPROVE with zero blockers for that HEAD, and every acceptance item is met.
 3. The PR's "Decisions needing the maintainer" section is empty. Anything touching privacy, data deletion or
    data sent to language-model providers escalates regardless.
@@ -95,6 +95,10 @@ A ticket PR merges without the maintainer only when **all** hold:
 
 Otherwise the PR gets `status:needs-human` and the maintainer merges or decides. Merging is a squash merge;
 the guards against pushing to `main` are unchanged.
+
+**How the merge runs:** `ship-ticket` runs `gh pr merge --squash` itself, only after it has read the checks and
+the other conditions on the current HEAD. Never `--auto`. Nothing server-side stops someone with push access from
+merging a red PR by hand.
 
 **Safety net:** every auto-merged PR gets a comment listing what was checked. If an auto-merged PR is
 reverted, auto-merge pauses until the maintainer resumes it. Docs-only spec PRs and anything on the denylist
@@ -122,8 +126,9 @@ Auto-merge stays off until steps 2, 5 and 6 have merged.
 0. Verify `test-runner` finds `cargo` in a worktree; fix if not; share one `CARGO_TARGET_DIR` across worktrees.
 1. Issue templates, `scripts/labels.sh`, CONTRIBUTING section, PR template field "Decisions needing the
    maintainer".
-2. Minimal CI (fmt, clippy, `cargo test`, web test and lint) and branch protection requiring it. Confirm the
-   repository plan supports required checks and auto-merge.
+2. Minimal CI (fmt, clippy, `cargo test`, web test and lint). The repository is private on the free plan, where
+   branch protection, rulesets and GitHub's own auto-merge are unavailable (checked 2026-11-17: the API returns
+   403 and `allow_auto_merge` is false), so the check is enforced by the merge step, see Merge.
 3. Spec template and `grill-spec`.
 4. `plan-tickets`.
 5. `ship-ticket`, the reviewer's acceptance and risk grading, merge-when-green. Updates the `pull-request`
@@ -154,5 +159,5 @@ Project boards, parallelism above 3, automated deployment, migrating the content
 
 ## Open questions
 
-- Whether the repository plan allows required checks and auto-merge (check in step 2).
+- Move to GitHub Pro (required checks, branch protection) if a second committer joins.
 - Where the pause-on-revert flag lives (repo file or label); decide in step 6.
