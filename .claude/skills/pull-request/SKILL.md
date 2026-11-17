@@ -7,7 +7,7 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 
 ## Rules for `gh` and branches
 
-- Several GitHub accounts may be logged in. Never change the shared active account (`gh auth switch`); pass the work account's token per command: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`, including in sub-agent briefs. (A `.envrc` above this folder may already export it; do not rely on that in new shells or sub-agents.)
+- Use the GitHub account that has access to this repository. If several are logged in, never change the shared active account (`gh auth switch`); set `GH_TOKEN` for the command instead, including in sub-agent briefs.
 - Merge your own PRs under "Merging and escalation" in `CLAUDE.md`; escalate only when the change is critical.
 - Docs-only PRs (Markdown and `CLAUDE.md` only, no code, config or scripts) skip `test-runner` and `code-reviewer`.
 - Branch names are `<type>/<short-kebab-name>` with the Conventional Commit type (`feat/google-sign-in`, `fix/upload-size-limit`, `chore/ci-cache`, `docs/spec-update`). Never a user prefix or a tool-suggested name: rename the branch before the first push.

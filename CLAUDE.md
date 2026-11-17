@@ -38,7 +38,7 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
 - Docs-only PRs (Markdown and `CLAUDE.md` only, no code, config or scripts) skip `test-runner` and `code-reviewer`; say "docs only, no tests run" under Testing.
 - Implement, then `test-runner` once when done (give it the folder and scope). On FAIL fix the code, never the test; re-run only if code changed since the last PASS. On `STATUS: PASS` for the current HEAD, run `code-reviewer` (docs-only PRs skip it), fix blockers, then open the PR with the `pull-request` skill. `explore-code` for broad searches.
 - Branches `<type>/<name>`, commits and PR titles `type(scope): summary` (Conventional Commits, CONTRIBUTING.md). Merge your own PRs under "Merging and escalation" below. After a merge, clean up the local branch as the `pull-request` skill says.
-- `gh`: never `gh auth switch`; pass the work account's token per command (see `pull-request`).
+- `gh`: use the account that has access to this repository; if several are logged in, set `GH_TOKEN` per command and never `gh auth switch` (see `pull-request`).
 
 ## Merging and escalation
 

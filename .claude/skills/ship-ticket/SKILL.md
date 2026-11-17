@@ -8,7 +8,7 @@ description: Implement one ticket issue end to end in its own worktree - claim, 
 Input: a ticket issue number, or none for "the next ticket". One ticket is one PR. Work in your own worktree
 (the maintainer starts one per ticket; at most 3 tickets are `status:in-progress` at once).
 
-Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`.
+Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
 
 ## 1. Pick and claim
 
