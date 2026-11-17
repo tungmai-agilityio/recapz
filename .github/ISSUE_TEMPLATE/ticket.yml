@@ -1,0 +1,56 @@
+name: Ticket
+description: One task that becomes exactly one PR (normally created from an approved spec)
+title: "type(scope): summary"
+labels: ["kind:ticket", "status:ready"]
+body:
+  - type: input
+    id: spec
+    attributes:
+      label: Spec
+      description: Link to the merged file in docs/specs/.
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What this PR changes and why, in a few sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: A checkable list. Each item is something a reviewer can confirm in the diff or by running it.
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: textarea
+    id: touches
+    attributes:
+      label: Touches
+      description: Paths this ticket changes, one per line. Used to stop two tickets editing the same files.
+    validations:
+      required: true
+  - type: input
+    id: blocked_by
+    attributes:
+      label: Blocked by
+      description: "Issue numbers such as #12, #15, or None."
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Small is about 300 source lines, medium about 600. Split anything larger.
+      options: [small, medium]
+    validations:
+      required: true
+  - type: input
+    id: testing
+    attributes:
+      label: Testing scope
+      description: Crates or web to test, per the merge rule in CLAUDE.md, for example `core` or `web`.
+    validations:
+      required: true
