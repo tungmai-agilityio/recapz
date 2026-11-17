@@ -59,6 +59,8 @@ definition of done for every web PR.
       view route does not exist yet; rows with status `recording` show a Recording badge)
 - [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
+`GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web PR can show them and tick the Header counts and Days grouped rows.
+
 No screenshot attached and not checked by eye: no browser tool was available. A per-row Delete with confirm is
 done, shown on every row because the list API has no owner info (a refusal appears in the dialog). Hide it for
 non-owners once the list returns the owner.

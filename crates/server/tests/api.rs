@@ -859,3 +859,53 @@ async fn rename_meeting_trims_validates_and_is_owner_or_admin_only() {
         ("Shared".into(), 200)
     );
 }
+
+#[tokio::test]
+async fn meeting_list_returns_duration_action_count_and_capped_speakers() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await;
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    t.execute_batch(&format!(
+        "UPDATE meetings SET started_at = 1000, ended_at = 61000 WHERE id = '{id}';
+         INSERT INTO action_items (id, meeting_id, text) VALUES ('a1','{id}','x'), ('a2','{id}','y');
+         INSERT INTO speakers (id, meeting_id, label, display_name) VALUES
+           ('p1','{id}','Speaker 1','Lan'), ('p2','{id}','Speaker 2',NULL), ('p3','{id}','S3',NULL),
+           ('p4','{id}','S4',NULL), ('p5','{id}','S5',NULL), ('p6','{id}','S6',NULL);
+         INSERT INTO members (id, email, role) VALUES ('someone-else','se@example.com','member');
+         INSERT INTO meetings (id, title, platform, status, owner_id, share)
+           VALUES ('other','o','upload','done','someone-else','attendees');
+         INSERT INTO speakers (id, meeting_id, label) VALUES ('px','other','Hidden');"
+    ))
+    .unwrap();
+    let (_, _, body) = send(&app, get("/api/meetings", &boss)).await;
+    let rows: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["duration_ms"], 60000);
+    assert_eq!(rows[0]["action_item_count"], 2);
+    assert_eq!(
+        rows[0]["speakers"],
+        serde_json::json!([
+            {"id":"p1","name":"Lan"},{"id":"p2","name":"Speaker 2"},{"id":"p3","name":"S3"},
+            {"id":"p4","name":"S4"},{"id":"p5","name":"S5"}])
+    );
+
+    // Unknown duration and no report: null, 0 and an empty list.
+    t.execute_batch(&format!(
+        "UPDATE meetings SET ended_at = NULL WHERE id = '{id}';
+         DELETE FROM action_items; DELETE FROM speakers;"
+    ))
+    .unwrap();
+    let (_, _, body) = send(&app, get("/api/meetings", &boss)).await;
+    let rows: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(rows[0]["duration_ms"], serde_json::Value::Null);
+    assert_eq!(rows[0]["action_item_count"], 0);
+    assert_eq!(rows[0]["speakers"], serde_json::json!([]));
+}
