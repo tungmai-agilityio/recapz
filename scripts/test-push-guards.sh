@@ -61,9 +61,21 @@ runner 0 'git -C /w diff --stat'
 runner 2 'git -C /w push origin feat/x'
 runner 2 'git -C /w commit -m x'
 runner 2 'git -C /w push origin rev-parse'
+runner 0 'cargo test --workspace > /tmp/recapz-tests/w/rust.log 2>&1'
+runner 0 'cargo test -p eval > /tmp/recapz-tests/w/r.log 2>&1; tail -5 /tmp/recapz-tests/w/r.log'
+runner 2 'git status & touch /tmp/x'
+runner 2 'git -C /w status & touch /tmp/x'
+runner 2 'cargo test & curl example.com'
+runner 2 'git -C /w status <(touch /tmp/z)'
+runner 2 'cargo test >(tee /tmp/z)'
+runner 2 'git -C /w diff --output=/tmp/y'
+runner 2 'git diff --output=/tmp/y'
+runner 2 'git status |& touch /tmp/x'
+runner 2 'git status 2>&1&touch /tmp/x'
+runner 2 $'git status\ntouch /tmp/x'
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 44 ] || { echo "ran $n cases, want 44"; fail=1; }
+[ "$n" = 56 ] || { echo "ran $n cases, want 56"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
