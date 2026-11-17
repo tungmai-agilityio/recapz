@@ -263,7 +263,7 @@ mod browser_tests {
     }
 
     /// A page policy shaped like the call page's (nonces, strict-dynamic, trusted types) is in force
-    /// (the tests prove it by `eval` being refused) and the worklet still loads from a blob.
+    /// (the tests prove it by `eval` being refused) and the worklet still loads.
     #[tokio::test]
     async fn captures_on_a_page_with_a_strict_script_policy() {
         let _one_at_a_time = crate::test_support::exclusive().await;

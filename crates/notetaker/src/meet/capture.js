@@ -49,8 +49,9 @@
     ctx.resume();
   };
   try {
-    const url = URL.createObjectURL(new Blob([worklet], { type: 'text/javascript' }));
-    ctx.audioWorklet.addModule(url).then(() => {
+    // A data URL, not a blob URL: on the call page blob URLs come out with an opaque origin
+    // (`blob:null/…`) and the worklet refuses to load them.
+    ctx.audioWorklet.addModule(`data:text/javascript;base64,${btoa(worklet)}`).then(() => {
       const node = new AudioWorkletNode(ctx, 'recapz-capture');
       node.port.onmessage = (e) => send(e.data);
       mix.connect(node);

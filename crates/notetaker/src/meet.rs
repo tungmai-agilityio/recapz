@@ -106,11 +106,9 @@ impl MeetPage {
             .evaluate_on_new_document(SCRIPT)
             .await
             .map_err(|e| dropped("evaluate_on_new_document", e))?;
-        // A navigation error can carry the join link, so it is not logged.
-        self.page
-            .goto(url)
-            .await
-            .map_err(|_| dropped("goto", "navigation failed"))?;
+        // chromiumoxide's `goto` fails with Chrome's network error code (`net::ERR_…`) or a
+        // connection error, never with the URL, so it is safe to log and says why it failed.
+        self.page.goto(url).await.map_err(|e| dropped("goto", e))?;
         Ok(())
     }
 
