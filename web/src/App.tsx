@@ -4,12 +4,14 @@ import { Ask } from './pages/Ask'
 import { Meetings } from './pages/Meetings'
 import { Recording } from './pages/Recording'
 import { Report } from './pages/Report'
+import { Upload } from './pages/Upload'
 
 export default function App() {
   return (
     <Shell>
       <Routes>
         <Route path="/" element={<Meetings />} />
+        <Route path="/upload" element={<Upload />} />
         <Route path="/ask" element={<Ask />} />
         <Route path="/recording" element={<Recording />} />
         <Route path="/meetings/:id" element={<Report />} />
