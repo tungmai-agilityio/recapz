@@ -13,6 +13,7 @@ hooks:
 
 test:
 	./scripts/test-push-guards.sh
+	./scripts/test-automerge.sh
 	cargo test --workspace
 	pnpm -C web test
 
