@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PreToolUse (test-runner only): allow test, check and log-reading commands; exit 2 blocks the rest.
 cmd=$(jq -r '.tool_input.command // empty')
-case "$cmd" in *'$('* | *'`'*) echo "test-runner: no command substitution" >&2; exit 2 ;; esac
+case "$cmd" in *'$('* | *'`'* | *'<('* | *'>('*) echo "test-runner: no command or process substitution" >&2; exit 2 ;; esac
+case "$cmd" in *--output*) echo "test-runner: no --output (writes files)" >&2; exit 2 ;; esac
 while IFS= read -r part; do
   part="${part#"${part%%[![:space:]]*}"}"
   [ -z "$part" ] && continue
@@ -14,5 +15,5 @@ while IFS= read -r part; do
     "git status"* | "git diff"* | "git rev-parse"*) ;;
     *) echo "test-runner may only run tests, lint or read logs; blocked: $part" >&2; exit 2 ;;
   esac
-done < <(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+done < <(printf '%s\n' "$cmd" | sed -E -e 's/[0-9]*>&[0-9-]*//g' -e 's/&>>?/>/g' -e 's/(&&|\|\||;|\||&)/\n/g')
 exit 0
