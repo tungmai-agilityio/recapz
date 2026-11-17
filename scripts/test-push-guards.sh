@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks .claude/hooks/guard-push.sh and scripts/git-hooks/pre-push against known commands and refs.
+# Checks .claude/hooks/guard-push.sh, .claude/hooks/validate-test-cmd.sh and scripts/git-hooks/pre-push against known commands and refs.
 cd "$(dirname "$0")/.." || exit 1
 fail=0 n=0
 guard() { # expected-exit command
@@ -7,6 +7,12 @@ guard() { # expected-exit command
   jq -n --arg c "$2" '{tool_input: {command: $c}}' | .claude/hooks/guard-push.sh 2>/dev/null
   got=$?
   [ "$got" = "$1" ] || { echo "guard-push: want $1, got $got: $2"; fail=1; }
+}
+runner() { # expected-exit command
+  n=$((n + 1))
+  jq -n --arg c "$2" '{tool_input: {command: $c}}' | .claude/hooks/validate-test-cmd.sh 2>/dev/null
+  got=$?
+  [ "$got" = "$1" ] || { echo "validate-test-cmd: want $1, got $got: $2"; fail=1; }
 }
 prepush() { # expected-exit remote-ref
   n=$((n + 1))
@@ -49,9 +55,15 @@ guard 2 'cd web && git push --force origin feat/x'
 guard 2 'git push --no-verify origin feat/x'
 guard 2 'git -c core.hooksPath=/dev/null push origin feat/x'
 guard 2 'git config --unset core.hooksPath'
+runner 0 'git -C /w rev-parse --short HEAD'
+runner 0 'git -C /w status --porcelain'
+runner 0 'git -C /w diff --stat'
+runner 2 'git -C /w push origin feat/x'
+runner 2 'git -C /w commit -m x'
+runner 2 'git -C /w push origin rev-parse'
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 38 ] || { echo "ran $n cases, want 38"; fail=1; }
+[ "$n" = 44 ] || { echo "ran $n cases, want 44"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
