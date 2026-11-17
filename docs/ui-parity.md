@@ -75,11 +75,11 @@ once the list returns the owner.
 - [ ] States: streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
-- [x] Drop zone with accepted types and size limit (only formats the backend accepts) (PR #138)
-- [x] Fields: title, language, speaker count; button "Process recording" (PR #138). Only title is built: the upload API reads
+- [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet.
+- [ ] Fields: title, language, speaker count; button "Process recording". Built in #138; no screenshot yet. Only title is built: the upload API reads
       no language or speaker count, so those are hidden rather than faked.
-- [x] Pipeline progress over the real statuses (PR #138) (uploaded, transcribing, reporting, ready, failed); error with retry;
-      link to the new meeting when ready. Retry re-uploads the file (no retry endpoint). Not checked by eye.
+- [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
+      link to the new meeting when ready. Built in #138; no screenshot yet. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
 
 ## S6 Live meeting (blocked: events API and notetaker driver)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
