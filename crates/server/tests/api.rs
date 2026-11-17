@@ -6,6 +6,7 @@ use axum::{
 use http_body_util::BodyExt;
 use recapz_core::db;
 use recapz_server::{config::Config, routes};
+use serde_json::json;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -640,6 +641,43 @@ fn seed_full_meeting(
     ))
     .unwrap();
     id
+}
+
+#[tokio::test]
+async fn transcript_returns_each_segments_speaker_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await;
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    t.execute_batch(&format!(
+        "INSERT INTO speakers (id, meeting_id, label, display_name) VALUES
+           ('s1','{id}','Speaker 1','Lan'), ('s2','{id}','Speaker 2','Minh');
+         INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES
+           ('{id}','s1',0,1000,'a'), ('{id}','s2',1000,2000,'b'), ('{id}',NULL,2000,3000,'c')"
+    ))
+    .unwrap();
+    let (s, _, body) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v.as_array().unwrap().len(), 3);
+    let got: Vec<_> = (0..3)
+        .map(|i| (v[i]["speaker_id"].clone(), v[i]["speaker_name"].clone()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (json!("s1"), json!("Lan")),
+            (json!("s2"), json!("Minh")),
+            (json!(null), json!(null))
+        ]
+    );
 }
 
 #[tokio::test]
