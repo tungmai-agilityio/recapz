@@ -1,7 +1,7 @@
-name: Idea
+name: Intent
 description: A feature, fix or requirement to grill into a spec
-title: "idea: "
-labels: ["kind:idea", "status:backlog"]
+title: "intent: "
+labels: ["kind:intent", "status:backlog"]
 body:
   - type: textarea
     id: pitch

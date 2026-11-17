@@ -10,9 +10,9 @@ label() { # name color description
   n=$((n + 1))
   if [ "$dry" = 1 ]; then echo "$1"; else gh label create "$1" --color "$2" --description "$3" --force; fi
 }
-label kind:idea 5319e7 "A pitch to grill into a spec"
+label kind:intent 5319e7 "A pitch to grill into a spec"
 label kind:ticket 1d76db "One task, one PR"
-label status:backlog cfd3d7 "Idea filed, not started"
+label status:backlog cfd3d7 "Intent filed, not started"
 label status:planning fbca04 "Being grilled into a spec"
 label status:ready fef2c0 "Unblocked and waiting to be picked up"
 label status:in-progress 0e8a16 "Claimed, work in a branch"
