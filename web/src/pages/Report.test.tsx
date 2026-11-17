@@ -246,3 +246,47 @@ test('a failed rename keeps the editor open with the server message', async () =
   expect((screen.getByRole('textbox', { name: 'Meeting title' }) as HTMLInputElement).value).toBe('Nope')
   expect(patches()).toHaveLength(1)
 })
+
+const people = [
+  { id: 1, speaker_id: 'a', speaker_name: 'Khoa', start_ms: 0, end_ms: 10000, text: 'Hello' },
+  { id: 2, speaker_id: 'b', speaker_name: 'Sarah', start_ms: 10000, end_ms: 40000, text: 'Hi there' },
+  { id: 3, speaker_id: 'a', speaker_name: 'Khoa', start_ms: 40000, end_ms: 50000, text: 'Bye' },
+  { id: 4, speaker_id: null, speaker_name: null, start_ms: 50000, end_ms: 100000, text: 'Unlabelled' },
+]
+const withReport = { summary: 'Plan agreed', decisions: [], open_questions: [], chapters: [], action_items: [] }
+const serve = (segs: unknown[]) =>
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? withReport : meeting))))
+const swatch = (e: Element) => e.className.match(/bg-speaker-\d/)![0]
+
+test('shows speaker names on lines, faces in the header and talk time with one colour per person', async () => {
+  serve(people)
+  show()
+  await screen.findByText('Plan agreed')
+  const faces = screen.getAllByRole('img')
+  expect(faces.map((f) => [f.getAttribute('aria-label'), swatch(f)])).toEqual([['Khoa', 'bg-speaker-1'], ['Sarah', 'bg-speaker-2']])
+  const rows = screen.getByRole('heading', { name: 'Talk time' }).parentElement!.querySelectorAll('li')
+  expect([...rows].map((r) => r.textContent)).toEqual(['Sarah30%', 'Khoa20%'])
+  const bars = screen.getAllByTestId('talk-bar')
+  expect(bars.map((b) => swatch(b))).toEqual(['bg-speaker-2', 'bg-speaker-1'])
+  expect(bars[0].style.width).toBe('100%')
+  expect(parseFloat(bars[1].style.width)).toBeCloseTo(66.667, 2)
+  fireEvent.click(screen.getByRole('tab', { name: 'Transcript' }))
+  expect(screen.getByText('Hi there').closest('button')!.textContent).toBe('0:10SarahHi there')
+  expect(screen.getByText('Unlabelled').closest('button')!.textContent).toBe('0:50Unlabelled')
+})
+
+test('hides Talk time and faces when no segment has a speaker', async () => {
+  serve([{ id: 1, speaker_id: null, speaker_name: null, start_ms: 0, end_ms: 1000, text: 'x' }])
+  show()
+  await screen.findByText('Plan agreed')
+  expect(screen.queryByRole('heading', { name: 'Talk time' })).toBeNull()
+  expect(screen.queryAllByRole('img')).toEqual([])
+})
+
+test('labels a speaker with no name as Unknown', async () => {
+  serve([{ id: 1, speaker_id: 'z', speaker_name: null, start_ms: 0, end_ms: 1000, text: 'x' }])
+  show()
+  await screen.findByText('Plan agreed')
+  expect(screen.getAllByText('Unknown')).toHaveLength(1)
+  expect(screen.getByRole('img').getAttribute('aria-label')).toBe('Unknown')
+})

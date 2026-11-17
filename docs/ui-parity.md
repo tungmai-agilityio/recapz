@@ -69,7 +69,7 @@ non-owners once the list returns the owner.
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
       (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
-      the date, duration and faces on the header redesign). Rename is also in that menu, with an inline title
+      the date, duration and faces are built: faces show the people who spoke, from the transcript). Rename is also in that menu, with an inline title
       editor; the prototype header has neither, so the row stays unticked until the maintainer confirms the
       design, and no screenshot is attached yet (not checked by eye))
 - [ ] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
@@ -83,11 +83,13 @@ non-owners once the list returns the owner.
       (built except owner face: the report API has no owner. Done state is shown read-only: no endpoint saves it)
 - [ ] Sidebar: Chapters (click seeks and opens the transcript), Talk time bars, Details (language, sharing,
       deletion date)
-      (Chapters and Details language done. Talk time waits on speaker names in the transcript API; sharing and deletion
-      date are not in the meeting API)
+      (Chapters, Details language and Talk time done: bars and percent from real segment durations, sorted, hidden
+      when no segment has a speaker, shown in the Summary tab with the report; sharing and deletion date are not in
+      the meeting API. Not ticked: no screenshot yet)
 - [ ] Transcript: speaker colour bar, time, speaker name, text, current line highlighted, click seeks
-      (colour bar, time, text, highlight, seek done. Speaker name is hidden: the API returns an opaque speaker id,
-      the name lives only in the `speakers` table)
+      (colour bar, time, speaker name, text, highlight, seek done. The name shows only on lines with a speaker; a
+      speaker with no name reads "Unknown". One colour per person, by order of first speaking, shared with the
+      ribbon, faces and Talk time. Not ticked: no screenshot yet)
 - [ ] Processing, failed with retry, no report yet, no audio yet, 404
       (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
 
