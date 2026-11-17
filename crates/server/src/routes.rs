@@ -444,7 +444,18 @@ struct MeetingRow {
     status: String,
     started_at: Option<i64>,
     created_at: i64,
+    duration_ms: Option<i64>,
+    action_item_count: i64,
+    speakers: Vec<ListSpeaker>,
 }
+
+#[derive(Serialize)]
+struct ListSpeaker {
+    id: String,
+    name: String,
+}
+
+const LIST_SPEAKER_CAP: i64 = 5;
 
 async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<MeetingRow>>> {
     let u = app.current_user(&jar).await?;
@@ -454,11 +465,14 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
             ensure_member(c, &u)?;
             // Visible to the owner, or to everyone when shared with the workspace.
             let mut s = c.prepare(
-                "SELECT id, title, platform, status, started_at, created_at FROM meetings
+                "SELECT id, title, platform, status, started_at, created_at,
+                        CASE WHEN started_at IS NOT NULL AND ended_at >= started_at THEN ended_at - started_at END,
+                        (SELECT count(*) FROM action_items a WHERE a.meeting_id = meetings.id)
+                 FROM meetings
                  WHERE owner_id = ?1 OR share = 'workspace' ORDER BY COALESCE(started_at, created_at) DESC",
             )?;
-            let rows = s
-                .query_map([uid], |r| {
+            let mut rows = s
+                .query_map([&uid], |r| {
                     Ok(MeetingRow {
                         id: r.get(0)?,
                         title: r.get(1)?,
@@ -466,9 +480,30 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
                         status: r.get(3)?,
                         started_at: r.get(4)?,
                         created_at: r.get(5)?,
+                        duration_ms: r.get(6)?,
+                        action_item_count: r.get(7)?,
+                        speakers: Vec::new(),
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
+            // One query for every listed meeting's speakers, with the same visibility rule.
+            let mut sp = c.prepare(
+                "SELECT meeting_id, id, name FROM (
+                   SELECT p.meeting_id, p.id, COALESCE(NULLIF(p.display_name, ''), p.label) AS name,
+                          row_number() OVER (PARTITION BY p.meeting_id ORDER BY p.rowid) AS n
+                   FROM speakers p JOIN meetings m ON m.id = p.meeting_id
+                   WHERE m.owner_id = ?1 OR m.share = 'workspace') WHERE n <= ?2",
+            )?;
+            let mut by: std::collections::HashMap<String, Vec<ListSpeaker>> = Default::default();
+            for x in sp.query_map(params![uid, LIST_SPEAKER_CAP], |r| {
+                Ok((r.get::<_, String>(0)?, ListSpeaker { id: r.get(1)?, name: r.get(2)? }))
+            })? {
+                let (m, v) = x?;
+                by.entry(m).or_default().push(v);
+            }
+            for r in &mut rows {
+                r.speakers = by.remove(&r.id).unwrap_or_default();
+            }
             Ok(rows)
         })
         .await?;

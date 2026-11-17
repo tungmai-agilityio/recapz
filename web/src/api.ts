@@ -5,6 +5,9 @@ export interface Meeting {
   status: string
   started_at: number | null
   created_at: number
+  duration_ms?: number | null
+  action_item_count?: number
+  speakers?: { id: string; name: string }[]
 }
 
 export interface MeetingDetail extends Meeting {
