@@ -72,7 +72,7 @@ ticket missing a required label.
 
 - Sequence per ticket: implement, `test-runner`, `code-reviewer`, PR. The existing test and review helpers are reused; the reviewer
   also checks the diff against the ticket's acceptance list and grades risk.
-- **Parallel work:** the maintainer starts one worktree per ticket. `ship-ticket` claims a ticket by setting
+- **Parallel work:** until `ship-epic` exists (rollout step 8), the maintainer starts one worktree per ticket. `ship-ticket` claims a ticket by setting
   `status:in-progress` and refuses one whose `touches:` overlap another `in-progress` ticket. At most 3 at once.
 - **Retry caps:** 3 failed test-fix cycles or 2 reviewer CHANGES REQUESTED rounds stop the ticket with
   `status:needs-human` and the last failure in a comment.
@@ -131,13 +131,26 @@ Auto-merge stays off until steps 2, 5 and 6 have merged.
    maintainer approves each merge".
 6. Denylist script, audit comment, `human-merge` and pause on revert.
 7. `release`.
+8. `ship-epic <spec>`, built only after several single-ticket runs have merged cleanly (see Epic runs).
 
 Then run the pipeline on the next real feature.
 
+## Epic runs
+
+`ship-epic <spec>` runs a spec's tickets in the background without the maintainer starting each one. It stops
+only on `status:needs-human`; the spec merge and any denylist merge still need the maintainer.
+
+- Reads the spec's tickets, applies the order rule, the `touches:` overlap check and the cap of 3, and starts
+  one worker per eligible ticket in its own worktree; when one finishes it starts the next.
+- A ticket or PR that needs the maintainer is parked as `status:needs-human`. The run skips it and continues
+  with tickets that do not depend on it, and notifies the maintainer each time it parks one.
+- Halts at a configured ticket or spend limit, and pauses and retries on rate limits or CI outages instead of
+  failing the ticket. Ends with a summary: merged, parked, and tickets blocked behind a parked one.
+- A ticket chain behind a parked ticket waits; the run does not work around a dependency.
+
 ## Out of scope
 
-Project boards, a batch command that starts workers for every ready ticket, parallelism above 3, automated
-deployment, migrating existing plan files.
+Project boards, parallelism above 3, automated deployment, migrating the contents of existing plan files.
 
 ## Open questions
 
