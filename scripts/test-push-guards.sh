@@ -23,6 +23,16 @@ guard 0 'git config --get core.hooksPath'
 guard 0 'git config core.hooksPath scripts/git-hooks'
 guard 0 'grep -n hooksPath Makefile'
 guard 0 'cargo test -p core'
+guard 0 'git commit -m "docs: explain core.hooksPath"'
+guard 0 'git log --grep hooksPath'
+guard 0 'git config --list'
+guard 2 'if true; then git push -f; fi'
+guard 2 '(git push -f origin feat/x)'
+guard 2 'env git push -f origin feat/x'
+guard 2 '/usr/bin/git push -f origin feat/x'
+guard 2 'git push	-f origin feat/x'
+guard 2 'git push origin "main"'
+guard 2 'git config core.hookspath /dev/null'
 guard 2 'git push --force origin feat/x'
 guard 2 'git push -f origin feat/x'
 guard 2 'git push -uf origin feat/x'
@@ -42,6 +52,6 @@ guard 2 'git config --unset core.hooksPath'
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 28 ] || { echo "ran $n cases, want 28"; fail=1; }
+[ "$n" = 38 ] || { echo "ran $n cases, want 38"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
