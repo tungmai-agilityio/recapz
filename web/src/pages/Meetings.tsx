@@ -123,7 +123,7 @@ export function Meetings() {
         <a href="/auth/google" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-primary-fg">
           Sign in with Google
         </a>
-        {import.meta.env.DEV && <DevLogin onDone={() => qc.invalidateQueries({ queryKey: ['meetings'] })} />}
+        {import.meta.env.DEV && <DevLogin onDone={() => qc.invalidateQueries()} />}
       </div>
     )
 
