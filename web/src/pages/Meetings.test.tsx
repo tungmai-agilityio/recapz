@@ -33,7 +33,8 @@ test('shows a day heading, the status badge and the month count for each meeting
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
   show()
   expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy()
-  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Next up', 'Today'])
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Today', 'Next up today'])
+  expect(screen.getByRole('link', { name: 'Upload' }).getAttribute('href')).toBe('/upload')
   expect(screen.getByText('Ready').className).toContain('text-good')
   expect(screen.getByText('Failed').className).toContain('text-bad')
   expect(screen.getByText('Transcribing').className).toContain('text-signal-ink')
@@ -113,7 +114,7 @@ const sendNotetaker = async (f: ReturnType<typeof vi.fn>, link: string, title = 
   fireEvent.click(await screen.findByRole('button', { name: 'Send notetaker' }))
   fireEvent.change(screen.getByLabelText('Meeting link'), { target: { value: link } })
   if (title) fireEvent.change(screen.getByLabelText('Title (optional)'), { target: { value: title } })
-  fireEvent.click(within(screen.getByRole('form', { name: 'Send notetaker' })).getByRole('button', { name: 'Send notetaker' }))
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Send notetaker' })).getByRole('button', { name: 'Send notetaker' }))
 }
 const joins = (f: ReturnType<typeof vi.fn>) => f.mock.calls.filter(([u]) => u === '/api/meetings/join')
 
@@ -136,7 +137,7 @@ test('send notetaker posts the link and title, shows loading, then refreshes the
   const init = joins(f)[0][1] as RequestInit
   expect(init.method).toBe('POST')
   expect(JSON.parse(init.body as string)).toEqual({ url: 'https://us02web.zoom.us/j/84012345678', title: 'Design review' })
-  expect(screen.queryByRole('form', { name: 'Send notetaker' })).toBeNull()
+  expect(screen.queryByRole('dialog', { name: 'Send notetaker' })).toBeNull()
   expect(screen.getByRole('status').textContent).toBe('Notetaker is on its way')
 })
 
@@ -152,4 +153,38 @@ test('send notetaker shows the server error and keeps the form open', async () =
   await sendNotetaker(f, 'https://example.com/x')
   expect((await screen.findByRole('alert')).textContent).toBe('not a Meet or Zoom link')
   expect((screen.getByLabelText('Meeting link') as HTMLInputElement).value).toBe('https://example.com/x')
+})
+
+test('an empty list says so and links to Upload; a failed load shows an alert', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
+  show()
+  expect((await screen.findByText(/No meetings yet/)).textContent).toContain('Upload a recording')
+  cleanup()
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('x', { status: 500 })))
+  show()
+  expect((await screen.findByRole('alert', {}, { timeout: 5000 })).textContent).toBe('Could not load meetings.')
+}, 8000)
+
+test('recording and joining meetings get their stage badge; Send notetaker opens a dialog', async () => {
+  const rows = [{ id: '1', title: 'Live one', platform: 'meet', status: 'recording', started_at: 5, created_at: 5 }]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  show()
+  expect((await screen.findByText('Recording')).className).toContain('text-signal-ink')
+  fireEvent.click(screen.getByRole('button', { name: 'Send notetaker' }))
+  expect(screen.getByRole('dialog', { name: 'Send notetaker' })).toBeTruthy()
+  fireEvent.keyDown(document.body, { key: 'Escape' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+test('Tab wraps inside the Send notetaker dialog', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Send notetaker' }))
+  const dialog = screen.getByRole('dialog', { name: 'Send notetaker' })
+  const send = within(dialog).getByRole('button', { name: 'Send notetaker' })
+  send.focus()
+  fireEvent.keyDown(send, { key: 'Tab' })
+  expect(document.activeElement).toBe(screen.getByLabelText('Meeting link'))
+  fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true })
+  expect(document.activeElement).toBe(send)
 })
