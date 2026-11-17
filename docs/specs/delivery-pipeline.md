@@ -52,7 +52,7 @@ ticket missing a required label.
 | Tickets created | `plan-tickets` | tickets `status:ready`; idea closed after the last ticket exists |
 | Ticket claimed | `ship-ticket` | `status:in-progress` |
 | PR opened | `ship-ticket` | `status:review` |
-| PR merges | `Closes #N` | ticket closed (only when the PR delivers the whole ticket, see Tickets) |
+| PR merges | `Closes #N`, then `ship-ticket` | ticket closed (only when the PR delivers the whole ticket, see Tickets); its `status:` label is removed |
 | Auto-merged PR reverted | pause rule | ticket reopened as `status:needs-human` with a comment |
 | Any stop or escalation | any skill | `status:needs-human` plus a comment saying why |
 | Escalation cleared | maintainer only | back to `status:ready` |
@@ -83,7 +83,9 @@ ticket missing a required label.
 
 A ticket PR merges without the maintainer only when **all** hold:
 
-1. Every CI check is green on the current HEAD, read by the merge step itself with `gh pr checks`.
+1. Every CI check passed on the current HEAD, read by the merge step itself with `gh pr checks`: no pending, failed or
+   skipped job. Editing a PR's title or labels must not replace the heavy results, so `ci.yml` (rust, web, guards)
+   does not run on those edits and `pr-meta.yml` (commits, size) does.
 2. `code-reviewer` returns APPROVE with zero blockers for that HEAD, and every acceptance item is met.
 3. The PR's "Decisions needing the maintainer" section is empty. Anything touching privacy, data deletion or
    data sent to language-model providers escalates regardless.
