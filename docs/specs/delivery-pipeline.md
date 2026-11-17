@@ -6,16 +6,16 @@ all run for real yet; see Rollout status.
 ## Problem
 
 Specs and plans live in `docs/`, but there is no intake, no ticket tracking and no link between a plan row and
-the PR that ships it. Status is hand-maintained Markdown and drifts. This defines one path from idea to release
+the PR that ships it. Status is hand-maintained Markdown and drifts. This defines one path from intent to release
 and who owns each step.
 
 ## Pipeline
 
 | Stage | Entry point | Output | Gate |
 |---|---|---|---|
-| Intake | `idea` issue template | Issue `kind:idea`, `status:backlog` | none |
-| Grill | an explicit grilling session with the maintainer | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | the maintainer's confirmation that ends the grilling |
-| Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the idea once every ticket exists | none |
+| Intake | `intent` issue template | Issue `kind:intent`, `status:backlog` | none |
+| Grill | an explicit grilling session with the maintainer | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<intent>`; intent is `status:planning` | the maintainer's confirmation that ends the grilling |
+| Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the intent once every ticket exists | none |
 | Ship | `ship-ticket` skill | Implement, test, verify, review, open the PR | auto-merge or escalate (below) |
 | Deliver | `release` skill, on demand | `v0.x` tag, GitHub release, upgrade checklist | asks before tagging |
 
@@ -33,7 +33,7 @@ Issues own status; Markdown holds specs and decisions only. A PR says `Closes #N
 
 | Namespace | Values | Rule |
 |---|---|---|
-| `kind:` | `idea`, `ticket` | exactly one |
+| `kind:` | `intent`, `ticket` | exactly one |
 | `status:` | `backlog`, `planning`, `ready`, `in-progress`, `review`, `needs-human` | exactly one on an open issue |
 | `type:` | `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`, `test` | exactly one per ticket; gives branch prefix and commit type. `ci`, `build`, `revert` use `chore` |
 | `priority:` | `p0`, `p1`, `p2`, `p3` | exactly one; default `p2`. `p0` is security, data loss or a broken `main` |
@@ -48,10 +48,10 @@ ticket missing a required label.
 
 | Event | Owner | Change |
 |---|---|---|
-| Idea filed | template | `status:backlog` |
+| Intent filed | template | `status:backlog` |
 | Grill starts | whoever runs the session | `status:planning` |
-| Spec PR merges | n/a | idea stays `status:planning` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
-| Tickets created | `plan-tickets` | tickets `status:ready`; idea closed after the last ticket exists |
+| Spec PR merges | n/a | intent stays `status:planning` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
+| Tickets created | `plan-tickets` | tickets `status:ready`; intent closed after the last ticket exists |
 | Ticket claimed | `ship-ticket` | `status:in-progress` |
 | PR opened | `ship-ticket` | `status:review` |
 | PR merges | `Closes #N`, then `ship-ticket` | ticket closed (only when the PR delivers the whole ticket, see Tickets); its `status:` label is removed |
