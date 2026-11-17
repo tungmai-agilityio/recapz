@@ -29,7 +29,7 @@
 ## Issues and tickets
 - Issues own task status; `docs/specs/` and `docs/decisions/` hold specs and decisions. The full flow, labels and
   merge rules are in `docs/specs/delivery-pipeline.md`.
-- Start from an **Idea** issue. A merged spec turns into **Ticket** issues, each one PR.
+- Start from an **Intent** issue. A merged spec turns into **Ticket** issues, each one PR.
 - Every ticket carries one `kind:`, `status:`, `type:` and `priority:` label (default `priority:p2`) and at least
   one `area:` label. `type:` matches the branch prefix and commit type; the first `area:` is the commit scope.
 - `Closes #N` in a PR only when it delivers the whole ticket; otherwise `Refs #N`.

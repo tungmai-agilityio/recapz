@@ -1,7 +1,7 @@
 # <Feature name>
 
 Status: **draft** | agreed with the maintainer (<date>) | shipped (<date>)
-Idea: #<issue>
+Intent: #<issue>
 
 ## Problem
 
