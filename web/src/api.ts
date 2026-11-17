@@ -77,11 +77,15 @@ export const joinMeeting = async (url: string, title: string) => {
   }))
 }
 
-export async function uploadFile(file: File) {
+/** Returns the new meeting's id. The server also reads an optional `title` (default: the file name). */
+export async function uploadRecording(file: File, title?: string): Promise<{ id: string }> {
   const body = new FormData()
+  if (title?.trim()) body.append('title', title.trim())
   body.append('file', file)
-  await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))
+  return (await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))).json()
 }
+
+export const uploadFile = (file: File) => uploadRecording(file)
 
 /** Local development only: the server accepts it when `dev_login = true`. */
 export async function devLogin(email: string) {

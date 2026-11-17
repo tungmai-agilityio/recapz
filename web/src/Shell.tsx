@@ -8,12 +8,13 @@ import { Face } from './ui/Face'
 import { Menu, MenuItem } from './ui/Menu'
 
 const groups: { label: string; items: { to: string; label: string; end?: boolean }[] }[] = [
-  { label: 'Work', items: [{ to: '/', label: 'Meetings', end: true }, { to: '/ask', label: 'Ask' }] },
+  { label: 'Work', items: [{ to: '/', label: 'Meetings', end: true }, { to: '/upload', label: 'Upload' }, { to: '/ask', label: 'Ask' }] },
   { label: 'Workspace', items: [{ to: '/recording', label: 'Recording & privacy' }] },
 ]
 
 function crumb(path: string) {
   if (path === '/recording') return <>Workspace / <b className="font-medium text-ink">Recording & privacy</b></>
+  if (path === '/upload') return <>Meetings / <b className="font-medium text-ink">Upload</b></>
   if (path === '/ask') return <b className="font-medium text-ink">Ask</b>
   if (path.startsWith('/meetings/')) return <>Meetings / <b className="font-medium text-ink">Meeting report</b></>
   return <b className="font-medium text-ink">Meetings</b>
