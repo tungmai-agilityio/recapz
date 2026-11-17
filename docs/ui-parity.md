@@ -46,12 +46,13 @@ definition of done for every web PR.
 - [ ] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
 
 ## S2 Meetings
-- [ ] Header "Meetings" with a counts line, Upload link, Send notetaker button (done, but the counts line has no
-      hours recorded: the list API has no duration; the Upload link goes to /upload, which is built in its own PR)
+- [ ] Header "Meetings" with a counts line, Upload link, Send notetaker button (built: counts line shows meetings this month and
+      hours recorded from `duration_ms`, hours omitted when no meeting has a duration; no screenshot yet)
 - [ ] Send notetaker dialog: paste a meeting link; bad link shows an error (modal dialog, server message shown) (built in #137; no screenshot yet)
 - [ ] Days grouped (Today, Yesterday, weekday and date); row: time, title, duration, platform, action-item count,
-      ribbon, faces; ribbon moves under the title on mobile (days, time, title, platform done; duration, action
-      count, ribbon and faces are hidden because `/api/meetings` returns none of them, they need a list-API change)
+      ribbon, faces; ribbon moves under the title on mobile (built: duration, platform, action-item count (hidden at 0), equal-weight
+      speaker ribbon and faces from `speakers` (hidden when empty); no screenshot yet. The ribbon is one segment per
+      speaker, not a timeline, because the list API has no speaking times)
 - [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
       no opted-out state exists in the list data)
 - [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
@@ -59,7 +60,7 @@ definition of done for every web PR.
       view route does not exist yet; rows with status `recording` show a Recording badge)
 - [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
-`GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web PR can show them and tick the Header counts and Days grouped rows.
+`GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built; a later screenshot pass ticks Header counts and Days grouped.
 
 No screenshot attached and not checked by eye: no browser tool was available. A per-row Delete with confirm is
 done, shown on every row because the list API has no owner info (a refusal appears in the dialog). Hide it for
