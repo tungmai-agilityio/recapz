@@ -36,6 +36,7 @@ export function Ask() {
       patch(() => ({ cites, state: 'done' }))
     } catch (err) {
       patch(() => ({ state: 'error', error: errorText(err) }))
+      setQuestion((cur) => cur || q)
     }
   }
 
@@ -54,7 +55,7 @@ export function Ask() {
           ) : (
             <p className="whitespace-pre-wrap leading-7" aria-live="polite">
               {t.a || (t.state === 'streaming' && <span className="text-mute">Searching your meetings…</span>)}
-              {t.cites.map((_, i) => (
+              {t.cites.slice(0, 3).map((_, i) => (
                 <sup key={i} className="ml-0.5 text-[0.68rem]">
                   <a href={`#cite-${ti}-${i}`} className="rounded-sm bg-hair-2 px-1 font-mono no-underline">{i + 1}</a>
                 </sup>
