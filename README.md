@@ -10,7 +10,7 @@ Status: early development, building toward v1. See `docs/spec.md` for the featur
 - `crates/` — Rust workspace (server and core crates; more are added as features land)
 - `web/` — React app
 - `docs/` — spec and decisions
-- `scripts/` — local checks (`check-commits.sh`, `banned-names.sh`, `pr-size.mjs`)
+- `scripts/` — local checks (`check-commits.sh`, `pr-size.mjs`)
 - `.claude/` — agents, hooks and skills for coding sessions
 
 ## Develop
@@ -20,7 +20,7 @@ Prerequisites: Rust (version pinned in `rust-toolchain.toml`), Node LTS and pnpm
 ```
 make dev      # server on :8080, web dev server on :5173
 make test     # Rust and web tests
-make lint     # fmt, clippy, web lint, banned-names check
+make lint     # fmt, clippy, web lint
 ```
 
 ## Contributing

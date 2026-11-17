@@ -16,7 +16,7 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
 ## Commands
 - make dev      # server on :8080 + vite on :5173
 - make test     # all Rust and web tests
-- make lint     # cargo fmt --check, clippy -D warnings, pnpm lint, banned-names check
+- make lint     # cargo fmt --check, clippy -D warnings, pnpm lint
 - make release  # production build with CUDA
 - PR size: node scripts/pr-size.mjs origin/main (before pushing)
 - Before merge: full `cargo test --workspace` only if the PR touches `crates/core`, migrations, auth, meeting access or shared API types; otherwise `cargo test -p <crate>` for the crates changed, plus `cargo fmt --check` and clippy. Web tests (`pnpm -C web test`) and lint only when `web/` changed. Browser flows only for shared UI or a cross-page flow.
