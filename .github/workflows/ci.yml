@@ -1,7 +1,6 @@
 name: ci
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
     branches: [main]
 concurrency:
@@ -10,33 +9,12 @@ concurrency:
 permissions:
   contents: read
 jobs:
-  commits:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE" "$BRANCH"
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          BRANCH: ${{ github.head_ref }}
-  size:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - run: node scripts/pr-size.mjs "origin/${{ github.base_ref }}"
-        env:
-          SIZE_EXCEPTION: ${{ contains(github.event.pull_request.labels.*.name, 'size-exception') }}
   guards:
-    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: ./scripts/test-push-guards.sh
   rust:
-    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +30,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
   web:
-    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

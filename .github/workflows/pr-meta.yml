@@ -1,0 +1,29 @@
+name: pr-meta
+# Title, branch, commit and size checks. They rerun when the title or labels change; the heavy checks in ci.yml do
+# not, so editing a PR never replaces their results with skipped runs.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+concurrency:
+  group: pr-meta-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: ./scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD" "$PR_TITLE" "$BRANCH"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: node scripts/pr-size.mjs "origin/${{ github.base_ref }}"
+        env:
+          SIZE_EXCEPTION: ${{ contains(github.event.pull_request.labels.*.name, 'size-exception') }}
