@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -42,6 +42,23 @@ function SendNotetaker({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
+  const form = useRef<HTMLFormElement>(null)
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
+  // Escape from anywhere closes; Tab wraps inside the dialog.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return close.current()
+      if (e.key !== 'Tab' || !form.current) return
+      const f = [...form.current.querySelectorAll<HTMLElement>('input, button:not([disabled])')]
+      const [first, last] = [f[0], f[f.length - 1]]
+      if (!form.current.contains(document.activeElement)) { e.preventDefault(); first.focus() }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [])
   const send = useMutation({
     mutationFn: () => joinMeeting(url.trim(), title.trim()),
     onSuccess: () => {
@@ -51,8 +68,8 @@ function SendNotetaker({ onClose }: { onClose: () => void }) {
     },
   })
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-    <form role="dialog" aria-modal="true" className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-hair bg-sheet p-5 shadow-xl" aria-label="Send notetaker"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+    <form ref={form} role="dialog" aria-modal="true" className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-hair bg-sheet p-5 shadow-xl" aria-label="Send notetaker"
       onSubmit={(e) => { e.preventDefault(); send.mutate() }}>
       <Field label="Meeting link" hint="A Google Meet or Zoom link."
         error={send.error ? send.error.message.replace(/^\d+ /, '') : undefined}>

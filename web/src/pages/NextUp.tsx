@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router'
 import { getCalendar, getUpcoming, setAutoJoin } from '../api'
 import { Faces } from '../ui/Face'
 import { Switch } from '../ui/Switch'
-import { dayLabel } from './meeting-days'
 
 const SHOWN = 5
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -11,6 +11,7 @@ const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit'
 /** Calendar meetings still to come, each with its own join switch. */
 export function NextUp() {
   const qc = useQueryClient()
+  const [now] = useState(() => Date.now()) // fixed per mount; refetches replace the events
   const cal = useQuery({ queryKey: ['calendar'], queryFn: getCalendar })
   const events = useQuery({ queryKey: ['upcoming'], queryFn: getUpcoming, enabled: cal.data?.connected === true })
   const flip = useMutation({
@@ -19,7 +20,9 @@ export function NextUp() {
   })
 
   if (cal.isLoading || cal.isError) return null
-  const today = (events.data ?? []).filter((e) => dayLabel(e.starts_at) === 'Today')
+  const endOfToday = new Date(now).setHours(24, 0, 0, 0)
+  // Still to come or running now, and starting before midnight.
+  const today = (events.data ?? []).filter((e) => e.ends_at > now && e.starts_at < endOfToday)
   const connectHint = <>Connect Google Calendar on <Link to="/recording" className="text-primary">Recording &amp; privacy</Link>.</>
   let body
   if (!cal.data?.connected) body = <p className="text-sm text-mute">Your calendar is not connected. {connectHint}</p>

@@ -12,7 +12,7 @@ const show = () =>
       <MemoryRouter><NextUp /></MemoryRouter>
     </QueryClientProvider>,
   )
-const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: new Date().setHours(12, 0, 0, 0), ends_at: new Date().setHours(13, 0, 0, 0), platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, attendees: [], ...o })
+const ev = (o = {}) => ({ id: 'e1', title: 'Design review', starts_at: Date.now() + 1000, ends_at: Date.now() + 2000, platform: 'meet', join_url: 'https://meet.google.com/abc-defg-hij', auto_join: false, attendees: [], ...o })
 const api = (connected: boolean, events: unknown[], calls: [string, RequestInit | undefined][] = []) =>
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push([url, init])
@@ -89,4 +89,11 @@ test('shows only today, with a Join rules link to Recording & privacy', async ()
   expect(screen.queryByText('Tomorrow thing')).toBeNull()
   expect(screen.getByRole('heading', { name: 'Next up today' })).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Join rules' }).getAttribute('href')).toBe('/recording')
+})
+
+test('hides an event that already ended today', async () => {
+  api(true, [ev(), ev({ id: 'e8', title: 'Finished chat', starts_at: Date.now() - 7_200_000, ends_at: Date.now() - 3_600_000 })])
+  show()
+  expect(await screen.findByText('Design review')).toBeTruthy()
+  expect(screen.queryByText('Finished chat')).toBeNull()
 })
