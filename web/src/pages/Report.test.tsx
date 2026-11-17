@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { clock } from '../clock'
 import { ToastProvider } from '../ui/Toast'
+import { Meetings } from './Meetings'
 import { Report } from './Report'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -254,8 +255,10 @@ const people = [
   { id: 4, speaker_id: null, speaker_name: null, start_ms: 50000, end_ms: 100000, text: 'Unlabelled' },
 ]
 const withReport = { summary: 'Plan agreed', decisions: [], open_questions: [], chapters: [], action_items: [] }
+// Meeting order is Sarah then Khoa, while Khoa speaks first in the transcript.
+const speakers = [{ id: 'b', name: 'Sarah' }, { id: 'a', name: 'Khoa' }]
 const serve = (segs: unknown[]) =>
-  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? withReport : meeting))))
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? withReport : { ...meeting, speakers }))))
 const swatch = (e: Element) => e.className.match(/bg-speaker-\d/)![0]
 
 test('shows speaker names on lines, faces in the header and talk time with one colour per person', async () => {
@@ -263,11 +266,11 @@ test('shows speaker names on lines, faces in the header and talk time with one c
   show()
   await screen.findByText('Plan agreed')
   const faces = screen.getAllByRole('img')
-  expect(faces.map((f) => [f.getAttribute('aria-label'), swatch(f)])).toEqual([['Khoa', 'bg-speaker-1'], ['Sarah', 'bg-speaker-2']])
+  expect(faces.map((f) => [f.getAttribute('aria-label'), swatch(f)])).toEqual([['Sarah', 'bg-speaker-1'], ['Khoa', 'bg-speaker-2']])
   const rows = screen.getByRole('heading', { name: 'Talk time' }).parentElement!.querySelectorAll('li')
   expect([...rows].map((r) => r.textContent)).toEqual(['Sarah30%', 'Khoa20%'])
   const bars = screen.getAllByTestId('talk-bar')
-  expect(bars.map((b) => swatch(b))).toEqual(['bg-speaker-2', 'bg-speaker-1'])
+  expect(bars.map((b) => swatch(b))).toEqual(['bg-speaker-1', 'bg-speaker-2'])
   expect(bars[0].style.width).toBe('100%')
   expect(parseFloat(bars[1].style.width)).toBeCloseTo(66.667, 2)
   fireEvent.click(screen.getByRole('tab', { name: 'Transcript' }))
@@ -289,4 +292,28 @@ test('labels a speaker with no name as Unknown', async () => {
   await screen.findByText('Plan agreed')
   expect(screen.getAllByText('Unknown')).toHaveLength(1)
   expect(screen.getByRole('img').getAttribute('aria-label')).toBe('Unknown')
+})
+
+test('one person has the same colour on the Meetings list and on the Report', async () => {
+  const row = { ...meeting, speakers, action_item_count: 0, duration_ms: null, started_at: Date.now() }
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([row]))))
+  const list = render(
+    <QueryClientProvider client={new QueryClient()}><ToastProvider><MemoryRouter><Meetings /></MemoryRouter></ToastProvider></QueryClientProvider>,
+  )
+  await screen.findByText('Weekly sync')
+  const onList = Object.fromEntries(screen.getAllByRole('img').map((f) => [f.getAttribute('aria-label'), swatch(f)]))
+  list.unmount()
+  serve(people)
+  show()
+  await screen.findByText('Plan agreed')
+  const onReport = Object.fromEntries(screen.getAllByRole('img').map((f) => [f.getAttribute('aria-label'), swatch(f)]))
+  expect(onList).toEqual({ Sarah: 'bg-speaker-1', Khoa: 'bg-speaker-2' })
+  expect(onReport).toEqual(onList)
+})
+
+test('colours a speaker missing from the meeting speakers grey', async () => {
+  serve([{ id: 1, speaker_id: 'zz', speaker_name: 'Zed', start_ms: 0, end_ms: 1000, text: 'x' }])
+  show()
+  await screen.findByText('Plan agreed')
+  expect(screen.getByRole('img', { name: 'Zed' }).className).toContain('bg-hair')
 })

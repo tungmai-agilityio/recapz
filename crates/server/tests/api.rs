@@ -935,6 +935,16 @@ async fn meeting_list_returns_duration_action_count_and_capped_speakers() {
             {"id":"p4","name":"S4"},{"id":"p5","name":"S5"}])
     );
 
+    // The detail returns the same speakers, so both screens colour from one order.
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &boss)).await;
+    let detail: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(detail["speakers"], rows[0]["speakers"]);
+    assert_eq!(detail["speakers"].as_array().unwrap().len(), 5);
+    assert_eq!(
+        detail["speakers"][0],
+        serde_json::json!({"id":"p1","name":"Lan"})
+    );
+
     // Unknown duration and no report: null, 0 and an empty list.
     t.execute_batch(&format!(
         "UPDATE meetings SET ended_at = NULL WHERE id = '{id}';
