@@ -8,7 +8,7 @@ description: Turn a merged spec's ticket table into GitHub ticket issues with th
 Input: a spec file in `docs/specs/`. Output: one `kind:ticket` issue per row of its Tickets table, then the idea
 issue closed. Never invent tickets that are not in the table; if the table is wrong, stop and escalate.
 
-Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`.
+Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
 
 ## Checks before creating anything
 

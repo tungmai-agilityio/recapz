@@ -5,8 +5,7 @@ description: Cut a release on demand - pick the next v0.x version, build notes f
 
 # Release
 
-Never touch the production host, its config or secrets. The maintainer runs the install. Pass the work account's
-token on every `gh` call: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`.
+Never touch the production host, its config or secrets. The maintainer runs the install. Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
 
 ## Steps
 

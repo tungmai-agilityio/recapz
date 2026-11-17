@@ -11,7 +11,7 @@ green on its HEAD, then stop; never create tickets here (`plan-tickets` does tha
 out to be critical under "Merging and escalation" in `CLAUDE.md` (for example it bends a hard rule), leave the PR
 for the maintainer.
 
-Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`.
+Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
 
 ## Steps
 
