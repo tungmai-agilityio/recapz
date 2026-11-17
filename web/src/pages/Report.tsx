@@ -210,7 +210,7 @@ export function Report() {
               return (
                 <li key={s.id}>
                   <button type="button" aria-current={active || undefined} onClick={() => seek(s.start_ms)}
-                    className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-hair-2 ${active ? 'bg-signal-wash' : ''}`}>
+                    className={`grid w-full grid-cols-[3px_3.5rem_minmax(0,1fr)] gap-3 rounded-md py-2.5 pr-2 text-left hover:bg-inset ${active ? 'bg-signal-wash' : ''}`}>
                     <SpeakerBar speaker={speakerOf(s.speaker_id)} />
                     <time className="pt-0.5 font-mono text-xs text-mute">{clock(s.start_ms)}</time>
                     <span>
