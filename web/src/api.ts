@@ -77,11 +77,15 @@ export const joinMeeting = async (url: string, title: string) => {
   }))
 }
 
-export async function uploadFile(file: File) {
+/** Returns the new meeting's id. The server also reads an optional `title` (default: the file name). */
+export async function uploadRecording(file: File, title?: string): Promise<{ id: string }> {
   const body = new FormData()
+  if (title?.trim()) body.append('title', title.trim())
   body.append('file', file)
-  await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))
+  return (await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))).json()
 }
+
+export const uploadFile = (file: File) => uploadRecording(file)
 
 /** Local development only: the server accepts it when `dev_login = true`. */
 export async function devLogin(email: string) {
@@ -115,15 +119,22 @@ export function parseEvents(buf: string): { events: { name: string; data: unknow
   return { events, rest }
 }
 
+/** Ask refused for now: 429 (too many questions) or 503 (no language model configured). */
+export class RateLimited extends Error {}
+export class NoModel extends Error {}
+/** The stream ended with an `error` event after it had started. */
+export class AnswerFailed extends Error {}
+
 /** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
 export async function ask(question: string, onToken: (t: string) => void): Promise<Citation[]> {
-  const res = await check(
-    await fetch('/api/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...csrf() },
-      body: JSON.stringify({ question }),
-    }),
-  )
+  const first = await fetch('/api/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...csrf() },
+    body: JSON.stringify({ question }),
+  })
+  if (first.status === 429) throw new RateLimited()
+  if (first.status === 503) throw new NoModel()
+  const res = await check(first)
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let buf = ''
@@ -135,6 +146,7 @@ export async function ask(question: string, onToken: (t: string) => void): Promi
     buf = rest
     for (const e of events) {
       if (e.name === 'token') onToken((e.data as { text: string }).text)
+      if (e.name === 'error') throw new AnswerFailed()
       if (e.name === 'citations') citations = e.data as Citation[]
     }
     if (done) return citations

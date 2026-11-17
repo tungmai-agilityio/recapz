@@ -15,42 +15,53 @@ definition of done for every web PR.
   shown in the rail. Connections and "Send to tracker" are skipped until their backends exist.
 
 ## Global
-- [ ] Skins Daylight (default) and Ink; modes Light (default), Dark, Auto; `data-skin` and `data-theme` on `<html>`;
+- [x] Skins Daylight (default) and Ink; modes Light (default), Dark, Auto; `data-skin` and `data-theme` on `<html>`;
       stored in localStorage `recapz-skin` and `recapz-mode`
-- [ ] Tokens: paper, sheet, wash, ink, ink-2, mute, hair, hair-2, rail, rail-fg, rail-on, btn, btn-fg, signal,
+      Covered by theme.test.tsx (#135).
+- [x] Tokens: paper, sheet, wash, ink, ink-2, mute, hair, hair-2, rail, rail-fg, rail-on, btn, btn-fg, signal,
       signal-ink, signal-wash, good, good-wash, bad, bad-wash, speaker-1..5, radius 6px
-- [ ] Be Vietnam Pro for UI, JetBrains Mono with tabular numerals for times and counts
+      Checked in index.css; btn and btn-fg are named primary and primary-fg there. Not checked by eye (#135).
+- [x] Be Vietnam Pro for UI, JetBrains Mono with tabular numerals for times and counts
+      Fonts loaded in index.html; `.font-mono` gets tabular numerals in index.css (#135).
 - [ ] Primitives in `web/src/ui/`: Button (default, primary, ghost, danger), Badge (good, signal, bad), Face, Faces,
       Ribbon (list, scrubber, live), Switch, Tabs, Choice group, Field, Table, Toast, Menu, PageHead
+      Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.
 - [ ] Amber (`signal`) only on the playhead, recording state and focus ring
 - [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` that stack at 900 px, rail becomes a top strip
-- [ ] Reduced motion honoured (recording dot, pipeline fill)
+- [x] Reduced motion honoured (recording dot, pipeline fill)
+      Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet (#135).
 - [ ] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus
 
 ## S1 Shell
 - [ ] Rail: glyph and wordmark; groups Work (Meetings, Meeting report, Ask, Live meeting, Upload) and Workspace
       (Members, Recording & privacy); v1 dot; active item has `aria-current="page"` and an amber marker (Ink) or
       blue marker (Daylight)
+      Open: Live meeting, Upload and Members stay out of the rail until their screens exist; v1 dots and the glyph are in.
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
 - [ ] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
       mode switch (group label "Light or dark mode"; Light, Dark, Auto)
-- [ ] Signed-out state shows the sign-in card; a 401 returns to it
+- [x] Signed-out state shows the sign-in card; a 401 returns to it
+      Covered by App.test.tsx (#135).
 - [ ] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
 
 ## S2 Meetings
-- [ ] Header "Meetings" with a counts line, Upload link, Send notetaker button
-- [ ] Send notetaker dialog: paste a meeting link; bad link shows an error
+- [ ] Header "Meetings" with a counts line, Upload link, Send notetaker button (done, but the counts line has no
+      hours recorded: the list API has no duration; the Upload link goes to /upload, which is built in its own PR)
+- [ ] Send notetaker dialog: paste a meeting link; bad link shows an error (modal dialog, server message shown) (built in #137; no screenshot yet)
 - [ ] Days grouped (Today, Yesterday, weekday and date); row: time, title, duration, platform, action-item count,
-      ribbon, faces; ribbon moves under the title on mobile
-- [ ] Processing row shows a stage badge; failed row an error badge; opted-out row
-- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link
-- [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
-- [ ] Empty, loading and error states
+      ribbon, faces; ribbon moves under the title on mobile (days, time, title, platform done; duration, action
+      count, ribbon and faces are hidden because `/api/meetings` returns none of them, they need a list-API change)
+- [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
+      no opted-out state exists in the list data)
+- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
+- [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording (not built: the live
+      view route does not exist yet; rows with status `recording` show a Recording badge)
+- [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
-S2 stays unticked: the list is still the plain first version, and the Send notetaker form is an inline box with no prototype screenshot yet. A per-row Delete with confirm is done, shown on
-every row because the list API has no owner info (a refusal appears in the dialog). Hide it for non-owners
-once the list returns the owner.
+No screenshot attached and not checked by eye: no browser tool was available. A per-row Delete with confirm is
+done, shown on every row because the list API has no owner info (a refusal appears in the dialog). Hide it for
+non-owners once the list returns the owner.
 
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
@@ -75,19 +86,22 @@ once the list returns the owner.
       (colour bar, time, text, highlight, seek done. Speaker name is hidden: the API returns an opaque speaker id,
       the name lives only in the `speakers` table)
 - [ ] Processing, failed with retry, no report yet, no audio yet, 404
+      (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
 
 ## S4 Ask
-      (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
 - [ ] Question line, answer with numbered markers, three citation cards (number, time, meeting title, two-line
-      quote, ribbon with pin)
-- [ ] Suggestion chips, sticky composer with Ask button, Cmd/Ctrl+K focus
-- [ ] States: streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
+      quote, ribbon with pin). Unticked: markers sit after the answer, not inline, because the server returns the
+      answer and its citation list separately; cards have no ribbon or pin because citations carry no speaker or
+      offset data and `web/src/ui/Ribbon.tsx` does not exist yet. Rest done in #136.
+- [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
+- [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
-- [ ] Drop zone with accepted types and size limit (only formats the backend accepts)
-- [ ] Fields: title, language, speaker count; button "Process recording"
+- [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet.
+- [ ] Fields: title, language, speaker count; button "Process recording". Built in #138; no screenshot yet. Only title is built: the upload API reads
+      no language or speaker count, so those are hidden rather than faked.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
-      link to the new meeting when ready
+      link to the new meeting when ready. Built in #138; no screenshot yet. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
 
 ## S6 Live meeting (blocked: events API and notetaker driver)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm

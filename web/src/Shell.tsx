@@ -8,12 +8,13 @@ import { Face } from './ui/Face'
 import { Menu, MenuItem } from './ui/Menu'
 
 const groups: { label: string; items: { to: string; label: string; end?: boolean }[] }[] = [
-  { label: 'Work', items: [{ to: '/', label: 'Meetings', end: true }, { to: '/ask', label: 'Ask' }] },
+  { label: 'Work', items: [{ to: '/', label: 'Meetings', end: true }, { to: '/upload', label: 'Upload' }, { to: '/ask', label: 'Ask' }] },
   { label: 'Workspace', items: [{ to: '/recording', label: 'Recording & privacy' }] },
 ]
 
 function crumb(path: string) {
   if (path === '/recording') return <>Workspace / <b className="font-medium text-ink">Recording & privacy</b></>
+  if (path === '/upload') return <>Meetings / <b className="font-medium text-ink">Upload</b></>
   if (path === '/ask') return <b className="font-medium text-ink">Ask</b>
   if (path.startsWith('/meetings/')) return <>Meetings / <b className="font-medium text-ink">Meeting report</b></>
   return <b className="font-medium text-ink">Meetings</b>
@@ -65,8 +66,8 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.end}
-                className={({ isActive }) => `relative rounded-md px-2.5 py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
-                {i.label}
+                className={({ isActive }) => `relative flex items-center rounded-md px-2.5 py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
+                {i.label}<span aria-hidden title="In v1" data-testid="v1-dot" className="ml-auto inline-block h-1.5 w-1.5 rounded-full bg-current opacity-60 max-[900px]:hidden" />
               </NavLink>
             ))}
           </div>
@@ -87,6 +88,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 {me.data.name && <small className="break-all text-mute">{me.data.email}</small>}
                 <span className="mt-1.5 self-start"><Badge>{me.data.role.charAt(0).toUpperCase() + me.data.role.slice(1)}</Badge></span>
               </div>
+              <MenuItem onClick={() => navigate('/recording')}>Recording & privacy</MenuItem>
               <MenuItem onClick={() => out.mutate()}>Sign out</MenuItem>
             </Menu>
             {out.isError && <span role="alert" className="block pt-1 text-xs text-bad">Could not sign out.</span>}

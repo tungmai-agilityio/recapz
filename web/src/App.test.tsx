@@ -26,7 +26,7 @@ const signedIn = () => new Response(JSON.stringify({ email: 'ana@example.com', n
 
 test('signed-in shell shows the rail, the account and the Meetings page', async () => {
   mount('/', signedIn())
-  expect(await screen.findByText('No meetings yet. Upload a recording to get started.')).toBeTruthy()
+  expect(await screen.findByText(/No meetings yet/)).toBeTruthy()
   const rail = screen.getByRole('navigation', { name: 'Screens' })
   expect(rail.textContent).toContain('Work')
   expect(screen.getByRole('link', { name: 'Meetings' }).getAttribute('aria-current')).toBe('page')
@@ -37,6 +37,16 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   fireEvent.click(screen.getByRole('button', { name: 'Account' }))
   expect(screen.getByRole('menu').textContent).toContain('Admin')
   expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
+  expect(screen.getAllByTestId('v1-dot').length).toBe(3)
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('menu')).toBeNull()
+})
+
+test('the account menu links to Recording & privacy', async () => {
+  mount('/', signedIn())
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Recording & privacy' }))
+  expect(await screen.findByRole('heading', { name: 'Recording & privacy' })).toBeTruthy()
 })
 
 test('the top bar has the Ask box, and Cmd+K or Ctrl+K opens Ask with the question focused', async () => {

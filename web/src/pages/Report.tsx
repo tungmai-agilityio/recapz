@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
 import { meetingTime } from './meeting-days'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
-import { Ribbon, SpeakerBar, type RibbonSegment } from '../ui/Ribbon'
+import { Ribbon, SpeakerBar } from '../ui/Ribbon'
 import { Tabs } from '../ui/Tabs'
 import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
@@ -92,7 +92,7 @@ export function Report() {
   const segs = transcript.data ?? []
   const ids = [...new Set(segs.map((s) => s.speaker_id).filter((x): x is string => x !== null))]
   const speakerOf = (id: string | null) => (id === null ? null : ids.indexOf(id))
-  const ribbon: RibbonSegment[] = segs.map((s) => ({ start_ms: s.start_ms, end_ms: s.end_ms, speaker: speakerOf(s.speaker_id) }))
+  const ribbon = segs.map((s) => ({ speaker: speakerOf(s.speaker_id), weight: Math.max(s.end_ms - s.start_ms, 1) }))
   const total = length || (segs.length ? Math.max(...segs.map((s) => s.end_ms)) : 0)
   if (meeting.error instanceof Unauthorized) return <Link to="/" className="text-primary">Sign in</Link>
   if (meeting.isError) return <p className="text-mute">Meeting not found.</p>
@@ -142,7 +142,7 @@ export function Report() {
         preload="metadata"
         src={`/api/meetings/${id}/audio`}
         onTimeUpdate={(e) => setNow(e.currentTarget.currentTime * 1000)}
-        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLength(e.currentTarget.duration * 1000)}
+        onLoadedMetadata={(e) => { setNoAudio(false); if (Number.isFinite(e.currentTarget.duration)) setLength(e.currentTarget.duration * 1000) }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onError={() => setNoAudio(true)}
@@ -159,7 +159,7 @@ export function Report() {
           </button>
           <div className="min-w-0 flex-1">
             {total > 0 && (
-              <Ribbon segments={ribbon} total={total} height={28} now={now} onSeek={(ms) => seek(ms, false)}
+              <Ribbon segments={ribbon} variant="scrubber" total={total} now={now} onSeek={(ms) => seek(ms, false)}
                 ticks={report.data?.chapters.map((c) => ({ ms: c.start_ms, title: c.title }))} />
             )}
           </div>

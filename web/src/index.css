@@ -57,3 +57,7 @@
 
 body { @apply bg-paper font-sans text-ink antialiased; }
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.font-mono { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
