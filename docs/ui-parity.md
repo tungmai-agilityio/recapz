@@ -72,9 +72,9 @@ once the list returns the owner.
 - [ ] Question line, answer with numbered markers, three citation cards (number, time, meeting title, two-line
       quote, ribbon with pin). Unticked: markers sit after the answer, not inline, because the server returns the
       answer and its citation list separately; cards have no ribbon or pin because citations carry no speaker or
-      offset data and `web/src/ui/Ribbon.tsx` does not exist yet. Rest done in #PR.
-- [x] Suggestion (#PR) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
-- [x] States (#PR): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
+      offset data and `web/src/ui/Ribbon.tsx` does not exist yet. Rest done in #136.
+- [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
+- [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
 - [ ] Drop zone with accepted types and size limit (only formats the backend accepts)
