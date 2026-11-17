@@ -521,6 +521,8 @@ struct MeetingDetail {
     ended_at: Option<i64>,
     created_at: i64,
     error: Option<String>,
+    /// Same order, cap and names as the list rows: the colour index every screen derives from.
+    speakers: Vec<ListSpeaker>,
 }
 
 /// The one meeting access rule: the owner, or anyone when shared with the workspace.
@@ -541,6 +543,7 @@ fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option
                 ended_at: r.get(6)?,
                 created_at: r.get(7)?,
                 error: r.get(8)?,
+                speakers: Vec::new(),
             })
         },
     )
@@ -557,7 +560,23 @@ async fn meeting_detail(
     let m = app
         .tenant(u.tenant_id.clone(), move |c| {
             ensure_member(c, &u)?;
-            visible_meeting(c, &uid, &id)
+            // Access is decided by visible_meeting; the speakers query only runs for a visible meeting.
+            let Some(mut m) = visible_meeting(c, &uid, &id)? else {
+                return Ok(None);
+            };
+            let mut sp = c.prepare(
+                "SELECT id, COALESCE(NULLIF(display_name, ''), label) FROM speakers
+                 WHERE meeting_id = ?1 ORDER BY rowid LIMIT ?2",
+            )?;
+            m.speakers = sp
+                .query_map(params![id, LIST_SPEAKER_CAP], |r| {
+                    Ok(ListSpeaker {
+                        id: r.get(0)?,
+                        name: r.get(1)?,
+                    })
+                })?
+                .collect::<Result<_, _>>()?;
+            Ok(Some(m))
         })
         .await?;
     Ok(Json(m.ok_or(ApiError::NotFound)?))
