@@ -8,7 +8,7 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 ## Rules for `gh` and branches
 
 - Several GitHub accounts may be logged in. Never change the shared active account (`gh auth switch`); pass the work account's token per command: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`, including in sub-agent briefs. (A `.envrc` above this folder may already export it; do not rely on that in new shells or sub-agents.)
-- The maintainer approves each merge before you run it, except a ticket PR for which `scripts/automerge-check.sh` prints `ELIGIBLE` (see `docs/specs/delivery-pipeline.md`): merge that one yourself with `gh pr merge <n> --squash --delete-branch` and post the audit comment (`ship-ticket` describes it).
+- The maintainer approves each merge before you run it, except a ticket PR for which `scripts/automerge-check.sh` prints `ELIGIBLE` (see `docs/specs/delivery-pipeline.md`): merge that one yourself with `gh pr merge <n> --squash --delete-branch --match-head-commit <the sha you checked>` and post the audit comment (`ship-ticket` describes it).
 - Docs-only PRs (Markdown and `CLAUDE.md` only, no code, config or scripts) skip `test-runner` and `code-reviewer`.
 - Branch names are `<type>/<short-kebab-name>` with the Conventional Commit type (`feat/google-sign-in`, `fix/upload-size-limit`, `chore/ci-cache`, `docs/spec-update`). Never a user prefix or a tool-suggested name: rename the branch before the first push.
 - Clean-room rules (CLAUDE.md) apply to branch names, titles, bodies and commits: no AI mentions or tool trailers, no other product names.

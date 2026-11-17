@@ -44,10 +44,10 @@ Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --us
 Grade the risk yourself, `low` or `high`: `high` if the change touches privacy, data deletion, data sent to
 language-model providers, meeting access, or you were unsure of anything. Then run:
 
-`scripts/automerge-check.sh <pr> --reviewed-sha <HEAD sha the reviewer approved> --implementer-risk <low|high> --reviewer-risk <low|high from the reviewer>`
+`scripts/automerge-check.sh <pr> --reviewed-sha <full 40-character HEAD sha the reviewer approved> --implementer-risk <low|high> --reviewer-risk <low|high from the reviewer>`
 
 - Prints `ELIGIBLE` (and `scripts/automerge-pause.sh status` says active): merge with
-  `gh pr merge <pr> --squash --delete-branch` (never `--auto`, `--admin` or a flag that skips checks), then post the
+  `gh pr merge <pr> --squash --delete-branch --match-head-commit <that sha>` (never `--auto`, `--admin` or a flag that skips checks), then post the
   audit comment, which must start with `Auto-merged:` and list the CI jobs, the reviewed commit, both risk grades
   and "Decisions: None". Clean up as the `pull-request` skill says, and remove the leftover `status:` label from the
   closed issue.
