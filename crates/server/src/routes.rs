@@ -613,6 +613,7 @@ async fn delete_meeting(
 struct SegmentRow {
     id: i64,
     speaker_id: Option<String>,
+    speaker_name: Option<String>,
     start_ms: i64,
     end_ms: i64,
     text: String,
@@ -632,16 +633,19 @@ async fn meeting_transcript(
                 return Ok(None);
             }
             let mut s = c.prepare(
-                "SELECT id, speaker_id, start_ms, end_ms, text FROM segments WHERE meeting_id = ?1 ORDER BY start_ms, id",
+                "SELECT g.id, g.speaker_id, COALESCE(p.display_name, p.label), g.start_ms, g.end_ms, g.text
+                 FROM segments g LEFT JOIN speakers p ON p.id = g.speaker_id
+                 WHERE g.meeting_id = ?1 ORDER BY g.start_ms, g.id",
             )?;
             let rows = s
                 .query_map([&id], |r| {
                     Ok(SegmentRow {
                         id: r.get(0)?,
                         speaker_id: r.get(1)?,
-                        start_ms: r.get(2)?,
-                        end_ms: r.get(3)?,
-                        text: r.get(4)?,
+                        speaker_name: r.get(2)?,
+                        start_ms: r.get(3)?,
+                        end_ms: r.get(4)?,
+                        text: r.get(5)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
