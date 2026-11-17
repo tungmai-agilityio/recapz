@@ -59,7 +59,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: lts/* }
       - run: corepack enable
-      - run: pnpm -C web install --frozen-lockfile
-      - run: pnpm -C web lint
-      - run: pnpm -C web test
-      - run: pnpm -C web build
+      # Run inside web/ so corepack reads the pinned packageManager from web/package.json.
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm lint
+        working-directory: web
+      - run: pnpm test
+        working-directory: web
+      - run: pnpm build
+        working-directory: web
