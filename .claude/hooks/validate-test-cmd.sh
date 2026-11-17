@@ -5,6 +5,8 @@ case "$cmd" in *'$('* | *'`'*) echo "test-runner: no command substitution" >&2; 
 while IFS= read -r part; do
   part="${part#"${part%%[![:space:]]*}"}"
   [ -z "$part" ] && continue
+  # `git -C <dir>` is allowed only for the same read-only subcommands as plain git below.
+  [[ "$part" =~ ^git\ -C\ [^\ ]+\ (rev-parse|status|diff)(\ |$) ]] && continue
   case "$part" in
     "make test"* | "make lint"* | "cargo test"* | "cargo clippy"* | "cargo fmt --check"* | \
     "pnpm -C web test"* | "pnpm -C web lint"* | "pnpm -C web exec tsc --noEmit"* | "pnpm -C web exec playwright"* | \
