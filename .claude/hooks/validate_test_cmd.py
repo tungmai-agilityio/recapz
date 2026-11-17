@@ -10,12 +10,24 @@ import re
 import shlex
 import sys
 
-PATH = re.compile(r"^[A-Za-z0-9_./-]+$")
-LOG = re.compile(r"^/tmp/recapz-tests/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.log$")
+PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
+LOG = re.compile(r"^/tmp/recapz-tests/[A-Za-z0-9_][A-Za-z0-9._-]*/[A-Za-z0-9_][A-Za-z0-9._-]*\.log$")
 CRATE = re.compile(r"^[A-Za-z0-9_-]+$")
 FILTER = re.compile(r"^[A-Za-z0-9_:]+$")
 NUM = re.compile(r"^-?[0-9]+$")
 GIT = [["status"], ["status", "--porcelain"], ["rev-parse", "--short", "HEAD"], ["diff", "--stat"], ["diff", "--name-only"]]
+
+
+class PATH:
+    """Plain path characters and no `.` or `..` component."""
+
+    @staticmethod
+    def match(t):
+        return bool(PATH_RE.match(t)) and not {".", ".."} & set(t.split("/"))
+
+
+def unquote(t):
+    return t[1:-1] if len(t) >= 2 and t[0] == t[-1] and t[0] in "'\"" else t
 
 
 def cargo_test(a):
@@ -63,12 +75,12 @@ def allowed(a):
     if a[:2] == ["wc", "-l"]:
         return len(a) == 3 and bool(PATH.match(a[2]))
     if a[:2] == ["mkdir", "-p"]:
-        return len(a) == 3 and a[2].startswith("/tmp/recapz-tests/") and bool(PATH.match(a[2]))
+        return len(a) == 3 and a[2].startswith("/tmp/recapz-tests/") and PATH.match(a[2])
     if a[0] == "grep":
         rest = a[1:]
         while rest and re.match(r"^-[A-Za-z]+$", rest[0]):
             rest = rest[1:]
-        return len(rest) >= 2 and not rest[0].startswith("-") and all(PATH.match(t) for t in rest[1:])
+        return len(rest) >= 2 and not unquote(rest[0]).startswith("-") and all(PATH.match(t) for t in rest[1:])
     if a[0] == "git":
         rest = a[1:]
         if rest[:1] == ["-C"]:
@@ -81,10 +93,15 @@ def allowed(a):
 
 def check(cmd):
     """Return None when the command is allowed, else the reason it is blocked."""
-    if "\n" in cmd or "$" in cmd or "`" in cmd:
-        return "no newlines, variables or command substitution"
+    if not isinstance(cmd, str) or not cmd.strip():
+        return "empty or non-text command"
+    if re.search(r"[\n\r\\$`]", cmd):
+        return "no newlines, backslashes, variables or command substitution"
+    # The only fd redirect allowed is a literal ` 2>&1` as its own word; any other `>&` stays and is blocked below.
+    cmd = re.sub(r"(?<=\s)2>&1(?=\s|;|$)", " ", cmd)
     try:
-        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        # posix=False keeps quotes on words, so a quoted '&&' is a plain word, not an operator, as in the shell.
+        lex = shlex.shlex(cmd, posix=False, punctuation_chars=True)
         lex.whitespace_split = True
         toks = list(lex)
     except ValueError as e:
@@ -100,11 +117,6 @@ def check(cmd):
             if i + 1 >= len(toks) or not LOG.match(toks[i + 1]):
                 return "redirect only to /tmp/recapz-tests/<dir>/<name>.log"
             i += 1
-        elif t == ">&":
-            if not cur or cur[-1] != "2" or toks[i + 1:i + 2] != ["1"]:
-                return "only 2>&1 is allowed"
-            cur.pop()
-            i += 1
         elif re.fullmatch(r"[&|<>()]+", t):
             return f"operator not allowed: {t}"
         else:
@@ -113,8 +125,15 @@ def check(cmd):
     return None
 
 
-if __name__ == "__main__":
-    reason = check(json.load(sys.stdin).get("tool_input", {}).get("command", ""))
+def main():
+    try:
+        reason = check(json.load(sys.stdin).get("tool_input", {}).get("command"))
+    except BaseException as e:  # fail closed: any other exit code lets the command run
+        reason = f"hook error ({type(e).__name__})"
     if reason:
         print(f"test-runner may only run tests, lint or read logs; {reason}", file=sys.stderr)
         sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

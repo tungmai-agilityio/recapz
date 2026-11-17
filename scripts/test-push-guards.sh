@@ -14,6 +14,16 @@ runner() { # expected-exit command
   got=$?
   [ "$got" = "$1" ] || { echo "validate-test-cmd: want $1, got $got: $2"; fail=1; }
 }
+failclosed() { # description; the hook must exit 2 (any other code lets the command run)
+  n=$((n + 1))
+  case "$1" in
+    garbage) echo garbage | .claude/hooks/validate-test-cmd.sh 2>/dev/null ;;
+    number) echo '{"tool_input":{"command":123}}' | .claude/hooks/validate-test-cmd.sh 2>/dev/null ;;
+    nopython) env -i PATH=/nonexistent /bin/bash .claude/hooks/validate-test-cmd.sh </dev/null 2>/dev/null ;;
+  esac
+  got=$?
+  [ "$got" = 2 ] || { echo "validate-test-cmd fail-closed ($1): want 2, got $got"; fail=1; }
+}
 prepush() { # expected-exit remote-ref
   n=$((n + 1))
   echo "refs/heads/x abc $2 def" | scripts/git-hooks/pre-push 2>/dev/null
@@ -101,9 +111,19 @@ runner 2 'cargo test < /etc/passwd'
 runner 2 'cargo test; rm -rf x'
 runner 2 'grep x /tmp/a.log | sh'
 runner 2 'ls ~'
+runner 2 'cargo test > /tmp/recapz-tests/../x.log'
+runner 2 'mkdir -p /tmp/recapz-tests/../../x'
+runner 2 "make test '&&' grep -f x y"
+runner 2 "cargo test '>' /tmp/recapz-tests/a/b.log"
+runner 2 'cargo test -p core 2 >&1'
+runner 2 'cargo test \&\& ls'
+runner 2 ''
+failclosed garbage
+failclosed number
+failclosed nopython
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 84 ] || { echo "ran $n cases, want 84"; fail=1; }
+[ "$n" = 94 ] || { echo "ran $n cases, want 94"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
