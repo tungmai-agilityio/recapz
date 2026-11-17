@@ -6,8 +6,10 @@ description: Turn an `idea` issue into an agreed spec file by grilling the maint
 # Grill an idea into a spec
 
 Input: an idea issue number. Output: `docs/specs/<feature>.md` in a docs-only PR that says `Refs #<idea>`.
-The maintainer merges the spec PR; that merge is the approval. Never merge it, and never create tickets here
-(`plan-tickets` does that after the merge).
+The maintainer's confirmation at the end of the grilling is the approval. Merge the spec PR yourself once CI is
+green on its HEAD, then stop; never create tickets here (`plan-tickets` does that after the merge). If the spec turns
+out to be critical under "Merging and escalation" in `CLAUDE.md` (for example it bends a hard rule), leave the PR
+for the maintainer.
 
 Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --user tungmai-agilityio) gh ...`.
 
@@ -34,8 +36,8 @@ Pass the work account's token on every `gh` call: `GH_TOKEN=$(gh auth token --us
      wording from other products.
 6. **Open the PR** with the `pull-request` skill: branch `docs/<feature>-spec`, title
    `docs(specs): add <feature> spec`, body ends with `Refs #<idea>` (not `Closes`). Docs-only: skip
-   `test-runner` and `code-reviewer`, write "docs only, no tests run" under Testing. Leave the idea at
-   `status:planning`.
+   `test-runner` and `code-reviewer`, write "docs only, no tests run" under Testing. Wait for CI, then merge it as the
+   `pull-request` skill says. Leave the idea at `status:planning`; `plan-tickets` closes it.
 
 ## Stop and escalate
 
