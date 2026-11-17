@@ -22,7 +22,8 @@ and who owns each step.
 - Each stage is a skill in the project's skill directory, started by the maintainer. No CI orchestrator.
 - A spec PR is always merged by the maintainer; merging it is the approval, and tickets are created only after.
 - Spec files use one template: problem, decisions, out of scope, acceptance, ticket list. `docs/spec.md` stays
-  the product spec and is amended by the PR that ships the feature. Older `docs/*-plan.md` files are not migrated.
+  the product spec and is amended by the PR that ships the feature. The older `docs/*-plan.md` files move into `docs/specs/`, and the decision records into
+  `docs/decisions/`, in a separate PR; they are not rewritten to the template.
 
 ## State: GitHub Issues
 
