@@ -1,0 +1,22 @@
+name: Idea
+description: A feature, fix or requirement to grill into a spec
+title: "idea: "
+labels: ["kind:idea", "status:backlog"]
+body:
+  - type: textarea
+    id: pitch
+    attributes:
+      label: Pitch
+      description: One paragraph. What should Recapz do, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: The problem it solves or the date it matters. Optional.
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Related issues, specs in docs/specs/, or decisions in docs/decisions/. Optional.

@@ -25,6 +25,15 @@
 - Clean-room rules apply to everything: no AI mentions, no `Co-Authored-By` trailers, no other product names.
   See `CLAUDE.md`.
 
+## Issues and tickets
+- Issues own task status; `docs/specs/` and `docs/decisions/` hold specs and decisions. The full flow, labels and
+  merge rules are in `docs/specs/delivery-pipeline.md`.
+- Start from an **Idea** issue. A merged spec turns into **Ticket** issues, each one PR.
+- Every ticket carries one `kind:`, `status:`, `type:` and `priority:` label (default `priority:p2`) and at least
+  one `area:` label. `type:` matches the branch prefix and commit type; the first `area:` is the commit scope.
+- `Closes #N` in a PR only when it delivers the whole ticket; otherwise `Refs #N`.
+- Labels come from `scripts/labels.sh` (safe to re-run); change them there, not by hand in GitHub.
+
 ## Pull requests
 - One concern per PR; keep it reviewable. Title uses the same `type(scope): summary` format.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.
