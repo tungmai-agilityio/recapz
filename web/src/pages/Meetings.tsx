@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -9,7 +9,7 @@ import { useToast } from '../ui/toast-context'
 import { NextUp } from './NextUp'
 import { groupByDay, meetingTime, statusBadge } from './meeting-days'
 import { Field, inputClass } from '../ui/Field'
-import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized, uploadFile } from '../api'
+import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized } from '../api'
 
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const thisMonth = (ms: number) => { const a = new Date(ms), b = new Date(); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() }
@@ -42,6 +42,23 @@ function SendNotetaker({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
+  const form = useRef<HTMLFormElement>(null)
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
+  // Escape from anywhere closes; Tab wraps inside the dialog.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return close.current()
+      if (e.key !== 'Tab' || !form.current) return
+      const f = [...form.current.querySelectorAll<HTMLElement>('input, button:not([disabled])')]
+      const [first, last] = [f[0], f[f.length - 1]]
+      if (!form.current.contains(document.activeElement)) { e.preventDefault(); first.focus() }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [])
   const send = useMutation({
     mutationFn: () => joinMeeting(url.trim(), title.trim()),
     onSuccess: () => {
@@ -51,7 +68,8 @@ function SendNotetaker({ onClose }: { onClose: () => void }) {
     },
   })
   return (
-    <form className="flex flex-col gap-3 rounded-lg border border-hair bg-sheet p-4" aria-label="Send notetaker"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+    <form ref={form} role="dialog" aria-modal="true" className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-hair bg-sheet p-5 shadow-xl" aria-label="Send notetaker"
       onSubmit={(e) => { e.preventDefault(); send.mutate() }}>
       <Field label="Meeting link" hint="A Google Meet or Zoom link."
         error={send.error ? send.error.message.replace(/^\d+ /, '') : undefined}>
@@ -66,6 +84,7 @@ function SendNotetaker({ onClose }: { onClose: () => void }) {
         <Button variant="primary" type="submit" disabled={send.isPending}>{send.isPending ? 'Sending…' : 'Send notetaker'}</Button>
       </div>
     </form>
+    </div>
   )
 }
 
@@ -75,10 +94,6 @@ export function Meetings() {
     queryKey: ['meetings'],
     queryFn: getMeetings,
     retry: (n, e) => !(e instanceof Unauthorized) && n < 2,
-  })
-  const upload = useMutation({
-    mutationFn: uploadFile,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
   })
   const toast = useToast()
   const [sending, setSending] = useState(false)
@@ -109,23 +124,15 @@ export function Meetings() {
       <PageHead title="Meetings"
         lede={data ? `${data.filter((m) => thisMonth(meetingTime(m))).length} meetings this month · all audio stays on your server` : undefined}
         actions={<>
-          <Button onClick={() => setSending(true)}>Send notetaker</Button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg hover:opacity-90">
-            {upload.isPending ? 'Uploading…' : 'Upload recording'}
-            <input
-              type="file"
-              accept="audio/*,video/*"
-              className="sr-only"
-              onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])}
-            />
-          </label>
+          <Link to="/upload" className="inline-flex items-center gap-2 rounded-md border border-hair bg-sheet px-3 py-1.5 text-sm font-medium hover:border-ink-2">Upload</Link>
+          <Button variant="primary" onClick={() => setSending(true)}>Send notetaker</Button>
         </>} />
       {sending && <SendNotetaker onClose={() => setSending(false)} />}
-      <NextUp />
-      {upload.isError && <p className="text-sm text-bad">Upload failed. Try again.</p>}
+      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
+      <div className="flex min-w-0 flex-col gap-7">
       {isLoading && <p className="text-mute">Loading…</p>}
-      {error && !(error instanceof Unauthorized) && <p className="text-bad">Could not load meetings.</p>}
-      {data?.length === 0 && <p className="text-mute">No meetings yet. Upload a recording to get started.</p>}
+      {error && !(error instanceof Unauthorized) && <p role="alert" className="text-bad">Could not load meetings.</p>}
+      {data?.length === 0 && <p className="text-mute">No meetings yet. <Link to="/upload" className="text-primary">Upload a recording</Link> or send the notetaker to a call.</p>}
       {data && groupByDay(data).map((g) => (
         <div key={g.label} className="flex flex-col">
           <h2 className="pb-2 text-xs font-semibold tracking-[0.08em] text-mute uppercase">{g.label}</h2>
@@ -148,6 +155,9 @@ export function Meetings() {
           </ul>
         </div>
       ))}
+      </div>
+      <NextUp />
+      </div>
       {deleting && (
         <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}
           error={del.error ? del.error.message.replace(/^\d+ /, '') : undefined}

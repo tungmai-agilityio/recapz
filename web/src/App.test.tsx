@@ -26,7 +26,7 @@ const signedIn = () => new Response(JSON.stringify({ email: 'ana@example.com', n
 
 test('signed-in shell shows the rail, the account and the Meetings page', async () => {
   mount('/', signedIn())
-  expect(await screen.findByText('No meetings yet. Upload a recording to get started.')).toBeTruthy()
+  expect(await screen.findByText(/No meetings yet/)).toBeTruthy()
   const rail = screen.getByRole('navigation', { name: 'Screens' })
   expect(rail.textContent).toContain('Work')
   expect(screen.getByRole('link', { name: 'Meetings' }).getAttribute('aria-current')).toBe('page')
