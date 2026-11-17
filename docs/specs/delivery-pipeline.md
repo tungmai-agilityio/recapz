@@ -14,8 +14,8 @@ and who owns each step.
 | Stage | Entry point | Output | Gate |
 |---|---|---|---|
 | Intake | `idea` issue template | Issue `kind:idea`, `status:backlog` | none |
-| Grill | `grill-spec` skill | `docs/specs/<feature>.md` in a docs-only PR with `Closes #<idea>`; idea is `status:planning` | **maintainer merges the spec PR** |
-| Plan | `plan-tickets` skill | One issue per ticket, `status:ready` | none |
+| Grill | `grill-spec` skill | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<idea>`; idea is `status:planning` | **maintainer merges the spec PR** |
+| Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the idea once every ticket exists | none |
 | Ship | `ship-ticket` skill | Implement, test, verify, review, open the PR | auto-merge or escalate (below) |
 | Deliver | `release` skill, on demand | `v0.x` tag, GitHub release, upgrade checklist | asks before tagging |
 
@@ -47,11 +47,12 @@ ticket missing a required label.
 |---|---|---|
 | Idea filed | template | `status:backlog` |
 | Grill starts | `grill-spec` | `status:planning` |
-| Spec PR merges | `Closes #<idea>` | idea closed |
-| Tickets created | `plan-tickets` | `status:ready` |
+| Spec PR merges | n/a | idea stays `status:planning` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
+| Tickets created | `plan-tickets` | tickets `status:ready`; idea closed after the last ticket exists |
 | Ticket claimed | `ship-ticket` | `status:in-progress` |
 | PR opened | `ship-ticket` | `status:review` |
-| PR merges | `Closes #N` | ticket closed |
+| PR merges | `Closes #N` | ticket closed (only when the PR delivers the whole ticket, see Tickets) |
+| Auto-merged PR reverted | pause rule | ticket reopened as `status:needs-human` with a comment |
 | Any stop or escalation | any skill | `status:needs-human` plus a comment saying why |
 | Escalation cleared | maintainer only | back to `status:ready` |
 
@@ -60,6 +61,10 @@ ticket missing a required label.
 - One ticket is one PR, within the 300/600 line guide. The planner splits anything it estimates over about 600.
 - Fixed body: Spec link, Goal, Acceptance (checkable list), `touches:` paths, `blocked by #N`, size
   (small/medium), Testing scope (crates or web, per the merge rule in `CLAUDE.md`).
+- A PR says `Closes #N` only when it delivers the whole ticket. A PR that delivers part says `Refs #N`, and the
+  missing part gets its own ticket before the merge.
+- Work found missing after a ticket closed gets a new `type:fix` ticket linking the original. Reopen a ticket
+  only when its PR was reverted.
 - Order: `priority:p0` first, then p1, p2, p3, then lowest issue number, skipping tickets with an open blocker.
 
 ## Ship
