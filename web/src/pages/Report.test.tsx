@@ -32,6 +32,7 @@ test('shows the meeting and its transcript lines with times', async () => {
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? null : meeting))))
   show()
   expect(await screen.findByText('Weekly sync')).toBeTruthy()
+  fireEvent.click(screen.getByRole('tab', { name: 'Transcript' }))
   expect(await screen.findByText('Xin chào')).toBeTruthy()
   expect(screen.getByText('Next topic')).toBeTruthy()
   expect(screen.getAllByRole('time').map((t) => t.textContent)).toEqual(['0:00', '1:05'])
@@ -68,6 +69,7 @@ test('clicking a transcript line seeks the audio and the playhead marks the curr
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? null : meeting))))
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
   const { container } = show()
+  fireEvent.click(await screen.findByRole('tab', { name: 'Transcript' }))
   fireEvent.click(await screen.findByText('Next topic'))
   const audio = container.querySelector('audio')!
   expect(audio.getAttribute('src')).toBe('/api/meetings/m1/audio')
@@ -93,11 +95,50 @@ test('shows the report sections and chapter and action-item times seek the audio
   expect(screen.getByText('Ship on Friday')).toBeTruthy()
   expect(screen.getByText('Who owns QA?')).toBeTruthy()
   expect(screen.getByText('due 2026-12-01')).toBeTruthy()
+  expect(screen.getByText('Action items · 0/1 done')).toBeTruthy()
   const audio = container.querySelector('audio')!
-  fireEvent.click(screen.getByText('Planning'))
-  expect(audio.currentTime).toBe(65)
   fireEvent.click(screen.getByText('2:05'))
   expect(audio.currentTime).toBe(125)
+  fireEvent.click(screen.getByText('Planning'))
+  expect(audio.currentTime).toBe(65)
+  expect(screen.getByRole('tab', { name: 'Transcript' }).getAttribute('aria-selected')).toBe('true')
+})
+
+test('transport: play button and Space toggle the audio, clicking the ribbon seeks', async () => {
+  const segs = [
+    { id: 1, speaker_id: 's1', start_ms: 0, end_ms: 60000, text: 'One' },
+    { id: 2, speaker_id: 's2', start_ms: 60000, end_ms: 100000, text: 'Two' },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? segs : u.endsWith('/report') ? null : meeting))))
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+  const { container } = show()
+  const slider = await screen.findByRole('slider', { name: 'Speaker ribbon' })
+  expect(screen.getByText('/ 1:40')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+  fireEvent.keyDown(document.body, { key: ' ' })
+  expect(play).toHaveBeenCalledTimes(2)
+  slider.getBoundingClientRect = () => ({ left: 0, width: 200 }) as DOMRect
+  fireEvent.click(slider, { clientX: 100 })
+  expect(container.querySelector('audio')!.currentTime).toBe(50)
+  expect(screen.getByTestId('playhead').style.left).toBe('50%')
+  play.mockRestore()
+})
+
+test('says there is no audio when the file cannot be loaded', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : meeting))))
+  const { container } = show()
+  await screen.findByText('Weekly sync')
+  fireEvent.error(container.querySelector('audio')!)
+  expect(await screen.findByText('No audio is available for this meeting yet.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Play' })).toBeNull()
+})
+
+test('shows a failed meeting with its error and no report', async () => {
+  const m = { ...meeting, status: 'failed', error: 'transcription failed' }
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m))))
+  show()
+  expect((await screen.findByRole('alert')).textContent).toBe('transcription failed')
+  expect(screen.getByText('No report, because processing failed.')).toBeTruthy()
 })
 
 test('tells the member the report is on its way while the meeting is being reported', async () => {

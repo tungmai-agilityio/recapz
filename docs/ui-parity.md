@@ -71,13 +71,22 @@ non-owners once the list returns the owner.
       design, and no screenshot is attached yet (not checked by eye))
 - [ ] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
       clicking the ribbon seeks; Space toggles
+      (built: play/pause, ribbon scrubber with chapter ticks and playhead, times, click and arrow-key seek, Space;
+      left unticked only because no screenshot at 1280 and 390 px was taken, so not checked by eye)
 - [ ] Tabs Summary and Transcript (`role=tablist`)
+      (built; same reason: no screenshot)
 - [ ] Summary: prose, Decisions, Open questions with timestamp link, Action items "n/m done" with checkbox, owner
       face, due date, strike-through when done
+      (built except owner face: the report API has no owner. Done state is shown read-only: no endpoint saves it)
 - [ ] Sidebar: Chapters (click seeks and opens the transcript), Talk time bars, Details (language, sharing,
       deletion date)
+      (Chapters and Details language done. Talk time waits on speaker names in the transcript API; sharing and deletion
+      date are not in the meeting API)
 - [ ] Transcript: speaker colour bar, time, speaker name, text, current line highlighted, click seeks
+      (colour bar, time, text, highlight, seek done. Speaker name is hidden: the API returns an opaque speaker id,
+      the name lives only in the `speakers` table)
 - [ ] Processing, failed with retry, no report yet, no audio yet, 404
+      (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
 
 ## S4 Ask
 - [ ] Question line, answer with numbered markers, three citation cards (number, time, meeting title, two-line
