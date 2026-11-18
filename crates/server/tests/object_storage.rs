@@ -18,23 +18,25 @@ use std::{
 use tower::ServiceExt;
 
 type Objects = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+/// Parts of in-flight multipart uploads, keyed by `key#part`.
+type Parts = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 
 /// Path-style S3: `/bucket/key`. Supports PUT, HEAD, GET with `Range`, DELETE. Signatures are not checked.
 fn mock_s3() -> (String, Objects) {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     let objects: Objects = Default::default();
-    let o = objects.clone();
+    let (o, parts): (Objects, Parts) = (objects.clone(), Default::default());
     thread::spawn(move || {
         for s in l.incoming().flatten() {
-            let o = o.clone();
-            thread::spawn(move || serve(s, o));
+            let (o, p) = (o.clone(), parts.clone());
+            thread::spawn(move || serve(s, o, p));
         }
     });
     (url, objects)
 }
 
-fn serve(mut s: TcpStream, objects: Objects) {
+fn serve(mut s: TcpStream, objects: Objects, parts: Parts) {
     let mut raw = Vec::new();
     let mut buf = [0u8; 65536];
     let (head, mut body) = loop {
@@ -53,6 +55,12 @@ fn serve(mut s: TcpStream, objects: Objects) {
     let mut lines = head.lines();
     let mut first = lines.next().unwrap().split(' ');
     let (method, path) = (first.next().unwrap(), first.next().unwrap());
+    let query = path.split_once('?').map(|x| x.1).unwrap_or("").to_string();
+    let q = |name: &str| {
+        query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix(&format!("{name}=")).map(str::to_string))
+    };
     let key = path.split('?').next().unwrap().trim_start_matches('/');
     let key = key.split_once('/').map(|x| x.1).unwrap_or("").to_string(); // drop the bucket
     let header = |name: &str| {
@@ -78,6 +86,31 @@ fn serve(mut s: TcpStream, objects: Objects) {
     };
     let mut o = objects.lock().unwrap();
     match method {
+        "POST" if query.starts_with("uploads") => {
+            let xml = format!("<InitiateMultipartUploadResult><Bucket>recordings</Bucket><Key>{key}</Key><UploadId>u1</UploadId></InitiateMultipartUploadResult>");
+            reply(&mut s, "200 OK", "", xml.len(), xml.as_bytes());
+        }
+        "POST" => {
+            // complete: stitch the parts in order
+            let mut all = Vec::new();
+            let mut parts = parts.lock().unwrap();
+            for n in 1.. {
+                match parts.remove(&format!("{key}#{n}")) {
+                    Some(p) => all.extend(p),
+                    None => break,
+                }
+            }
+            o.insert(key, all);
+            let xml = "<CompleteMultipartUploadResult><Location>l</Location><Bucket>b</Bucket><Key>k</Key><ETag>\"x\"</ETag></CompleteMultipartUploadResult>";
+            reply(&mut s, "200 OK", "", xml.len(), xml.as_bytes());
+        }
+        "PUT" if q("partNumber").is_some() => {
+            parts
+                .lock()
+                .unwrap()
+                .insert(format!("{key}#{}", q("partNumber").unwrap()), body);
+            reply(&mut s, "200 OK", "ETag: \"p\"\r\n", 0, b"");
+        }
         "PUT" => {
             o.insert(key, body);
             reply(&mut s, "200 OK", "ETag: \"x\"\r\n", 0, b"");
@@ -245,4 +278,32 @@ async fn a_recording_is_archived_played_in_ranges_behind_access_and_deleted_from
         objects.lock().unwrap().is_empty(),
         "the object is hard-deleted with the meeting"
     );
+}
+
+#[tokio::test]
+async fn a_recording_over_one_chunk_goes_up_as_a_multipart_upload_and_comes_back_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let (url, objects) = mock_s3();
+    let cfg = cfg(dir.path(), &url);
+    let store = S3Store::from_config(&cfg.storage, tokio::runtime::Handle::current())
+        .unwrap()
+        .unwrap();
+    // 20 MiB: more than the client's 8 MiB chunk, so it cannot be a single PUT
+    let big: Vec<u8> = (0..20 * 1024 * 1024u32).map(|i| (i % 251) as u8).collect();
+    let file = dir.path().join("big.wav");
+    std::fs::write(&file, &big).unwrap();
+    let f2 = file.clone();
+    tokio::task::spawn_blocking(move || {
+        use recapz_core::blobs::Blobs;
+        store.put_file("t/audio/big/recording.wav", &f2).unwrap();
+        store.delete("t/audio/never-existed.wav").unwrap(); // deleting a missing object is fine
+    })
+    .await
+    .unwrap();
+    let o = objects.lock().unwrap();
+    let got = o
+        .get("t/audio/big/recording.wav")
+        .unwrap_or_else(|| panic!("object stored; have {:?}", o.keys().collect::<Vec<_>>()));
+    assert_eq!(got.len(), big.len());
+    assert!(got == &big, "parts were stitched in order");
 }
