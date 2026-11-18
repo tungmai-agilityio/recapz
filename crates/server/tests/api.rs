@@ -1020,7 +1020,7 @@ async fn usage_is_admin_only_and_reports_cost_cap_and_pause() {
     assert_eq!(s, StatusCode::FORBIDDEN);
 
     let t = db::open_tenant(dir.path(), &tid).unwrap();
-    t.execute("INSERT INTO meetings (id, title, platform, status) VALUES ('m1','Standup','upload','ready')", []).unwrap();
+    t.execute("INSERT INTO meetings (id, title, platform, status, share) VALUES ('m1','Standup','upload','ready','workspace')", []).unwrap();
     let now = db::now_ms();
     t.execute(
         "INSERT INTO speech_usage (meeting_id, kind, audio_seconds, cost_micro_usd, at) VALUES ('m1','batch',60,70,?1)",

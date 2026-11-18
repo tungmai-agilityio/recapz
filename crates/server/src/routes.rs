@@ -520,15 +520,17 @@ struct UsageOut {
     meetings: Vec<UsageMeeting>,
 }
 
-/// Admin only: this month's estimated cost, the cap and the costliest meetings.
+/// Admin only: this month's estimated cost and the cap (workspace totals), and the costliest meetings
+/// the admin may see (own or shared with the workspace), like every other meeting read.
 async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>> {
     let u = app.current_user(&jar).await?;
     if u.role != "admin" {
         return Err(ApiError::Denied("only an admin can see usage"));
     }
     let cap = app.cfg.monthly_cap_micro_usd();
+    let (uid, tenant) = (u.id.clone(), u.tenant_id.clone());
     let out = app
-        .tenant(u.tenant_id.clone(), move |c| {
+        .tenant(tenant, move |c| {
             let now = db::now_ms();
             let t = recapz_core::usage::month_totals(c, now)?;
             Ok(UsageOut {
@@ -537,7 +539,7 @@ async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>
                 total_micro_usd: t.total(),
                 cap_micro_usd: cap,
                 paused: cap > 0 && t.total() >= cap as i64,
-                meetings: recapz_core::usage::per_meeting(c, now, 20)?
+                meetings: recapz_core::usage::per_meeting(c, now, 20, &uid)?
                     .into_iter()
                     .map(|m| UsageMeeting {
                         id: m.meeting_id,

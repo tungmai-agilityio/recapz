@@ -79,20 +79,27 @@ pub struct MeetingCost {
     pub llm_micro_usd: i64,
 }
 
-/// This month's costliest meetings first. Rows without a meeting (Ask) are not listed here.
-pub fn per_meeting(c: &Connection, now_ms: i64, limit: usize) -> Result<Vec<MeetingCost>> {
+/// This month's costliest meetings first, only those `member_id` may see (owner, or shared with the
+/// workspace). Rows without a meeting (Ask) are not listed here.
+pub fn per_meeting(
+    c: &Connection,
+    now_ms: i64,
+    limit: usize,
+    member_id: &str,
+) -> Result<Vec<MeetingCost>> {
     let sql = format!(
         "SELECT m.id, m.title,
                 COALESCE((SELECT SUM(cost_micro_usd) FROM speech_usage s WHERE s.meeting_id = m.id AND {}), 0),
                 COALESCE((SELECT SUM(cost_micro_usd) FROM llm_usage l WHERE l.meeting_id = m.id AND {}), 0)
          FROM meetings m
+         WHERE m.owner_id = ?3 OR m.share = 'workspace'
          ORDER BY 3 + 4 DESC, m.id LIMIT ?2",
         in_month("s.at"),
         in_month("l.at")
     );
     let mut st = c.prepare(&sql)?;
     let rows = st
-        .query_map(params![now_ms, limit as i64], |r| {
+        .query_map(params![now_ms, limit as i64, member_id], |r| {
             Ok(MeetingCost {
                 meeting_id: r.get(0)?,
                 title: r.get(1)?,
@@ -117,10 +124,17 @@ mod tests {
     const OCT: i64 = 1_793_487_600_000;
 
     fn seed(c: &Connection) {
+        for m in ["u1", "other"] {
+            c.execute(
+                "INSERT INTO members (id, email, role) VALUES (?1, ?1, 'member')",
+                [m],
+            )
+            .unwrap();
+        }
         for (id, end) in [("a", 3_600_000), ("b", 600_000)] {
             c.execute(
-                "INSERT INTO meetings (id, title, platform, status) VALUES (?1, ?1, 'upload', 'ready')",
-                [id],
+                "INSERT INTO meetings (id, title, platform, status, owner_id, share) VALUES (?1, ?1, 'upload', 'ready', ?2, 'attendees')",
+                params![id, if id == "b" { "other" } else { "u1" }],
             )
             .unwrap();
             c.execute(
@@ -203,13 +217,18 @@ mod tests {
             [],
         )
         .unwrap();
-        let rows = per_meeting(&c, NOV, 10).unwrap();
-        assert_eq!(
+        let rows = per_meeting(&c, NOV, 10, "u1").unwrap();
+        fn list(rows: &[MeetingCost]) -> Vec<(&str, i64, i64)> {
             rows.iter()
                 .map(|m| (m.meeting_id.as_str(), m.speech_micro_usd, m.llm_micro_usd))
-                .collect::<Vec<_>>(),
-            vec![("a", 468_000, 0), ("b", 78_000, 1_000)]
-        );
-        assert_eq!(per_meeting(&c, NOV, 1).unwrap().len(), 1);
+                .collect()
+        }
+        // "b" belongs to someone else and is not shared: its title and cost are not listed to u1
+        assert_eq!(list(&rows), vec![("a", 468_000, 0)]);
+        c.execute("UPDATE meetings SET share='workspace' WHERE id='b'", [])
+            .unwrap();
+        let rows = per_meeting(&c, NOV, 10, "u1").unwrap();
+        assert_eq!(list(&rows), vec![("a", 468_000, 0), ("b", 78_000, 1_000)]);
+        assert_eq!(per_meeting(&c, NOV, 1, "u1").unwrap().len(), 1);
     }
 }
