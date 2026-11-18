@@ -43,7 +43,7 @@ export interface ReportData {
 
 export class Unauthorized extends Error {}
 
-export interface Me { email: string; name: string | null; role: string }
+export interface Me { email: string; name: string | null; role: string; speech_provider?: string }
 
 /** Echoes the csrf cookie in a header on state-changing requests. */
 const csrf = () => ({ 'x-csrf-token': /(?:^|; )recapz_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' })
