@@ -131,3 +131,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `GET /api/meetings/upcoming` returns `attendees: [{name, email, status}]` per event, only for the signed-in member's own rows, like `join_url`. Emails of other people are therefore shown to someone who already saw them on their own invite.
 - Web: Next up shows up to four faces (name, or email when Google sent no name) with a "+N" count; nothing is drawn for an event with no invitees. The reply status is returned but not shown yet.
 - Tested with the mocked Google endpoints and seeded databases only. Real sync still returns 403 for the maintainer until the Calendar API is enabled on the Google project, so this has not been run against Google or checked by eye in either skin.
+
+## Speaker labels from segments
+- `Segment.speaker` is the provider's tag (any string); the transcribe job numbers distinct tags `Speaker 1`, `Speaker 2`, ... by first appearance. A retry deletes the meeting's speaker rows and rebuilds them, like segments, so nothing duplicates. A rename a member made before a retry is lost, as the segments it pointed at are replaced too.
+- The `label` job (call recordings) still runs after and replaces speakers by its own names.
+- The `whisper` feature path only gained `speaker: None`; it was not compiled here (feature off).
