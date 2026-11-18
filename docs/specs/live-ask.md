@@ -38,8 +38,8 @@ answer they can say back to the client. Answers are private to the member who as
 - Call audio reaches the server while the call is live: 100 ms frames of 16 kHz mono i16 from
   `crates/notetaker/src/meet/capture.js` through `DriverEvent::Audio`. Only the WAV writer in
   `crates/server/src/notetaker.rs` reads them.
-- Transcription runs once over the finished file (`crates/core/src/transcribe_job.rs`); the hosted provider replaces
-  local whisper (`docs/decisions/hosted-speech.md`).
+- Transcription runs once over the finished file (`crates/core/src/transcribe_job.rs`); the hosted provider does it
+  (`docs/decisions/hosted-speech.md`).
 - Ask: `POST /api/ask` streams `token`, `citations`, `done`. `crates/core/src/search.rs` merges FTS5 and
   vector results with reciprocal rank fusion, filtered by `m.owner_id = ? OR m.share = 'workspace'`.
 - The only embedder is `HashEmbedder` (`hash-256`), lexical and not cross-language.
@@ -88,7 +88,7 @@ New dependencies, each with its reason in its PR: none planned. PDF text extract
 
 - Meet live check (`docs/specs/meet-notetaker.md` row 16) must pass before any ticket starts. The maintainer runs it
   and reports the result.
-- None open. The old CUDA build ticket (#186) and the whisper speed measurement (#187) are closed: no local GPU is used.
+- None open. The old GPU build ticket (#186) and the local speed measurement (#187) are closed: no local GPU is used.
 
 ## Out of scope
 
