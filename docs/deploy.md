@@ -14,6 +14,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
 ```
 
+- **Cloud:** Hetzner Cloud, Singapore region (decided 2026-11-18): cheapest for this size and closest to a Vietnam team. It is a plain Linux VM, so everything below applies unchanged. Backups are not included by default; copy `/var/backups/recapz` off the host. A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
 - **Target host (hosted speech, `docs/decisions/hosted-speech.md`):** 2 vCPU, 4 GB RAM, 40 GB disk, `max_concurrent_calls = 2`, no GPU. Chromium (about 1 GB per call) drives memory; WAV audio (about 115 MB per hour) drives disk. On 2 GB RAM use `max_concurrent_calls = 1`. The speech and LLM keys go in `/etc/recapz/recapz.env` with `RECAPZ_SECRET_KEY`, never in `config.toml`.
 - Until local whisper is removed from the build, `make release` builds with CUDA (`whisper,cuda`): the build host needs the NVIDIA CUDA toolkit (`nvcc`) and `cmake`, and the host that runs the binary needs an NVIDIA driver. A Mac or a host without CUDA can only build the default features with `cargo build`.
 - `bind` stays `127.0.0.1:8080`; put a TLS reverse proxy in front. Set `base_url` to the public https URL.
