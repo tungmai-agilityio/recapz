@@ -57,6 +57,10 @@ pub struct Speech {
     pub base_url: String,
     #[serde(skip)]
     pub api_key: String,
+    /// Estimated cost of one audio minute in micro-USD, for the usage estimate and the monthly cap.
+    /// Default: Nova-3 multilingual batch about $0.0058 plus diarization about $0.0020, from the
+    /// provider's pricing page (promo prices change; unverified).
+    pub price_per_minute_micro_usd: u64,
 }
 
 impl Speech {
@@ -69,6 +73,7 @@ impl Default for Speech {
         Self {
             base_url: recapz_speech::deepgram::DEEPGRAM_BASE.into(),
             api_key: String::new(),
+            price_per_minute_micro_usd: 7_800,
         }
     }
 }
@@ -111,6 +116,9 @@ pub struct Config {
     pub notetaker: Notetaker,
     pub speech: Speech,
     pub storage: Storage,
+    /// Estimated spend per month (speech plus language model), in USD, after which new paid jobs
+    /// pause until next month. 0 means no cap.
+    pub monthly_cap_usd: f64,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
     /// Text embedder for Ask search: `hash` (built in) or `hosted` (see `[llm] embedding_model`). Changing it re-indexes meetings at start.
@@ -138,6 +146,7 @@ impl Default for Config {
             notetaker: Notetaker::default(),
             speech: Speech::default(),
             storage: Storage::default(),
+            monthly_cap_usd: 0.0,
             ask_per_minute: 20,
             embedder: "hash".into(),
             max_concurrent_calls: 2,
@@ -148,6 +157,10 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn monthly_cap_micro_usd(&self) -> u64 {
+        (self.monthly_cap_usd.max(0.0) * 1e6).round() as u64
+    }
+
     /// Startup check: transcription cannot run without the speech key.
     pub fn require_speech_key(&self) -> anyhow::Result<()> {
         if self.speech.api_key.trim().is_empty() {

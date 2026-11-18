@@ -992,3 +992,61 @@ async fn audio_retention_defaults_to_90_days_and_only_an_admin_changes_it() {
     let (_, _, me) = send(&app, get("/api/me", &boss)).await;
     assert!(me.contains(r#""recording_storage":"local_disk""#), "{me}");
 }
+
+#[tokio::test]
+async fn usage_is_admin_only_and_reports_cost_cap_and_pause() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        monthly_cap_usd: 0.0001, // 100 micro-USD
+        ..Config::default()
+    };
+    cfg.speech.price_per_minute_micro_usd = 7_800;
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let app = routes::router(cfg, Arc::new(Mutex::new(control)));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let (boss, amy) = (boss.unwrap(), amy.unwrap());
+    let (s, ..) = send(&app, get("/api/usage", &amy)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    t.execute("INSERT INTO meetings (id, title, platform, status) VALUES ('m1','Standup','upload','ready')", []).unwrap();
+    let now = db::now_ms();
+    t.execute(
+        "INSERT INTO speech_usage (meeting_id, kind, audio_seconds, cost_micro_usd, at) VALUES ('m1','batch',60,70,?1)",
+        [now],
+    )
+    .unwrap();
+    let (s, _, body) = send(&app, get("/api/usage", &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["total_micro_usd"], 70);
+    assert_eq!(
+        (v["cap_micro_usd"].as_u64(), v["paused"].as_bool()),
+        (Some(100), Some(false))
+    );
+    assert_eq!(v["meetings"][0]["title"], "Standup");
+    assert_eq!(v["meetings"][0]["speech_micro_usd"], 70);
+    t.execute(
+        "INSERT INTO llm_usage (meeting_id, task, provider, model, cost_micro_usd, at) VALUES ('m1','summary','p','m',30,?1)",
+        [now],
+    )
+    .unwrap();
+    let (_, _, body) = send(&app, get("/api/usage", &boss)).await;
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (v["total_micro_usd"].as_i64(), v["paused"].as_bool()),
+        (Some(100), Some(true)),
+        "{body}"
+    );
+}

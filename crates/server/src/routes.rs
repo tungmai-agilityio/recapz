@@ -93,6 +93,7 @@ pub fn router_with_llm(
             "/api/settings/audio-retention",
             get(get_audio_retention).put(put_audio_retention),
         )
+        .route("/api/usage", get(get_usage))
         .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
@@ -496,6 +497,59 @@ async fn put_audio_retention(
     })
     .await??;
     Ok(Json(AudioRetention { days: body.days }))
+}
+
+#[derive(Serialize)]
+struct UsageMeeting {
+    id: String,
+    title: String,
+    speech_micro_usd: i64,
+    llm_micro_usd: i64,
+}
+
+#[derive(Serialize)]
+struct UsageOut {
+    /// Estimates for the current UTC month, in micro-USD (1_000_000 = $1).
+    speech_micro_usd: i64,
+    llm_micro_usd: i64,
+    total_micro_usd: i64,
+    /// 0 means no cap.
+    cap_micro_usd: u64,
+    /// True when the cap is reached: new paid jobs wait until next month or a higher cap.
+    paused: bool,
+    meetings: Vec<UsageMeeting>,
+}
+
+/// Admin only: this month's estimated cost, the cap and the costliest meetings.
+async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can see usage"));
+    }
+    let cap = app.cfg.monthly_cap_micro_usd();
+    let out = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            let now = db::now_ms();
+            let t = recapz_core::usage::month_totals(c, now)?;
+            Ok(UsageOut {
+                speech_micro_usd: t.speech_micro_usd,
+                llm_micro_usd: t.llm_micro_usd,
+                total_micro_usd: t.total(),
+                cap_micro_usd: cap,
+                paused: cap > 0 && t.total() >= cap as i64,
+                meetings: recapz_core::usage::per_meeting(c, now, 20)?
+                    .into_iter()
+                    .map(|m| UsageMeeting {
+                        id: m.meeting_id,
+                        title: m.title,
+                        speech_micro_usd: m.speech_micro_usd,
+                        llm_micro_usd: m.llm_micro_usd,
+                    })
+                    .collect(),
+            })
+        })
+        .await?;
+    Ok(Json(out))
 }
 
 /// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).
