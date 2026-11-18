@@ -45,7 +45,9 @@ impl S3Store {
     pub async fn size(&self, key: &str) -> Result<Option<u64>> {
         match self.bucket.head_object(key).await {
             Ok((h, 200)) => Ok(h.content_length.map(|n| n as u64)),
-            Ok(_) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
+            Ok((_, 404)) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
+            // 403, 5xx and the rest are the store failing, not the recording missing
+            Ok((_, status)) => Err(anyhow!("object store: HTTP {status}")),
             Err(e) => Err(anyhow!("object store: {}", kind(&e))),
         }
     }

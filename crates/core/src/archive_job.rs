@@ -38,7 +38,11 @@ pub fn handle(
     blobs
         .put_file(&audio_key(tenant_id, &rel), &file)
         .with_context(|| format!("upload recording of {mid}"))?;
-    c.execute("UPDATE meetings SET audio_remote=1 WHERE id=?1", [mid])?;
+    if c.execute("UPDATE meetings SET audio_remote=1 WHERE id=?1", [mid])? == 0 {
+        // The meeting was deleted while the upload ran, so the purge saw no remote copy and skipped
+        // the object. Remove it here rather than leave audio nobody can reach or delete.
+        return blobs.delete(&audio_key(tenant_id, &rel));
+    }
     match fs::remove_file(&file) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e.into()),
         _ => Ok(()),
@@ -115,6 +119,34 @@ pub(crate) mod tests {
         // a rerun is a no-op, not an error and not a second object
         handle(&c, &job, dir.path(), "t1", &b).unwrap();
         assert_eq!(b.objects.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_meeting_deleted_during_the_upload_leaves_no_object_behind() {
+        struct DeleteWhileUploading<'a>(&'a Path, &'a Fake);
+        impl Blobs for DeleteWhileUploading<'_> {
+            fn put_file(&self, key: &str, file: &Path) -> Result<()> {
+                self.1.put_file(key, file)?;
+                // the purge runs now: it sees audio_remote = 0, so it deletes no object
+                let other = crate::db::open_tenant(self.0, "t1")?;
+                other.execute("DELETE FROM meetings WHERE id='m1'", [])?;
+                Ok(())
+            }
+            fn delete(&self, key: &str) -> Result<()> {
+                self.1.delete(key)
+            }
+        }
+        let (dir, c, job) = setup();
+        let fake = Fake::default();
+        handle(
+            &c,
+            &job,
+            dir.path(),
+            "t1",
+            &DeleteWhileUploading(dir.path(), &fake),
+        )
+        .unwrap();
+        assert!(fake.objects.lock().unwrap().is_empty(), "object removed");
     }
 
     #[test]
