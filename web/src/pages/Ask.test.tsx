@@ -8,7 +8,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const sse =
   'event: token\ndata: {"text":"Ships "}\n\nevent: token\ndata: {"text":"Friday."}\n\n' +
-  'event: citations\ndata: [{"meeting_id":"m1","title":"Weekly sync","start_ms":65000,"quote":"pricing page ships Friday"}]\n\n' +
+  'event: citations\ndata: [{"meeting_id":"m1","document_id":null,"title":"Weekly sync","start_ms":65000,"quote":"pricing page ships Friday","answered":true}]\n\n' +
   'event: done\ndata: {}\n\n'
 
 test('shows the streamed answer and a citation card that opens the moment', async () => {
@@ -61,12 +61,20 @@ test('a failed request puts the typed question back', async () => {
 })
 
 test('only three markers are shown for four citations', async () => {
-  const c = [1, 2, 3, 4].map((n) => ({ meeting_id: `m${n}`, title: `T${n}`, start_ms: n * 1000, quote: `q${n}` }))
+  const c = [1, 2, 3, 4].map((n) => ({ meeting_id: `m${n}`, document_id: null, answered: true, title: `T${n}`, start_ms: n * 1000, quote: `q${n}` }))
   await askWith(() => new Response(`event: token\ndata: {"text":"A"}\n\nevent: citations\ndata: ${JSON.stringify(c)}\n\nevent: done\ndata: {}\n\n`))
   await screen.findByText('q3')
   expect(screen.queryByText('q4')).toBeNull()
   expect(screen.queryByRole('link', { name: '4' })).toBeNull()
   expect(screen.getByRole('link', { name: '3' })).toBeTruthy()
+})
+
+test('a document citation names the document and is not a meeting link', async () => {
+  const c = [{ meeting_id: null, document_id: 'd1', answered: false, title: 'notes.md', start_ms: null, quote: 'walrus clause' }]
+  await askWith(() => new Response(`event: token\ndata: {"text":"A"}\n\nevent: citations\ndata: ${JSON.stringify(c)}\n\nevent: done\ndata: {}\n\n`))
+  expect(await screen.findByText('notes.md')).toBeTruthy()
+  expect(screen.getByText('Document, not sent to the model')).toBeTruthy()
+  expect(screen.queryByRole('link', { name: /notes\.md/ })).toBeNull()
 })
 
 test('no citations says so', async () => {

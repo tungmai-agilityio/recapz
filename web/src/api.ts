@@ -105,10 +105,16 @@ export async function devLogin(email: string) {
 export const logout = async () => { await check(await fetch('/auth/logout', { method: 'POST', headers: csrf() })) }
 
 export interface Citation {
-  meeting_id: string
+  /** Exactly one of `meeting_id` and `document_id` is set. */
+  meeting_id: string | null
+  document_id: string | null
+  /** The meeting title or the document name. */
   title: string
-  start_ms: number
+  /** Moment in the meeting; null for a document. */
+  start_ms: number | null
   quote: string
+  /** False for a passage from a document not allowed to go to the language model: no answer used it. */
+  answered: boolean
 }
 
 /** Pulls `event:`/`data:` pairs out of a server-sent-event text, leaving any unfinished tail. */

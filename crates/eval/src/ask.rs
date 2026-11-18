@@ -98,7 +98,9 @@ fn run_in(dir: &std::path::Path, set: &Value) -> Result<AskReport> {
         let (question, meeting, at) = (text(q, "q")?, text(q, "meeting")?, num(q, "at_ms")?);
         let hits = search(&c, "eval", question, &HashEmbedder, TOP_K)?;
         let ok = hits.iter().any(|h| {
-            h.meeting_id == meeting && h.start_ms - SLACK_MS <= at && at <= h.end_ms + SLACK_MS
+            h.meeting_id.as_deref() == Some(meeting)
+                && h.start_ms - SLACK_MS <= at
+                && at <= h.end_ms + SLACK_MS
         });
         r.total += 1;
         if ok {
