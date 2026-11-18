@@ -13,3 +13,5 @@ whisper-rs = { version = "0.14", optional = true }
 [features]
 # Real recognizer; needs cmake and builds whisper.cpp. Off by default so tests stay fast.
 whisper = ["dep:whisper-rs"]
+# whisper.cpp with CUDA; needs the CUDA toolkit. Release builds only.
+cuda = ["whisper", "whisper-rs/cuda"]
