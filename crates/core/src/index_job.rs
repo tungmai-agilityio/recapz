@@ -22,13 +22,21 @@ pub fn handle(c: &Connection, job: &Job, embedder: &dyn Embedder) -> Result<()> 
         .query_map([mid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<_, _>>()?;
 
+    // Embed everything first: a failure leaves the old chunks untouched and holds no write lock
+    // while a slow embedder runs.
+    let chunks = chunk(&segments);
+    let blobs = chunks
+        .iter()
+        .map(|k| embedder.embed(&k.text).map(|v| to_blob(&v)))
+        .collect::<Result<Vec<_>>>()?;
+
     c.execute_batch("BEGIN")?;
     let stored = (|| -> Result<()> {
         c.execute("DELETE FROM chunks WHERE meeting_id=?1", [mid])?;
-        for k in chunk(&segments) {
+        for (k, blob) in chunks.iter().zip(&blobs) {
             c.execute(
                 "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding, embedder) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![mid, k.start_ms, k.end_ms, k.text, to_blob(&embedder.embed(&k.text)), embedder.id()],
+                params![mid, k.start_ms, k.end_ms, k.text, blob, embedder.id()],
             )?;
         }
         Ok(())
@@ -106,6 +114,42 @@ mod tests {
             .query_row("SELECT embedding FROM chunks LIMIT 1", [], |r| r.get(0))
             .unwrap();
         assert_eq!(blob.len(), crate::embed::HASH_DIM * 4);
+    }
+
+    struct Failing;
+    impl Embedder for Failing {
+        fn id(&self) -> &'static str {
+            "fail-1"
+        }
+        fn embed(&self, text: &str) -> Result<Vec<f32>> {
+            if text.contains("boom") {
+                Err(anyhow!("embedder down"))
+            } else {
+                HashEmbedder.embed(text)
+            }
+        }
+    }
+
+    #[test]
+    fn failing_embedder_stores_nothing_and_keeps_old_chunks() {
+        // Fresh meeting: the error surfaces and no chunk or vector is stored.
+        let (_d, c, job) = setup(&["alpha beta", "boom gamma"]);
+        let err = handle(&c, &job, &Failing).unwrap_err();
+        assert_eq!(err.to_string(), "embedder down");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM chunks"), 0);
+        // Existing index: a failed re-index leaves the old chunks as they were.
+        let (_d, c, job) = setup(&["alpha beta"]);
+        handle(&c, &job, &HashEmbedder).unwrap();
+        c.execute("UPDATE segments SET text = 'boom'", []).unwrap();
+        assert!(handle(&c, &job, &Failing).is_err());
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM chunks"), 1);
+        assert_eq!(
+            count(
+                &c,
+                "SELECT COUNT(*) FROM chunks WHERE text = 'alpha beta' AND embedder = 'hash-256'"
+            ),
+            1
+        );
     }
 
     #[test]
