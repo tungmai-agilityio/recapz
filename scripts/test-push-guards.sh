@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks .claude/hooks/guard-push.sh, .claude/hooks/validate-test-cmd.sh and scripts/git-hooks/pre-push against known commands and refs.
+# Checks .claude/hooks/guard-push.sh, .claude/hooks/validate-test-cmd.sh and scripts/git-hooks/pre-push and pre-commit against known commands and refs.
 cd "$(dirname "$0")/.." || exit 1
 fail=0 n=0
 guard() { # expected-exit command
@@ -29,6 +29,12 @@ prepush() { # expected-exit remote-ref
   echo "refs/heads/x abc $2 def" | scripts/git-hooks/pre-push 2>/dev/null
   got=$?
   [ "$got" = "$1" ] || { echo "pre-push: want $1, got $got: $2"; fail=1; }
+}
+precommit() { # expected-exit author-email committer-email
+  n=$((n + 1))
+  GIT_AUTHOR_NAME=t GIT_COMMITTER_NAME=t GIT_AUTHOR_EMAIL=$2 GIT_COMMITTER_EMAIL=$3 scripts/git-hooks/pre-commit 2>/dev/null
+  got=$?
+  [ "$got" = "$1" ] || { echo "pre-commit: want $1, got $got: $2 / $3"; fail=1; }
 }
 guard 0 'git push -u origin chore/guard-force-push'
 guard 0 'git push --force-with-lease origin feat/x'
@@ -124,6 +130,10 @@ failclosed nopython
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-[ "$n" = 94 ] || { echo "ran $n cases, want 94"; fail=1; }
+precommit 0 a@asnet.com.vn b@asnet.com.vn
+precommit 0 1+tungmai-agilityio@users.noreply.github.com a@asnet.com.vn
+precommit 1 a@asnet.com.vn someone@gmail.com
+precommit 1 someone@gmail.com a@asnet.com.vn
+[ "$n" = 98 ] || { echo "ran $n cases, want 98"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"
