@@ -40,7 +40,7 @@ impl DeepgramStream {
             _ => "multi",
         };
         let url = format!(
-            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true"
+            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&mip_opt_out=true"
         );
         let key = api_key.to_string();
         thread::spawn(move || {
@@ -168,20 +168,21 @@ mod tests {
 
     /// Mock provider on localhost. `script` gets the accepted socket and the Authorization header.
     fn mock(
-        script: impl FnOnce(tungstenite::WebSocket<TcpStream>, String) + Send + 'static,
+        script: impl FnOnce(tungstenite::WebSocket<TcpStream>, String, String) + Send + 'static,
     ) -> String {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("ws://{}/v1/listen", l.local_addr().unwrap());
         thread::spawn(move || {
             let (s, _) = l.accept().unwrap();
-            let mut auth = String::new();
+            let (mut auth, mut uri) = (String::new(), String::new());
             let ws =
                 tungstenite::accept_hdr(s, |req: &tungstenite::handshake::server::Request, r| {
+                    uri = req.uri().to_string();
                     auth = req.headers()["authorization"].to_str().unwrap().to_string();
                     Ok(r)
                 })
                 .unwrap();
-            script(ws, auth);
+            script(ws, auth, uri);
         });
         url
     }
@@ -189,11 +190,11 @@ mod tests {
     #[test]
     fn frames_go_out_as_le_bytes_and_text_comes_back() {
         let (got_tx, got_rx) = mpsc::channel();
-        let url = mock(move |mut ws, auth| {
+        let url = mock(move |mut ws, auth, uri| {
             let Message::Binary(b) = ws.read().unwrap() else {
                 panic!("not binary")
             };
-            got_tx.send((auth, b.to_vec())).unwrap();
+            got_tx.send((auth, uri, b.to_vec())).unwrap();
             ws.send(results("xin", false)).unwrap();
             ws.send(results("xin chào", true)).unwrap();
             ws.send(results("", true)).unwrap(); // empty text is not an event
@@ -208,8 +209,12 @@ mod tests {
         });
         let (s, events) = DeepgramStream::start(&url, "k3y", "vi+en");
         assert!(s.send_frame(&[1, -2, 256]));
-        let (auth, bytes) = got_rx.recv_timeout(WAIT).unwrap();
+        let (auth, uri, bytes) = got_rx.recv_timeout(WAIT).unwrap();
         assert_eq!(auth, "Token k3y");
+        assert!(
+            uri.contains("mip_opt_out=true"),
+            "opted out of model improvement: {uri}"
+        );
         assert_eq!(bytes, vec![1, 0, 254, 255, 0, 1]);
         assert_eq!(
             events.recv_timeout(WAIT).unwrap(),
@@ -233,7 +238,7 @@ mod tests {
 
     #[test]
     fn a_dropped_connection_reports_unavailable_and_sending_never_blocks() {
-        let url = mock(|mut ws, _| {
+        let url = mock(|mut ws, _, _| {
             let _ = ws.read();
             // dropped without a close handshake
         });
