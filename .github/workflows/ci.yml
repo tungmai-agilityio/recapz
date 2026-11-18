@@ -10,6 +10,24 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # A docs-only PR (see scripts/ci-changes.sh) still runs every job so the required check names report a pass;
+  # the heavy steps in rust and web are skipped instead. A skipped job would read as "skipping" to the auto-merge check.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.f.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: f
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git diff --name-only --no-renames "origin/$BASE_REF...HEAD" | ./scripts/ci-changes.sh >> "$GITHUB_OUTPUT"
+          else
+            echo code=true >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          BASE_REF: ${{ github.base_ref }}
   guards:
     runs-on: ubuntu-latest
     steps:
@@ -17,10 +35,13 @@ jobs:
       - run: ./scripts/test-push-guards.sh
       - run: ./scripts/test-automerge.sh
   rust:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/cache@v4
+        if: needs.changes.outputs.code == 'true'
         with:
           path: |
             ~/.cargo/registry
@@ -29,21 +50,32 @@ jobs:
           key: rust-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: rust-
       - run: cargo fmt --check
+        if: needs.changes.outputs.code == 'true'
       - run: cargo clippy --workspace --all-targets -- -D warnings
+        if: needs.changes.outputs.code == 'true'
       - run: cargo test --workspace
+        if: needs.changes.outputs.code == 'true'
   web:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.code == 'true'
         with: { node-version: lts/* }
       - run: corepack enable
+        if: needs.changes.outputs.code == 'true'
       # Run inside web/ so corepack reads the pinned packageManager from web/package.json.
       - run: pnpm install --frozen-lockfile
+        if: needs.changes.outputs.code == 'true'
         working-directory: web
       - run: pnpm lint
+        if: needs.changes.outputs.code == 'true'
         working-directory: web
       - run: pnpm test
+        if: needs.changes.outputs.code == 'true'
         working-directory: web
       - run: pnpm build
+        if: needs.changes.outputs.code == 'true'
         working-directory: web
