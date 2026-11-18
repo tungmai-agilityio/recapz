@@ -1,7 +1,7 @@
 # Recapz spec
 
 Recapz is a private meeting notetaker for one team on one server. A notetaker joins Google Meet and Zoom,
-transcribes mixed Vietnamese and English on our own GPU server, writes a meeting report, and lets the team
+transcribes mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team
 search every meeting with cited answers. Everything ships as one Rust binary.
 
 ## Vocabulary
@@ -49,7 +49,7 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 
 Two adapters (Anthropic Messages, OpenAI-compatible Chat Completions) behind a `Provider` trait and a
 per-task `Router`. Reports are written once and stored. Ask sends only top retrieved chunks. Outputs are
-JSON validated against a schema. Only transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent to the language model", go to providers; audio never leaves the server.
+JSON validated against a schema. Only transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent to the language model", go to the configured LLM and embedding providers. See "Data sent to providers" below.
 
 ## Web
 
@@ -68,3 +68,17 @@ Invite-only Google sign-in, no passwords. Cookies `HttpOnly`, `SameSite=Lax` (`S
 Permission checks in every query. Secrets never logged. Logs hold IDs, not transcript text.
 Deletes are hard deletes, including search rows and audio files. A meeting can be deleted by its owner or
 by an admin, and not while it is joining, recording or processing.
+
+## Data sent to providers
+
+- Audio goes only to the configured speech provider (Deepgram first): the live stream during a call and the
+  recorded file after it. Nothing else is sent to it.
+- Transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent
+  to the language model" go only to the configured LLM and embedding providers (OpenAI by default). Documents with
+  the toggle off (the default) are never sent.
+- Provider accounts must use no-training and no-retention settings. Deployment-wide keys live in the environment
+  file, never in `config.toml`, logs or the database.
+- The Recording & privacy screen and the notetaker's join message in call chat name the speech provider.
+- Deletes are hard deletes on our side. Providers keep nothing beyond transient processing under those settings,
+  so Recapz makes no provider-side delete calls.
+- If a provider is unavailable, audio stays on disk and jobs retry; there is no automatic second provider.

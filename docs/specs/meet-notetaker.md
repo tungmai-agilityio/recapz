@@ -123,8 +123,8 @@ assumes.
    `transcribe` job uploads use. A new `label` job runs after it and fills `speakers` and
    `segments.speaker_id` from `speakers.jsonl` with `speaker_for`.
 4. Opt-out: stop capture, `purge_meeting`, status `opted_out`.
-5. Audio never leaves the server. Transcription is local whisper unless the deployment opted in to hosted
-   speech; this plan changes neither rule.
+5. Audio goes only to the configured speech provider and the join message names it
+   (`docs/spec.md`, "Data sent to providers"); this plan does not change that rule.
 6. Guard: if no audio frame arrives for 60 s while admitted, log a warning with the meeting id; after
    5 minutes, leave with `DriverError(no_audio)` and transcribe what was captured.
 
