@@ -1,57 +1,66 @@
-# Hosted speech provider decision
+# Hosted speech and language providers
 
-Status: **decided, not implemented.** Local whisper (`ggml-small` first) stays the default. This records the plan for an optional hosted speech adapter. Facts below were read from provider docs on 2026-11-12. Items marked *unverified* must be checked before building.
+Status: **decided (2026-11-18), not implemented.** Supersedes the earlier plan where local whisper was the default
+and a hosted provider was an opt-in. Provider facts were read from provider docs on 2026-11-12; items marked
+*unverified* must be checked before a real meeting is sent.
 
-## Options
+## Decisions
 
-| | Deepgram Nova-3 | OpenAI | AssemblyAI Universal-2 |
-|---|---|---|---|
-| Vietnamese | `vi` listed, monolingual and multilingual ([models](https://developers.deepgram.com/docs/models-languages-overview)) | `gpt-transcribe` language list does not name `vi` (*unverified*) | Listed in the ">10–25% WER" group ([languages](https://www.assemblyai.com/docs/pre-recorded-audio/supported-languages)) |
-| Speaker labels | Included for pre-recorded audio; `speaker` per word and utterance ([diarization](https://developers.deepgram.com/docs/diarization)) | Only `gpt-4o-transcribe-diarize`, deprecated, shuts down 2027-02-26 ([guide](https://developers.openai.com/api/docs/guides/speech-to-text)) | +$0.02/h; support for `vi` not confirmed |
-| Timestamps | Per word | None documented for `gpt-transcribe` | Per word |
-| Cost per hour | $0.31 multilingual, $0.26 monolingual ([pricing](https://deepgram.com/pricing)) | $0.27 `gpt-transcribe`, $0.36 diarize ([pricing](https://developers.openai.com/api/docs/pricing)) | $0.17 with diarization ([pricing](https://www.assemblyai.com/pricing)) |
-| Limits | 2 GB per file; 504 after 10 min of processing ([pre-recorded](https://developers.deepgram.com/docs/pre-recorded-audio), page may be dated) | 25 MB per file, so chunking is required | Async upload, then polling |
+| Area | Decision |
+|---|---|
+| Speech provider | Deepgram Nova-3 multilingual, batch and streaming, behind the `Transcriber` trait |
+| Modes | Batch on the recorded file after the call gives the stored transcript and speaker labels. A streaming WebSocket feeds the live view and Live Ask |
+| Speaker labels | Deepgram diarization on the batch pass. The live view shows text without speakers |
+| LLM and embeddings | Provider-agnostic adapters, OpenAI as the default, per-task `Router` kept so reports and live answers can use different models. Anthropic and any OpenAI-compatible server stay as adapters |
+| Privacy rule | Audio goes only to the configured speech provider; transcript, question and marked-document text only to the configured LLM and embedding providers; providers are named to members. See `docs/spec.md`, "Data sent to providers" |
+| Documents | The per-document "May be sent to the language model" toggle stays, default off |
+| Retention | Accounts run with no-training and no-retention settings (*unverified*: exact Deepgram and OpenAI settings). Deletes stay local hard deletes. No provider-side delete calls |
+| Keys | One key per provider for the deployment, in `/etc/recapz/recapz.env`, never `config.toml`, logs or the database |
+| Cost | Per-meeting usage (audio seconds, tokens) stored; estimated cost shown to admins; a monthly cap in config pauses new jobs |
+| Failure | Audio stays on disk, jobs retry with backoff, streaming failure never blocks recording and the live view says "live transcript unavailable". Auth and quota errors fail fast with an admin alert. No automatic second provider |
+| Local whisper | Dropped: `whisper-rs`, the CUDA build and model files leave the build and docs. The `Transcriber` trait stays so a local engine can return. Upload decoding (symphonia) stays |
+| Deploy | 2 vCPU, 4 GB RAM, 40 GB disk, `max_concurrent_calls = 2`. Chromium per call is the memory driver and WAV audio (about 115 MB per hour) the disk driver |
 
-## Decision
+## Why Deepgram
 
-1. **First provider: Deepgram Nova-3 multilingual.** It is the only option whose docs cover Vietnamese, speaker labels and timestamps in one synchronous call without chunking.
-2. **Not now: OpenAI** (its only diarization model is being retired, and click-to-seek needs timestamps) and **AssemblyAI** (cheaper, but upload-and-poll code and no confirmed speaker labels for `vi`). Revisit when the eval set exists.
-3. **Privacy rule amendment.** "Audio never leaves the server" becomes "Audio never leaves the server unless the deployment opts in to a hosted speech provider." It is off by default, explicitly opted in per deployment and shown in the UI. The wording change in `docs/spec.md`, `CLAUDE.md` and `config.example.toml` lands in PR 1 below, not before.
+It is the only option whose docs cover Vietnamese, speaker labels and timestamps in one pre-recorded call, with a
+streaming API on the same models. OpenAI's diarization model is being retired and its transcription returns no
+timestamps; AssemblyAI is cheaper but needs upload-and-poll code and has no confirmed speaker labels for `vi`.
+No provider has been measured on Vietnamese; the check is a consented sample before launch.
 
-No provider has been measured on Vietnamese. Accuracy waits on the consented test set described in `docs/decisions/speech-model-comparison.md`.
+## Cost per meeting (list prices, to verify)
+
+Batch about $0.31 per hour of audio, streaming about $0.46 per hour (*unverified*), plus a few cents of LLM. A one
+hour meeting with the live view on costs about $1. The monthly cap in config is the guard.
 
 ## Design
 
-- **Trait.** `Transcriber::transcribe(&[f32], lang)` is unchanged. `Segment` gains `speaker: Option<String>`. Whisper returns `None`.
-- **Adapter.** `HostedTranscriber` in `crates/speech`, behind a `hosted` feature. It encodes the 16 kHz mono samples as 16-bit WAV (about 115 MB per hour) and sends one blocking `reqwest` call. The runner already calls the transcriber inside `spawn_blocking`. Sending decoded WAV means every format the decoder reads works.
-- **Speaker labels.** The transcribe job creates `speakers` rows (`Speaker 1`, `Speaker 2`, …) and sets `segments.speaker_id`. Uploads get speaker labels for the first time. Notetaker speaker matching can rename them later.
-- **Config.**
-  ```toml
-  [speech]
-  provider = "local"            # "local" or "deepgram"
-  api_key = ""
-  model = "nova-3"
-  base_url = ""                 # empty uses the provider default; tests point it at a mock
-  audio_leaves_server = false   # must be true for any hosted provider
-  ```
-  `speech_model` stays top-level for the local path. A hosted provider without `audio_leaves_server = true` makes the server refuse to start.
-- **Disclosure.** `/api/me` reports the speech provider. When it is hosted, the upload screen and Recording & privacy show "Audio is sent to {provider} for transcription."
-- **Errors and retries.** Inside one call, 429, 5xx and timeouts get two retries with backoff that honours `Retry-After`. 400, 401, 402 and 413 fail at once with the status and the provider's error code. Errors and logs never hold transcript text or the key. The job runner's retry handles the rest.
-- **Long audio.** No chunking in v1. If a 2-hour file hits the 10-minute limit, split into 60-minute chunks. The risk is that speaker labels do not line up across chunks.
-- **Out of scope.** Live view streaming, cost tracking per meeting, other providers.
+- `Segment` gains `speaker: Option<String>`; the transcribe job creates `speakers` rows (`Speaker 1`, `Speaker 2`, ...)
+  and sets `segments.speaker_id`. A retried job must not duplicate them.
+- `crates/speech` holds `DeepgramTranscriber` (batch, one blocking call on 16-bit WAV, 429, 5xx and timeouts retried
+  twice with `Retry-After`) and `DeepgramStream` (WebSocket, 100 ms frames already produced by the notetaker).
+- Errors and logs never hold transcript text or the key.
+- Long audio: no chunking in v1. If a 2 hour file hits the provider's processing limit, split into 60 minute chunks;
+  speaker labels may not line up across chunks.
+- `/api/me` reports the speech provider so the upload screen and Recording & privacy can name it.
 
 ## PRs, in order
 
 | # | PR | Done when |
 |---|---|---|
-| 1 | `docs: amend the audio rule for hosted speech` | New wording in spec, CLAUDE.md and config comment is merged with maintainer approval |
-| 2 | `feat(core): store speaker labels from segments` | Segments with speakers create matching `speakers` rows; a retried job does not duplicate them; `None` leaves `speaker_id` NULL. Full workspace tests |
-| 3 | `feat(speech): add hosted transcriber` | Mock-server tests: parsing synthetic JSON, speaker mapping, retry then success on 429, no retry on 401; WAV round-trips through `decode_to_16k_mono`; no key or text in errors. About 300 lines |
-| 4 | `feat(server): add speech provider config` | Startup guard has a test; `/api/me` reports the provider |
-| 5 | `feat(web): disclose hosted speech on upload and privacy` | jsdom test shows the line only for a hosted provider; matches the prototype per `docs/ui-parity.md` |
-| 6 | Manual check, no PR | A 2-hour file on a real key confirms the time limit and Vietnamese quality |
+| 1 | `docs(spec): replace the audio rule with provider disclosure` | Merged with maintainer approval |
+| 2 | `docs(decisions): record the hosted provider decision` (this file) | Merged |
+| 3 | `docs(live-ask): use the streaming transcript` and `docs(deploy): size a CPU-only host` | Merged |
+| 4 | `feat(core): store speaker labels from segments` | Rows match segments; retried job does not duplicate; full workspace tests |
+| 5 | `feat(speech): add the Deepgram batch transcriber` | Mock-server tests for parsing, speaker mapping, retry on 429, no retry on 401, no key or text in errors |
+| 6 | `feat(server): add speech provider config and disclosure` | Missing key fails at start; `/api/me` reports the provider |
+| 7 | `feat(web): name the speech provider on upload and privacy` | jsdom test; matches the prototype per `docs/ui-parity.md` |
+| 8 | `feat(core): record usage and enforce the monthly cap` | Usage rows per meeting; cap pauses new jobs; admin sees estimated cost |
+| 9 | `feat(speech): add the Deepgram streaming transcriber` | Mock WebSocket test; failure never stops recording (Live Ask ticket #191 uses it) |
+| 10 | `refactor(speech): remove whisper and CUDA` | Build, Makefile, config, `docs/running-locally.md` and README no longer mention it |
+| 11 | Manual check, no PR | A 2 hour file and a live call on a real key confirm limits, Vietnamese quality and the 6 s Live Ask bar |
 
 ## Open questions
 
-- Deepgram data retention and opt-out from model training (*unverified*; read the terms before any real meeting is sent).
-- Whether the notetaker's join message in call chat should also name the provider (proposed: yes).
+- Exact Deepgram and OpenAI settings that give no training and no retention (*unverified*).
+- Whether Deepgram streaming accepts the notetaker's 16 kHz mono i16 frames as they are (expected yes).

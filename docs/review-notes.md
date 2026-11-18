@@ -15,7 +15,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Sign-in uses Google OAuth code flow plus the userinfo endpoint (not ID-token verification) and requires a verified email.
 - `POST /auth/dev-login` exists for local development and is off unless `dev_login = true` in `config.toml`.
 - Week 2 transcription: an upload's `transcribe` job decodes the audio, runs the recognizer and replaces the meeting's segments in one transaction, then sets the meeting to `ready`. Labelling, report and indexing stages arrive in later weeks, so `ready` is reached straight from transcribing for now.
-- Without a speech model (or a build without the `whisper` feature) the transcribe job fails and retries instead of storing text. The default model path is `./models/ggml-large-v3-turbo.bin`; `large-v3-turbo` is an assumption until the comparison in `docs/decisions/speech-model-comparison.md` has real recordings.
+- Without a speech model (or a build without the `whisper` feature) the transcribe job fails and retries instead of storing text. The default model path is `./models/ggml-large-v3-turbo.bin`. Local whisper is being dropped; see `docs/decisions/hosted-speech.md`.
 - Meeting detail, transcript and audio reads share one access rule and answer 404 (not 403) for meetings the member cannot see.
 - Audio is streamed with single-range support; multi-range requests get 416.
 - The `eval` crate is the speech/WER tool; prompt evaluation (`cargo run -p eval` in CLAUDE.md) will need a subcommand of its own when prompts land.
@@ -31,7 +31,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Join links are parsed strictly (Meet and Zoom hosts only) and stored normalised, so the same call is never joined twice by one member.
 - Zoom v1 uses the Meeting SDK bot per the decision doc in #29; it needs Zoom app review, and upload stays the fallback.
 - Report email transport is undecided: assume SMTP behind a trait, nothing is wired yet.
-- Hosted speech: an optional adapter (Deepgram first, opt-in per deployment, off by default) is decided in `docs/decisions/hosted-speech.md` but not built; local whisper stays the default.
+- Hosted speech and LLM providers (Deepgram, OpenAI default) replace local whisper; decided in `docs/decisions/hosted-speech.md`, not built.
 
 ## Open issues
 - Google sign-in has not been exercised against real Google credentials.
