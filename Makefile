@@ -5,7 +5,7 @@ dev:
 
 local:
 	@test -f config.toml || { echo "copy config.example.toml to config.toml first (see docs/running-locally.md)"; exit 1; }
-	@trap 'kill 0' INT TERM; cargo run -p recapz-server --features whisper & pnpm -C web dev & wait
+	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
 
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:
@@ -28,4 +28,4 @@ lint:
 
 release:
 	pnpm -C web build
-	cargo build --release -p recapz-server --features whisper,cuda
+	cargo build --release -p recapz-server
