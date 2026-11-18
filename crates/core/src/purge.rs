@@ -2,7 +2,7 @@
 //! Used for opt-out; retention and per-participant purge reuse it later.
 use crate::db::tenant_dir;
 use anyhow::{bail, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::{fs, io, path::Path};
 
 /// Returns false when the meeting does not exist. Safe to repeat: files go first, so a failure
@@ -36,6 +36,46 @@ pub fn purge_meeting(
         c.execute("DELETE FROM jobs WHERE meeting_id = ?1", [meeting_id])?;
         c.execute("DELETE FROM llm_usage WHERE meeting_id = ?1", [meeting_id])?;
         Ok(c.execute("DELETE FROM meetings WHERE id = ?1", [meeting_id])? > 0)
+    })();
+    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+    done
+}
+
+/// Hard delete of one member's document: the file first (a failure leaves nothing readable and a
+/// retry finishes), then its row; chunks, search rows and vectors go through foreign keys and the
+/// delete trigger, and queued ingest jobs are removed. False when the member does not own it.
+pub fn purge_document(
+    c: &Connection,
+    data_dir: &Path,
+    tenant_id: &str,
+    member_id: &str,
+    doc_id: &str,
+) -> Result<bool> {
+    if !crate::document::safe_id(doc_id) {
+        bail!("unsafe document id");
+    }
+    let Some(path) = c
+        .query_row(
+            "SELECT path FROM documents WHERE id = ?1 AND member_id = ?2",
+            [doc_id, member_id],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?
+    else {
+        return Ok(false);
+    };
+    match fs::remove_file(tenant_dir(data_dir, tenant_id).join(path)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    c.execute_batch("BEGIN")?;
+    let done = (|| -> Result<bool> {
+        c.execute(
+            "DELETE FROM jobs WHERE kind = ?1 AND payload = ?2",
+            [crate::document::KIND, doc_id],
+        )?;
+        Ok(c.execute("DELETE FROM documents WHERE id = ?1", [doc_id])? > 0)
     })();
     c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
     done
