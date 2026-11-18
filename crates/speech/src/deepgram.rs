@@ -83,7 +83,7 @@ impl Transcriber for DeepgramTranscriber {
             _ => "multi",
         };
         let url = format!(
-            "{}/v1/listen?model=nova-3&language={lang}&diarize=true&utterances=true&punctuate=true",
+            "{}/v1/listen?model=nova-3&language={lang}&diarize_model=latest&mip_opt_out=true&utterances=true&punctuate=true",
             self.base
         );
         let wav = encode_wav(samples);
@@ -219,12 +219,17 @@ mod tests {
         );
         let req = reqs.recv().unwrap();
         assert!(req.starts_with(
-            "POST /v1/listen?model=nova-3&language=multi&diarize=true&utterances=true"
+            "POST /v1/listen?model=nova-3&language=multi&diarize_model=latest&mip_opt_out=true&utterances=true"
         ));
         assert!(req
             .to_lowercase()
             .contains("authorization: token sekret-key"));
         assert!(req.contains("RIFF") && req.contains("WAVEfmt "));
+        assert!(req.contains("mip_opt_out=true"));
+        assert!(
+            !req.contains("diarize=true"),
+            "deprecated, and rejected together with diarize_model"
+        );
     }
 
     #[test]
