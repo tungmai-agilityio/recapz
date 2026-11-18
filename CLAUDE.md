@@ -1,7 +1,7 @@
 # Recapz
 
 Private meeting notetaker. One Rust binary (axum) with an embedded React + Vite + TypeScript + Tailwind app.
-SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthropic + OpenAI-compatible adapters).
+SQLite per tenant via rusqlite. Speech via a hosted provider (Deepgram first, behind a `Transcriber` trait). LLM and embeddings via crates/llm (OpenAI default; Anthropic and any OpenAI-compatible adapter).
 
 ## Clean-room rules (mandatory)
 - Never mention AI, assistants or Claude in commit messages, trailers, author names or branch names.
@@ -90,7 +90,7 @@ A PR that breaks any of these, or a Conventions rule above, is rejected.
 - Never skip, disable or delete a test to make CI pass.
 - Never push to `main` or force-push a shared branch; on your own branch use `--force-with-lease` only. Never use `git commit --no-verify`.
 - Never commit `config.toml`, API keys, recordings or real meeting data. Logs hold IDs, never transcript text.
-- Only transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent to the language model", go to LLM and embedding providers; audio never leaves the server.
+- Audio goes only to the configured speech provider. Only transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent to the language model", go to the configured LLM and embedding providers. Providers are named to members, must run with no-training and no-retention settings, and nothing else leaves the server.
 - A web PR ticks its screen's rows in docs/ui-parity.md and attaches a screenshot next to the prototype state; an unticked row needs a written reason.
 
 ## Things Claude gets wrong
