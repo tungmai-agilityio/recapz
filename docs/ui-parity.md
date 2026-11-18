@@ -125,11 +125,10 @@ non-owners once the list returns the owner.
       and Document or Meeting sources with page or time; "Passages only" card for documents not sent to the language model;
       waiting state (`docs/specs/live-ask.md`)
 
-## S9 My documents (blocked: documents API, `docs/specs/live-ask.md` row 4)
-- [ ] Drop zone: PDF with selectable text, Markdown, TXT, up to 20 MB each
-- [ ] Table: name, type, size, added date; status Indexed, Indexing, or No text found (scanned); "Send to language model"
-      switch per row (`role=switch`, off by default, disabled when no text); Delete with inline confirm
-- [ ] Aside: storage meter (of 500 MB) and what the switch means when off and on
+## S9 My documents (page built from the spec, not checked against the prototype: it is not in the repo)
+- [ ] Drop zone: Markdown and TXT, up to 20 MB each, done. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there
+- [ ] Table: name, type, status (Indexed, Indexing, No text found) and the `role=switch` "May be sent to the language model" (off by default, replaced by "n/a" when no text) and Delete with a confirm dialog are done. Size and added date are not shown: `GET /api/documents` returns only id, name, llm_ok and status. Delete uses the shared modal confirm, not an inline one
+- [ ] Aside: what the switch means when off and on is done. The storage meter (of 500 MB) is not shown: no route returns bytes used
 
 ## S7 Members (blocked: members API)
 - [ ] Invite form (email, role) with validation errors, disabled for non-admins
