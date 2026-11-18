@@ -534,9 +534,12 @@ name = "eval"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "recapz-core",
+ "recapz-llm",
  "rusqlite",
  "serde_json",
+ "tokio",
  "unicode-normalization",
 ]
 

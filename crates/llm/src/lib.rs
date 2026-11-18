@@ -17,6 +17,7 @@ pub enum Task {
     Decisions,
     Summary,
     AskAnswer,
+    LiveAnswer,
 }
 
 #[derive(Debug, Clone)]
