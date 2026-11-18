@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { getMeeting, uploadRecording } from '../api'
+import { getMeeting, uploadRecording, type MeetingLanguage } from '../api'
 import { Button } from '../ui/Button'
 import { Field, inputClass } from '../ui/Field'
 import { PageHead } from '../ui/PageHead'
@@ -24,9 +24,10 @@ export function Upload() {
   const provider = useSpeechProvider()
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
+  const [language, setLanguage] = useState<MeetingLanguage>('vi')
   const [over, setOver] = useState(false)
   const bad = file ? problem(file) : null
-  const send = useMutation({ mutationFn: () => uploadRecording(file!, title) })
+  const send = useMutation({ mutationFn: () => uploadRecording(file!, title, language) })
   const id = send.data?.id
   const { data: m } = useQuery({
     queryKey: ['upload-status', id],
@@ -76,6 +77,15 @@ export function Upload() {
         <aside className="frame flex flex-col gap-4">
           <Field label="Title" hint="Defaults to the file name.">
             {(p) => <input {...p} className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />}
+          </Field>
+          <Field label="Language" hint="Pick the language people speak. Mixed is for calls that switch between Vietnamese and English.">
+            {(p) => (
+              <select {...p} className={inputClass} value={language} onChange={(e) => setLanguage(e.target.value as MeetingLanguage)}>
+                <option value="vi">Vietnamese</option>
+                <option value="en">English</option>
+                <option value="multi">Mixed languages</option>
+              </select>
+            )}
           </Field>
           <Button variant="primary" className="justify-center" disabled={!file || !!bad || send.isPending} onClick={() => send.mutate()}>
             {send.isPending ? 'Uploading…' : 'Process recording'}

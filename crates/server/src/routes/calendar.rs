@@ -97,6 +97,8 @@ pub(super) async fn set_join(
 pub(super) struct JoinLink {
     url: String,
     title: Option<String>,
+    /// `vi` (default), `en` or `multi`.
+    language: Option<String>,
 }
 
 /// Queues a meeting for the notetaker to join: a `scheduled` row the notetaker driver picks up.
@@ -107,6 +109,7 @@ pub(super) async fn join_link(
 ) -> Res<(StatusCode, Json<Created>)> {
     let u = app.current_user(&jar).await?;
     let link = links::parse(&body.url).ok_or(ApiError::BadRequest("not a Meet or Zoom link"))?;
+    let language = super::meeting_language(body.language.as_deref())?;
     let title = body
         .title
         .map(|t| t.trim().chars().take(MAX_TITLE).collect::<String>())
@@ -139,9 +142,9 @@ pub(super) async fn join_link(
                 return Ok((id, false));
             }
             c.execute(
-                "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, 'scheduled', ?5, ?6)",
-                params![new_id, title, platform, url, u.id, db::now_ms()],
+                "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, language, created_at)
+                 VALUES (?1, ?2, ?3, ?4, 'scheduled', ?5, ?6, ?7)",
+                params![new_id, title, platform, url, u.id, language, db::now_ms()],
             )?;
             Ok((new_id, true))
         })

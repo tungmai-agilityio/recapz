@@ -97,9 +97,13 @@ export const joinMeeting = async (url: string, title: string) => {
 }
 
 /** Returns the new meeting's id. The server also reads an optional `title` (default: the file name). */
-export async function uploadRecording(file: File, title?: string): Promise<{ id: string }> {
+/** The speech language of a meeting: Vietnamese (default), English, or mixed. */
+export type MeetingLanguage = 'vi' | 'en' | 'multi'
+
+export async function uploadRecording(file: File, title?: string, language: MeetingLanguage = 'vi'): Promise<{ id: string }> {
   const body = new FormData()
   if (title?.trim()) body.append('title', title.trim())
+  body.append('language', language)
   body.append('file', file)
   return (await check(await fetch('/api/uploads', { method: 'POST', body, headers: csrf() }))).json()
 }

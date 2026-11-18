@@ -1050,3 +1050,103 @@ async fn usage_is_admin_only_and_reports_cost_cap_and_pause() {
         "{body}"
     );
 }
+
+#[tokio::test]
+async fn a_meeting_language_defaults_to_vietnamese_and_only_vi_en_multi_are_accepted() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let with_language = |lang: Option<&str>| {
+        let b = "XBOUNDARY";
+        let field = lang
+            .map(|l| {
+                format!("--{b}\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n{l}\r\n")
+            })
+            .unwrap_or_default();
+        Request::post("/api/uploads")
+            .header(header::COOKIE, format!("{boss}; recapz_csrf=t"))
+            .header("x-csrf-token", "t")
+            .header(header::CONTENT_TYPE, format!("multipart/form-data; boundary={b}"))
+            .body(Body::from(format!(
+                "{field}--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFFdata\r\n--{b}--\r\n"
+            )))
+            .unwrap()
+    };
+    for (sent, stored) in [
+        (None, "vi"),
+        (Some("en"), "en"),
+        (Some("multi"), "multi"),
+        (Some(" vi "), "vi"),
+    ] {
+        let (s, _, body) = send(&app, with_language(sent)).await;
+        assert_eq!(s, StatusCode::CREATED, "{sent:?}");
+        let id = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let control = db::open_control(dir.path()).unwrap();
+        let tid = db::tenant_ids(&control).unwrap().remove(0);
+        let t = db::open_tenant(dir.path(), &tid).unwrap();
+        let lang: String = t
+            .query_row("SELECT language FROM meetings WHERE id=?1", [&id], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(lang, stored, "{sent:?}");
+    }
+    for bad in ["fr", "vi+en", "auto"] {
+        let (s, ..) = send(&app, with_language(Some(bad))).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let n: i64 = db::open_tenant(
+        dir.path(),
+        &db::tenant_ids(&db::open_control(dir.path()).unwrap())
+            .unwrap()
+            .remove(0),
+    )
+    .unwrap()
+    .query_row("SELECT count(*) FROM meetings", [], |r| r.get(0))
+    .unwrap();
+    assert_eq!(n, 4, "a rejected language creates no meeting");
+
+    // the notetaker join flow takes the same field
+    let join = |body: &str| json_req("POST", "/api/meetings/join", &boss, body);
+    let (s, _, b1) = send(
+        &app,
+        join(r#"{"url":"https://meet.google.com/abc-defg-hij","language":"en"}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{b1}");
+    let (s, ..) = send(
+        &app,
+        join(r#"{"url":"https://meet.google.com/zzz-yyyy-xxx","language":"fr"}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, b3) = send(
+        &app,
+        join(r#"{"url":"https://meet.google.com/qqq-wwww-eee"}"#),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{b3}");
+    let t = db::open_tenant(
+        dir.path(),
+        &db::tenant_ids(&db::open_control(dir.path()).unwrap())
+            .unwrap()
+            .remove(0),
+    )
+    .unwrap();
+    let langs: Vec<String> = t
+        .prepare("SELECT language FROM meetings WHERE platform != 'upload' ORDER BY created_at, id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(langs.len(), 2);
+    assert!(
+        langs.contains(&"en".to_string()) && langs.contains(&"vi".to_string()),
+        "{langs:?}"
+    );
+}
