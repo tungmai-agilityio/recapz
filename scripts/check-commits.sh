@@ -9,7 +9,8 @@ fail=0
 subject_ok() {
   printf '%s\n' "$1" | grep -Eq "^($types)(\([a-z0-9_-]+\))?!?: .*[^.]$" && [ ${#1} -le 72 ]
 }
-printf '%s\n' "$3" | grep -Eq "^($types)/[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$" \
+# dependabot names its own branches dependabot/<ecosystem>/<dep>
+printf '%s\n' "$3" | grep -Eq "^dependabot/[a-z_-]+/[A-Za-z0-9._/@-]+$" || printf '%s\n' "$3" | grep -Eq "^($types)/[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$" \
   || { echo "bad branch name: $3 (use <type>/<kebab-description>)"; fail=1; }
 subject_ok "$2" || { echo "bad PR title: $2"; fail=1; }
 for c in $(git rev-list --no-merges "$1"); do
