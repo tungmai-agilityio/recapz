@@ -1,6 +1,6 @@
 # Speech model comparison
 
-Status: **plan and placeholder. No model has been measured yet.** The team recordings needed for the test set do not exist in the repo and must not be added to it (hard rule: no real meeting data).
+Status: **superseded by `docs/decisions/hosted-speech.md` (2026-11-18): local whisper is dropped.** Kept for the error-rate method, which still applies to any provider check. The team recordings needed for a test set do not exist in the repo and must not be added to it (hard rule: no real meeting data).
 
 ## Assumption (logged, not measured)
 
