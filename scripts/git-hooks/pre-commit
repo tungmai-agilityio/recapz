@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuses a commit whose author or committer email is not a work address.
+# Enable once per clone with `make hooks`.
+for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
+  email=$(git var "$who" | sed 's/.*<\(.*\)>.*/\1/')
+  case "$email" in
+    *@asnet.com.vn | *+tungmai-agilityio@users.noreply.github.com) ;;
+    *)
+      echo "pre-commit: $who email '$email' is not a work address; set user.email" >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0
