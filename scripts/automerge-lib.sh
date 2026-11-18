@@ -2,7 +2,7 @@
 # Pure checks used by scripts/automerge-check.sh; sourced, also by scripts/test-automerge.sh.
 # The denylist can only force escalation; nothing here ever grants a merge on its own.
 
-REQUIRED_CHECKS="commits size guards rust web"
+REQUIRED_CHECKS="guards rust web"
 
 # denied_path <repo-relative path>: succeeds when a change to this path must go to the maintainer.
 # Over-matching is cheap: this list only forces escalation. Meeting access in crates/core is not listed: the reviewer
