@@ -121,6 +121,7 @@ mod tests {
              INSERT INTO action_items (id, meeting_id, text) VALUES ('a-{id}','{id}','{word}');
              INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding) VALUES ('{id}',0,1,'{word}',x'00');
              INSERT INTO llm_usage (meeting_id, task, provider, model, at) VALUES ('{id}','summary','p','m',1);
+             INSERT INTO speech_usage (meeting_id, kind, audio_seconds, cost_micro_usd, at) VALUES ('{id}','batch',60,1,1);
              INSERT INTO jobs (kind, meeting_id, run_after) VALUES ('report','{id}',0);"
         ))
         .unwrap();
@@ -151,6 +152,7 @@ mod tests {
             ("action_items", "meeting_id"),
             ("chunks", "meeting_id"),
             ("llm_usage", "meeting_id"),
+            ("speech_usage", "meeting_id"),
             ("jobs", "meeting_id"),
         ] {
             assert_eq!(

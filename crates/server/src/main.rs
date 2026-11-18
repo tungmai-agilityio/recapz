@@ -49,6 +49,10 @@ async fn main() -> anyhow::Result<()> {
         store.map(|s| s as Arc<dyn recapz_core::blobs::Blobs>),
         report,
         embedder,
+        runner::Limits {
+            speech_micro_usd_per_minute: cfg.speech.price_per_minute_micro_usd,
+            monthly_cap_micro_usd: cfg.monthly_cap_micro_usd(),
+        },
     );
     if cfg.google.client_id.is_empty() || cfg.secret_key.is_empty() {
         tracing::warn!("calendar sync is off: needs google.client_id and RECAPZ_SECRET_KEY");
