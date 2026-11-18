@@ -142,3 +142,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `Segment.speaker` is the provider's tag (any string); the transcribe job numbers distinct tags `Speaker 1`, `Speaker 2`, ... by first appearance. A retry deletes the meeting's speaker rows and rebuilds them, like segments, so nothing duplicates. A rename a member made before a retry is lost, as the segments it pointed at are replaced too.
 - The `label` job (call recordings) still runs after and replaces speakers by its own names.
 - The `whisper` feature path only gained `speaker: None`; it was not compiled here (feature off).
+
+## Deepgram batch transcriber
+- `crates/speech/src/deepgram.rs`: `DeepgramTranscriber::new(base_url, key)` posts the whole recording as 16-bit WAV to `/v1/listen` (`nova-3`, `diarize`, `utterances`, `punctuate`) and maps `results.utterances` to segments; the provider's speaker number is the tag the transcribe job numbers. Language `vi` and `en` pass through, anything else (including `vi+en`) uses `multi`.
+- 429, 5xx, timeouts and connect errors are retried twice (`Retry-After` honoured up to 30 s, else 2 s then 4 s); other 4xx fail at once. Errors hold the status or failure kind only.
+- Uses `reqwest` with its `blocking` feature (already a dependency elsewhere) rather than a new HTTP crate; the trait is synchronous and runs on the job thread. `tempfile` is a dev-dependency for the WAV round-trip test.
+- Not verified against the real service: query parameters, the `utterances` shape, the `multi` value, and that `utterances` carry `speaker` for Vietnamese. Mock server on localhost only; the https path and key header were not exercised. A 2 hour file (provider limit) is still unchecked (#226). Not wired into the server yet (#220).
