@@ -13,6 +13,7 @@ function run(statuses: string[], calls: string[] = []) {
     calls.push(`${init?.method ?? 'GET'} ${u}`)
     if (init?.method === 'POST') {
       calls.push(`title=${(init.body as FormData).get('title')}`)
+      calls.push(`language=${(init.body as FormData).get('language')}`)
       return new Response(JSON.stringify({ id: 'm9' }), { status: 201 })
     }
     const status = statuses[Math.min(n++, statuses.length - 1)]
@@ -82,4 +83,21 @@ test('the lede names the speech provider from /api/me', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram' }))))
   render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Upload /></MemoryRouter></QueryClientProvider>)
   expect(await screen.findByText(/The audio is sent to Deepgram to be transcribed\./)).toBeTruthy()
+})
+
+test('the language choice defaults to Vietnamese and is sent with the upload', async () => {
+  const calls: string[] = []
+  run(['ready'], calls)
+  expect((screen.getByLabelText('Language') as HTMLSelectElement).value).toBe('vi')
+  expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Vietnamese', 'English', 'Mixed languages'])
+  pick('call.mp3')
+  fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
+  await waitFor(() => expect(calls).toContain('language=vi'))
+  cleanup()
+  const calls2: string[] = []
+  run(['ready'], calls2)
+  fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'multi' } })
+  pick('call.mp3')
+  fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
+  await waitFor(() => expect(calls2).toContain('language=multi'))
 })

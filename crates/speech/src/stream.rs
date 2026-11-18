@@ -34,10 +34,11 @@ impl DeepgramStream {
     pub fn start(base_url: &str, api_key: &str, language: &str) -> (Self, Receiver<LiveEvent>) {
         let (ftx, frx) = mpsc::sync_channel(BACKLOG);
         let (etx, erx) = mpsc::channel();
-        // Deepgram's multilingual model covers mixed vi+en; "auto" and "vi+en" both use it.
-        let lang = match language {
-            "vi" | "en" => language,
-            _ => "multi",
+        let Some(lang) = crate::deepgram::deepgram_language(language) else {
+            // An unknown language never reaches the provider: the live view just says unavailable.
+            drop(frx);
+            let _ = etx.send(LiveEvent::Unavailable);
+            return (Self { frames: ftx }, erx);
         };
         let url = format!(
             "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&mip_opt_out=true"
@@ -257,5 +258,20 @@ mod tests {
         drop(l);
         let (_s, events) = DeepgramStream::start(&url, "k", "en");
         assert_eq!(events.recv_timeout(WAIT).unwrap(), LiveEvent::Unavailable);
+    }
+
+    #[test]
+    fn the_language_is_in_the_url_and_an_unknown_one_is_unavailable_at_once() {
+        let (uri_tx, uri_rx) = mpsc::channel();
+        let url = mock(move |mut ws, _, uri| {
+            uri_tx.send(uri).unwrap();
+            let _ = ws.read();
+        });
+        let (s, _events) = DeepgramStream::start(&url, "k", "vi");
+        s.send_frame(&[0; 4]);
+        assert!(uri_rx.recv_timeout(WAIT).unwrap().contains("language=vi&"));
+        let (s, events) = DeepgramStream::start("ws://127.0.0.1:1/never-used", "k", "fr");
+        assert_eq!(events.recv_timeout(WAIT).unwrap(), LiveEvent::Unavailable);
+        assert!(!s.send_frame(&[0; 4]));
     }
 }
