@@ -472,7 +472,7 @@ async fn get_audio_retention(State(app): State<App>, jar: CookieJar) -> Res<Json
     let u = app.current_user(&jar).await?;
     let days = app
         .tenant(u.tenant_id.clone(), |c| {
-            Ok(recapz_core::settings::audio_retention_days(c)?)
+            recapz_core::settings::audio_retention_days(c)
         })
         .await?;
     Ok(Json(AudioRetention { days }))
