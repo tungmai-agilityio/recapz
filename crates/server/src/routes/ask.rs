@@ -1,4 +1,4 @@
-//! `POST /api/ask`: answer a question from the transcripts the member may see.
+//! `POST /api/ask`: answer a question from the transcripts the member may see and their own documents.
 //! The reply is a server-sent event stream: `token` events with the answer text, one `citations`
 //! event with the moments used, then `done`. Retrieval applies the access rule inside the query.
 use super::*;
@@ -47,7 +47,10 @@ pub async fn ask(
             search::search(c, &uid, &q, embedder.as_ref(), TOP_K)
         })
         .await?;
-    let excerpts: Vec<Excerpt> = hits
+    // Only text the owner allowed to leave the server is sent to the model; a toggle-off document
+    // is shown as a cited passage after the answer. `cited` indexes into `sendable`.
+    let (sendable, passages): (Vec<_>, Vec<_>) = hits.into_iter().partition(|h| h.llm_ok);
+    let excerpts: Vec<Excerpt> = sendable
         .iter()
         .map(|h| Excerpt {
             start_ms: h.start_ms,
@@ -100,19 +103,22 @@ pub async fn ask(
                 {
                     tracing::error!("ask usage not recorded: {e:#}");
                 }
+                let citation = |h: &search::Hit, answered: bool| {
+                    serde_json::json!({
+                        "meeting_id": h.meeting_id,
+                        "document_id": h.document_id,
+                        "title": h.title,
+                        "start_ms": h.meeting_id.as_ref().map(|_| h.start_ms),
+                        "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
+                        "answered": answered,
+                    })
+                };
                 let citations: Vec<_> = out
                     .value
                     .cited
                     .iter()
-                    .map(|&i| {
-                        let h = &hits[i];
-                        serde_json::json!({
-                            "meeting_id": h.meeting_id,
-                            "title": h.title,
-                            "start_ms": h.start_ms,
-                            "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
-                        })
-                    })
+                    .map(|&i| citation(&sendable[i], true))
+                    .chain(passages.iter().map(|h| citation(h, false)))
                     .collect();
                 event("citations", serde_json::Value::Array(citations))
                     + &event("done", serde_json::json!({}))

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ask, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
 import { clock } from '../clock'
@@ -6,6 +7,11 @@ import { Button } from '../ui/Button'
 
 // ponytail: the server's citations carry no speaker or offset data, so cards have no ribbon or pin.
 const SUGGESTIONS = ['What decisions were made recently?', 'What are the open action items?', 'What was said about deadlines?']
+
+/** A citation card: a link into the meeting, or a plain card for a document. */
+function Cite({ to, ...p }: { to: string | null; id: string; className: string; children: ReactNode }) {
+  return to ? <Link to={to} {...p} /> : <div {...p} />
+}
 
 interface Turn { q: string; a: string; cites: Citation[]; state: 'streaming' | 'done' | 'error'; error: string }
 
@@ -65,16 +71,16 @@ export function Ask() {
           {t.cites.length > 0 && (
             <div className="grid gap-2.5 sm:grid-cols-3">
               {t.cites.slice(0, 3).map((c, i) => (
-                <Link
+                <Cite
                   key={i}
                   id={`cite-${ti}-${i}`}
-                  to={`/meetings/${c.meeting_id}?t=${c.start_ms}`}
+                  to={c.meeting_id ? `/meetings/${c.meeting_id}?t=${c.start_ms ?? 0}` : null}
                   className="flex min-w-0 flex-col gap-2 rounded-lg border border-hair bg-inset p-3 hover:border-ink-2"
                 >
-                  <span className="flex justify-between font-mono text-xs"><span>{i + 1}</span><time className="text-mute">{clock(c.start_ms)}</time></span>
+                  <span className="flex justify-between font-mono text-xs"><span>{i + 1}</span><time className="text-mute">{c.start_ms === null ? (c.answered ? 'Document' : 'Document, not sent to the model') : clock(c.start_ms)}</time></span>
                   <b className="text-sm font-semibold">{c.title}</b>
                   <span className="line-clamp-2 text-[0.82rem] text-ink-2">{c.quote}</span>
-                </Link>
+                </Cite>
               ))}
             </div>
           )}

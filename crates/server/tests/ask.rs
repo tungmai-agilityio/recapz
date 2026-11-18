@@ -388,3 +388,95 @@ async fn ask_reports_a_failure_after_streaming_started_as_an_error_event() {
         "{sse}"
     );
 }
+
+fn add_doc(t: &rusqlite::Connection, id: &str, owner: &str, llm_ok: bool, text: &str) {
+    t.execute(
+        "INSERT INTO documents (id, member_id, name, kind, size_bytes, path, llm_ok, created_at) VALUES (?1, ?2, ?1 || '.md', 'md', 1, 'p', ?3, 0)",
+        params![id, owner, llm_ok as i64],
+    )
+    .unwrap();
+    t.execute(
+        "INSERT INTO document_chunks (document_id, seq, text) VALUES (?1, 0, ?2)",
+        params![id, text],
+    )
+    .unwrap();
+    if llm_ok {
+        t.execute(
+            "INSERT INTO document_vectors (chunk_id, document_id, embedder, embedding) VALUES (last_insert_rowid(), ?1, ?2, ?3)",
+            params![id, HashEmbedder.id(), to_blob(&HashEmbedder.embed(text).unwrap())],
+        )
+        .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn ask_searches_only_the_members_own_documents_and_never_sends_a_toggle_off_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let stub = reply(r#"{"answer":"Net 30.","citations":[1]}"#);
+    let app = app(dir.path(), Some(stub.clone()));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let (tid, boss_id) = seed(dir.path());
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let amy_id: String = control
+        .query_row(
+            "SELECT id FROM users WHERE email='amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    t.execute(
+        "INSERT INTO members (id, email, role) VALUES (?1, 'amy@example.com', 'member') ON CONFLICT DO NOTHING",
+        [&amy_id],
+    )
+    .unwrap();
+    add_doc(&t, "bossdoc", &boss_id, true, "zebrafish retainer sixty");
+    add_doc(&t, "amyoff", &amy_id, false, "walrus escrow ninety");
+    add_doc(&t, "amyon", &amy_id, true, "ocelot payroll thirty");
+
+    // Another member's document is neither found, cited nor sent.
+    let (_, _, body) = send(&app, ask(&amy, "zebrafish retainer?")).await;
+    assert_eq!(answer_text(&body), recapz_llm::ask::NOT_FOUND);
+    assert!(
+        !body.contains("bossdoc") && !body.contains("retainer sixty"),
+        "{body}"
+    );
+    assert!(stub.requests().is_empty());
+
+    // A toggle-off document is cited as a passage; its text never reaches the model.
+    let (_, _, body) = send(&app, ask(&amy, "walrus escrow?")).await;
+    assert_eq!(
+        answer_text(&body),
+        recapz_llm::ask::NOT_FOUND,
+        "{body} {:?}",
+        stub.requests()
+    );
+    assert!(
+        stub.requests().is_empty(),
+        "no model call for a toggle-off document"
+    );
+    assert!(body.contains(r#""document_id":"amyoff""#), "{body}");
+    assert!(body.contains(r#""answered":false"#), "{body}");
+    assert!(
+        body.contains(r#""meeting_id":null"#) && body.contains(r#""start_ms":null"#),
+        "{body}"
+    );
+
+    // A toggle-on document is sent and cited as the answer source.
+    let (_, _, body) = send(&app, ask(&amy, "ocelot payroll?")).await;
+    let sent = stub.requests();
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0].prompt.contains("payroll thirty"));
+    assert!(
+        !sent[0].prompt.contains("escrow ninety") && !sent[0].prompt.contains("retainer sixty")
+    );
+    assert_eq!(answer_text(&body), "Net 30.");
+    assert!(
+        body.contains(r#""document_id":"amyon""#) && body.contains(r#""answered":true"#),
+        "{body}"
+    );
+    drop(boss);
+}
