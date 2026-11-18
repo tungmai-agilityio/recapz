@@ -10,9 +10,13 @@
 ## Issue
 <!-- `Closes #N` only when this PR delivers the whole ticket; `Refs #N` for part of it or a spec PR. -->
 
+## Decisions made
+<!-- Choices you settled from the ticket, spec, decisions or code patterns, one line each, or "None". Informational:
+these do not block the merge. -->
+
 ## Decisions needing the maintainer
-<!-- Any choice a reader would want to overrule: behaviour, naming, API shape, privacy, data deletion, data sent
-to language-model providers. Write "None" only if there really are none. -->
+<!-- Only a choice the spec does not settle that is costly to undo (privacy, data deletion, data sent to
+language-model providers, API shape other code depends on). Otherwise write "None". -->
 
 ## Checklist
 - [ ] Branch is `<type>/<name>`; title is `type(scope): summary`

@@ -13,13 +13,13 @@ no() { # description command...
 }
 no_denied() { ! denied_path "$1"; }
 for p in web/src/pages/Meetings.tsx web/src/ui/Button.tsx crates/notetaker/src/meet.rs crates/speech/src/transcribe.rs \
-  docs/ui-parity.md docs/deploy.md README.md web/src/index.css; do ok "allowed path $p" no_denied "$p"; done
-for p in crates/core/src/db.rs crates/core/migrations/tenant_006.sql crates/llm/prompts/report.md \
-  crates/server/src/routes.rs crates/server/src/routes/ask.rs web/src/api.ts crates/server/src/auth.rs \
+  docs/ui-parity.md docs/deploy.md README.md web/src/index.css crates/core/src/db.rs crates/llm/prompts/report.md \
+  crates/server/src/routes.rs crates/server/src/routes/ask.rs web/src/api.ts crates/server/src/runner.rs \
+  crates/server/tests/api.rs crates/llm/src/ask.rs crates/eval/src/lib.rs docs/specs/new.md docs/decisions/x.md; do ok "allowed path $p" no_denied "$p"; done
+for p in crates/core/migrations/tenant_006.sql crates/server/src/auth.rs \
   web/src/pages/Access.tsx Cargo.toml crates/speech/Cargo.toml Cargo.lock web/package.json web/pnpm-lock.yaml \
   rust-toolchain.toml deploy/recapz.service scripts/labels.sh .claude/hooks/x.sh .claude/skills/y/SKILL.md \
-  .github/workflows/ci.yml Makefile CLAUDE.md CONTRIBUTING.md docs/specs/new.md docs/decisions/x.md \
-  crates/server/src/runner.rs crates/server/tests/api.rs crates/llm/src/ask.rs crates/eval/src/lib.rs Crates/Core/x.rs \
+  .github/workflows/ci.yml Makefile CLAUDE.md CONTRIBUTING.md Crates/Core/migrations/x.sql \
   pnpm-workspace.yaml web/.npmrc .nvmrc; do
   ok "denied path $p" denied_path "$p"; done
 body() { printf '## Summary\nx\n\n## Decisions needing the maintainer\n%s\n\n## Checklist\n- [ ] y\n' "$1"; }
@@ -80,8 +80,9 @@ scenario() { # description expected-exit [setup-snippet using $F] [extra args to
 scenario "everything good" 0
 scenario "gh api for files fails" 1 'touch $F/files.fail'
 scenario "empty file list" 1 ': > $F/files.txt'
-scenario "rename out of crates/core" 1 'printf "F crates/speech/src/x.rs\nP crates/core/src/x.rs\n" > $F/files.txt'
-scenario "denylisted server file" 1 'echo "F crates/server/src/runner.rs" > $F/files.txt'
+scenario "rename out of migrations" 1 'printf "F crates/speech/src/x.rs\nP crates/core/migrations/x.sql\n" > $F/files.txt'
+scenario "denylisted migration" 1 'echo "F crates/core/migrations/tenant_006.sql" > $F/files.txt'
+scenario "core file is not denylisted" 0 'echo "F crates/core/src/db.rs" > $F/files.txt'
 scenario "an extra failing check" 1 'echo "${all_pass%]},{\"name\":\"deploy\",\"bucket\":\"fail\"}]" > $F/checks.json'
 scenario "web skipped" 1 'echo "${all_pass/\"web\",\"bucket\":\"pass\"/\"web\",\"bucket\":\"skipping\"}" > $F/checks.json'
 scenario "checks call fails" 1 'touch $F/checks.fail'
@@ -96,6 +97,9 @@ scenario "reviewed sha is not HEAD" 1 ':' --reviewed-sha "$sha2" --implementer-r
 scenario "short sha" 1 ':' --reviewed-sha "${sha:0:7}" --implementer-risk low --reviewer-risk low
 scenario "implementer risk high" 1 ':' --reviewed-sha "$sha" --implementer-risk high --reviewer-risk low
 scenario "reviewer risk high" 1 ':' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk high
-[ "$n" = 75 ] || { echo "ran $n cases, want 75"; fail=1; }
+scenario "docs-only PR, no reviewer" 0 'echo "F docs/ui-parity.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
+scenario "reviewer na with code" 1 ':' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
+scenario "reviewer na with CLAUDE.md" 1 'echo "F CLAUDE.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
+[ "$n" = 79 ] || { echo "ran $n cases, want 79"; fail=1; }
 [ "$fail" = 0 ] && echo "automerge: $n cases pass"
 exit "$fail"

@@ -26,31 +26,40 @@ Use `gh` as the account that has access to this repository. If several accounts 
   first, `web/src/ui/`, `docs/ui-parity.md`) and the test rules under "Things Claude gets wrong".
 - **Drift:** if the spec is wrong, the ticket is too big (over about 600 source lines) or you need a path outside
   `Touches`, stop. Do not deviate or widen the PR. Go to "Escalate".
+- Anything else that is unclear is not drift: decide by the order in "Autonomy" in `CLAUDE.md`, never ask the
+  maintainer, and write it under "Decisions made" in the PR.
 
 ## 3. Test, review, PR
 
 - Run `test-runner` once when done, with the folder and the Testing scope from the ticket. On FAIL fix the code,
-  never the test, and re-run only if code changed. **At most 3 failed fix cycles**, then escalate.
+  never the test, and re-run only if code changed. **At most 3 failed fix cycles**, then escalate. A failure that
+  does not reproduce locally and looks like infrastructure (network, runner, cache) is re-run once and is not a cycle.
 - On `STATUS: PASS` for the current HEAD with `Dirty: no`, run `code-reviewer` with the ticket number so it checks
-  each Acceptance item and grades risk. Fix blockers. **At most 2 CHANGES REQUESTED rounds**, then escalate.
+  each Acceptance item and grades risk. Fix blockers; a nit is fixed if trivial and otherwise ignored, and never counts as a round. **At most 2 CHANGES
+  REQUESTED rounds** for blockers, then escalate.
 - Open the PR with the `pull-request` skill: title `type(scope): summary`, body ending `Closes #<n>` only if the PR
   delivers the whole ticket, otherwise `Refs #<n>` (and create a ticket for the missing part first). Fill
-  "Decisions needing the maintainer" with every choice a reader might overrule, or exactly `None`.
+  "Decisions made" with each choice you settled, and "Decisions needing the maintainer" with only a choice the spec
+  does not settle that is costly to undo, or exactly `None`.
   Then `gh issue edit <n> --remove-label status:in-progress --add-label status:review`.
 - Wait for CI: `gh pr checks <pr> --watch`. On a CI failure fix the code and count it as a test-fix cycle.
 
 ## 4. Merge or hand over
 
-Grade the risk yourself, `low` or `high`: `high` if the change touches privacy, data deletion, data sent to
-language-model providers, meeting access, or you were unsure of anything. Then run:
+Grade the risk yourself, `low` or `high`. `high` only if the change is critical under "Merging and escalation" in
+`CLAUDE.md`: an always-critical item, or a meeting-access, language-model-data, migration or deletion change that the
+spec and the ticket's Acceptance do not decide. A spec-approved change of that kind is `low`. A doubt is something
+to check in the spec and the code, not a reason to grade `high`. Then run:
 
-`scripts/automerge-check.sh <pr> --reviewed-sha <full 40-character HEAD sha the reviewer approved> --implementer-risk <low|high> --reviewer-risk <low|high from the reviewer>`
+`scripts/automerge-check.sh <pr> --reviewed-sha <full 40-character HEAD sha the reviewer approved> --implementer-risk <low|high> --reviewer-risk <low|high from the reviewer, or na for a docs-only PR>`
 
 - Prints `ELIGIBLE` (and `scripts/automerge-pause.sh status` says active): merge with
   `gh pr merge <pr> --squash --delete-branch --match-head-commit <that sha>` (never `--auto`, `--admin` or a flag that skips checks), then post the
   audit comment, which must start with `Auto-merged:` and list the CI jobs, the reviewed commit, both risk grades
   and "Decisions: None". Clean up as the `pull-request` skill says, and remove the leftover `status:` label from the
-  closed issue.
+  closed issue. Then check CI on the merge commit once (`gh run list --branch main --limit 3`); a cancelled run
+  superseded by a newer merge does not count. If it failed because of this PR, file a `type:fix` `priority:p0`
+  ticket linking this one and ship it; revert only if that fix fails.
 - Prints `ESCALATE: ...`: if every reason is a denylisted path and the change is not critical under "Merging and
   escalation" in `CLAUDE.md`, merge anyway with the same command and name the overridden paths in the audit comment.
   Any other reason (paused, `human-merge`, high risk, open decisions, CI or HEAD problems, unreadable data), or a
@@ -62,5 +71,5 @@ language-model providers, meeting access, or you were unsure of anything. Then r
 ## Escalate
 
 Set `status:needs-human` on the ticket with a comment: what you tried, the last failure or the drift found, and the
-branch name. Leave the branch unpushed unless a PR already exists. Only the maintainer sets the ticket back to
-`status:ready`.
+branch name. Leave the branch unpushed unless a PR already exists. Send the maintainer one push notification naming
+the ticket and the reason. Only the maintainer sets the ticket back to `status:ready`.
