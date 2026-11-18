@@ -43,7 +43,7 @@ export interface ReportData {
 
 export class Unauthorized extends Error {}
 
-export interface Me { email: string; name: string | null; role: string; speech_provider?: string }
+export interface Me { email: string; name: string | null; role: string; speech_provider?: string; recording_storage?: 'object_storage' | 'local_disk' }
 
 /** Echoes the csrf cookie in a header on state-changing requests. */
 const csrf = () => ({ 'x-csrf-token': /(?:^|; )recapz_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' })
@@ -55,6 +55,9 @@ async function check(res: Response) {
 }
 
 export const getMe = async (): Promise<Me> => (await check(await fetch('/api/me'))).json()
+
+export const getAudioRetention = async (): Promise<{ days: number }> =>
+  (await check(await fetch('/api/settings/audio-retention'))).json()
 
 export const getMeetings = async (): Promise<Meeting[]> =>
   (await check(await fetch('/api/meetings'))).json()

@@ -50,6 +50,35 @@ pub fn set_join_rule(c: &Connection, rule: &str) -> Result<()> {
     Ok(())
 }
 
+const AUDIO_RETENTION_DAYS: &str = "audio_retention_days";
+pub const DEFAULT_AUDIO_RETENTION_DAYS: u32 = 90;
+
+/// Days a finished recording's audio is kept; 0 keeps it forever. Transcripts and reports are not
+/// affected. A missing or unreadable value means the default.
+pub fn audio_retention_days(c: &Connection) -> Result<u32> {
+    let v: Option<String> = c
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [AUDIO_RETENTION_DAYS],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(v.and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_AUDIO_RETENTION_DAYS))
+}
+
+pub fn set_audio_retention_days(c: &Connection, days: u32) -> Result<()> {
+    if days > 3650 {
+        bail!("retention is at most 3650 days");
+    }
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![AUDIO_RETENTION_DAYS, days.to_string()],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,6 +112,32 @@ mod tests {
         assert_eq!(
             (JoinRule::Auto.as_str(), JoinRule::Manual.as_str()),
             ("auto", "manual")
+        );
+    }
+
+    #[test]
+    fn audio_retention_defaults_to_90_days_round_trips_and_rejects_absurd_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        assert_eq!(audio_retention_days(&c).unwrap(), 90);
+        set_audio_retention_days(&c, 30).unwrap();
+        assert_eq!(audio_retention_days(&c).unwrap(), 30);
+        set_audio_retention_days(&c, 0).unwrap();
+        assert_eq!(
+            audio_retention_days(&c).unwrap(),
+            0,
+            "0 keeps audio forever"
+        );
+        assert!(set_audio_retention_days(&c, 3651).is_err());
+        c.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('audio_retention_days','x')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            audio_retention_days(&c).unwrap(),
+            90,
+            "junk means the default"
         );
     }
 }
