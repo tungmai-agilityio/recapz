@@ -7,7 +7,10 @@ import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
-import { useRecordingStorage, useSpeechProvider } from '../speech'
+import { useRecordingStorage, useSpeechProvider, useUsage } from '../speech'
+
+/** Micro-USD (1,000,000 = $1) as dollars; sub-cent amounts keep four decimals. */
+const usd = (micro: number) => `$${(micro / 1e6).toFixed(micro !== 0 && micro < 10_000 ? 4 : 2)}`
 
 /** What the server redirects back with after Google's consent screen. */
 const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
@@ -21,6 +24,7 @@ const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
 export function Recording() {
   const provider = useSpeechProvider()
   const storage = useRecordingStorage()
+  const usage = useUsage().data
   const qc = useQueryClient()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
@@ -94,6 +98,38 @@ export function Recording() {
           )}
         </div>
       </div>
+      {usage && (
+        <div className="mt-4 rounded-lg border border-hair bg-sheet">
+          <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+            <div>
+              <h2 className="font-semibold">Usage this month</h2>
+              <p className="mt-1 text-sm text-mute">Estimated from list prices, not an invoice. Only admins see this.</p>
+            </div>
+            <div className="text-sm">
+              {usage.paused && (
+                <p role="alert" className="mb-3 rounded-md bg-bad-wash px-3 py-2 text-bad">
+                  The monthly cap is reached. New transcripts, reports and search indexing wait until next month or a higher cap.
+                </p>
+              )}
+              <p>
+                <b>{usd(usage.total_micro_usd)}</b>
+                {usage.cap_micro_usd > 0 ? <> of {usd(usage.cap_micro_usd)} cap</> : ' (no cap set)'}
+                {' '}· speech {usd(usage.speech_micro_usd)} · language model {usd(usage.llm_micro_usd)}
+              </p>
+              {usage.meetings.length > 0 && (
+                <ul className="mt-3 divide-y divide-hair" aria-label="Cost per meeting">
+                  {usage.meetings.map((m) => (
+                    <li key={m.id} className="flex justify-between gap-3 py-1.5">
+                      <span className="truncate">{m.title}</span>
+                      <span className="font-mono">{usd(m.speech_micro_usd + m.llm_micro_usd)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {asking && (
         <ConfirmDialog title="Disconnect Google Calendar?" confirmLabel="Disconnect" busy={off.isPending}
           error={off.isError ? 'Could not disconnect. Try again.' : undefined}

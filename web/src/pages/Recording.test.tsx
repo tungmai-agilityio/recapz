@@ -97,3 +97,39 @@ test('names where recordings are kept and the retention period', async () => {
     'Finished recordings are kept in private object storage and their audio is deleted after 90 days. Transcripts and reports stay.',
   )
 })
+
+function showAs(role: string, usage: object) {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+    calls.push(u)
+    return new Response(JSON.stringify(
+      u === '/api/me' ? { email: 'a@b.c', name: null, role, speech_provider: 'Deepgram' }
+        : u === '/api/usage' ? usage : { connected: false, needs_reconnect: false },
+    ))
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  return calls
+}
+
+test("admins see this month's cost, the cap alert and the cost per meeting", async () => {
+  showAs('admin', {
+    speech_micro_usd: 546_000, llm_micro_usd: 4_000, total_micro_usd: 550_000, cap_micro_usd: 500_000, paused: true,
+    meetings: [{ id: 'm1', title: 'Weekly sync', speech_micro_usd: 468_000, llm_micro_usd: 2_000 }],
+  })
+  expect(await screen.findByText('Usage this month')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toMatch(/monthly cap is reached/)
+  expect(screen.getByText(/of \$0\.50 cap/).textContent).toBe('$0.55 of $0.50 cap · speech $0.55 · language model $0.0040')
+  expect(screen.getByRole('list', { name: 'Cost per meeting' }).textContent).toBe('Weekly sync$0.47')
+})
+
+test('members never ask for usage and see no usage card', async () => {
+  const calls = showAs('member', {})
+  await screen.findByText('Where audio goes')
+  await waitFor(() => expect(calls).toContain('/api/me'))
+  expect(calls).not.toContain('/api/usage')
+  expect(screen.queryByText('Usage this month')).toBeNull()
+})
