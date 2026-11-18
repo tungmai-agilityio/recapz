@@ -193,3 +193,21 @@ export const setAutoJoin = async (id: string, auto_join: boolean) => {
     method: 'PATCH', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ auto_join }),
   }))
 }
+
+export interface Doc { id: string; name: string; llm_ok: boolean; status: 'indexing' | 'indexed' | 'no text found' }
+
+export const getDocuments = async (): Promise<Doc[]> => (await check(await fetch('/api/documents'))).json()
+
+export async function uploadDocument(file: File): Promise<{ id: string }> {
+  const body = new FormData()
+  body.append('file', file)
+  return (await check(await fetch('/api/documents', { method: 'POST', body, headers: csrf() }))).json()
+}
+
+export const setDocumentLlmOk = async (id: string, llm_ok: boolean) => {
+  await check(await fetch(`/api/documents/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ llm_ok }),
+  }))
+}
+
+export const deleteDocument = async (id: string) => { await check(await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: csrf() })) }
