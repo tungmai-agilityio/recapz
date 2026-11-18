@@ -100,6 +100,24 @@ scenario "reviewer risk high" 1 ':' --reviewed-sha "$sha" --implementer-risk low
 scenario "docs-only PR, no reviewer" 0 'echo "F docs/ui-parity.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
 scenario "reviewer na with code" 1 ':' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
 scenario "reviewer na with CLAUDE.md" 1 'echo "F CLAUDE.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
-[ "$n" = 79 ] || { echo "ran $n cases, want 79"; fail=1; }
+# scripts/ci-changes.sh: which changed paths let ci.yml skip the rust and web steps.
+changes() { printf '%s\n' "$@" | scripts/ci-changes.sh; }
+want_changes() { # expected path...
+  n=$((n + 1)); local want="$1" got; shift; got=$(changes "$@")
+  [ "$got" = "code=$want" ] || { echo "ci-changes $*: got $got, want code=$want"; fail=1; }
+}
+want_changes false docs/deploy.md
+want_changes false docs/specs/a.md README.md docs/img/x.png
+want_changes true web/src/api.ts
+want_changes true docs/deploy.md crates/core/src/db.rs
+want_changes true CLAUDE.md
+want_changes true CONTRIBUTING.md docs/deploy.md
+want_changes true .claude/skills/y/SKILL.md
+want_changes true .github/workflows/ci.yml
+want_changes true Cargo.lock
+want_changes true docs/old.md scripts/x.sh
+want_changes true NOTES.md
+n=$((n + 1)); [ "$(scripts/ci-changes.sh </dev/null)" = code=true ] || { echo "empty list must run CI"; fail=1; }
+[ "$n" = 91 ] || { echo "ran $n cases, want 91"; fail=1; }
 [ "$fail" = 0 ] && echo "automerge: $n cases pass"
 exit "$fail"

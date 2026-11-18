@@ -92,6 +92,9 @@ maintainer. This section is how a ticket PR is checked. It merges without the ma
 1. Every CI check passed on the current HEAD, read by the merge step itself with `gh pr checks`: no pending, failed or
    skipped job. Editing a PR's title or labels must not replace the heavy results, so `ci.yml` (rust, web, guards)
    does not run on those edits and `pr-meta.yml` (commits, size) does.
+   A docs-only PR (every path under `docs/` or `README.md`; see `scripts/ci-changes.sh`) still runs these jobs, but
+   `rust` and `web` skip their steps and report a pass, so the required check names are never missing or skipped.
+   `CLAUDE.md`, `CONTRIBUTING.md`, `.claude/`, `.github/` and any other change run the full jobs.
 2. `code-reviewer` returns APPROVE with zero blockers for that HEAD, and every acceptance item is met.
 3. The PR's "Decisions needing the maintainer" section is exactly `None`. Choices settled from the spec go under
    "Decisions made", which does not block. A change touching privacy, data deletion or data sent to language-model
