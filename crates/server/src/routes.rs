@@ -418,6 +418,8 @@ struct Me {
     email: String,
     name: Option<String>,
     role: String,
+    /// Where call audio is sent; the upload and privacy screens name it.
+    speech_provider: &'static str,
 }
 
 async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
@@ -434,6 +436,7 @@ async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)
             email: u.email,
             name: u.name,
             role: u.role,
+            speech_provider: crate::config::Speech::PROVIDER,
         }),
     ))
 }

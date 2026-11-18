@@ -148,3 +148,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - 429, 5xx, timeouts and connect errors are retried twice (`Retry-After` honoured up to 30 s, else 2 s then 4 s); other 4xx fail at once. Errors hold the status or failure kind only.
 - Uses `reqwest` with its `blocking` feature (already a dependency elsewhere) rather than a new HTTP crate; the trait is synchronous and runs on the job thread. `tempfile` is a dev-dependency for the WAV round-trip test.
 - Not verified against the real service: query parameters, the `utterances` shape, the `multi` value, and that `utterances` carry `speaker` for Vietnamese. Mock server on localhost only; the https path and key header were not exercised. A 2 hour file (provider limit) is still unchecked (#226). Not wired into the server yet (#220).
+
+## Speech provider config
+- The server reads `RECAPZ_SPEECH_KEY` from the environment only (a key written under `[speech]` in `config.toml` is ignored) and refuses to start without it. `[speech] base_url` exists only so tests can point at a mock. The transcribe job now always uses the Deepgram transcriber; the whisper build feature and its model loader are no longer used by the server (removal is #225). `speech_model` is gone from the config.
+- `/api/me` returns `speech_provider: "Deepgram"`, a constant, since there is one provider. A second provider would need a config field and a real lookup.
+- Not verified: starting the real binary with a real key, and a real transcription. The start check and the `/api/me` field are covered by unit and router tests only.

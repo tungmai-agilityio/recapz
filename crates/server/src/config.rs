@@ -48,6 +48,31 @@ pub struct Llm {
     pub price_output: u64,
 }
 
+/// The hosted speech provider. The key is never read from the config file: `Config::load` takes
+/// it from `RECAPZ_SPEECH_KEY`.
+#[derive(Deserialize, Clone)]
+#[serde(default)]
+pub struct Speech {
+    /// Endpoint override, so tests can point at a local mock.
+    pub base_url: String,
+    #[serde(skip)]
+    pub api_key: String,
+}
+
+impl Speech {
+    /// Shown to members and in `/api/me`: where call audio is sent.
+    pub const PROVIDER: &'static str = "Deepgram";
+}
+
+impl Default for Speech {
+    fn default() -> Self {
+        Self {
+            base_url: recapz_speech::deepgram::DEEPGRAM_BASE.into(),
+            api_key: String::new(),
+        }
+    }
+}
+
 /// Settings for the browser notetaker.
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
@@ -69,8 +94,7 @@ pub struct Config {
     pub google: Google,
     pub llm: Llm,
     pub notetaker: Notetaker,
-    /// ggml speech model file used by the transcribe job (needs the `whisper` build feature).
-    pub speech_model: PathBuf,
+    pub speech: Speech,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
     /// Text embedder for Ask search: `hash` (built in) or `hosted` (see `[llm] embedding_model`). Changing it re-indexes meetings at start.
@@ -96,7 +120,7 @@ impl Default for Config {
             google: Google::default(),
             llm: Llm::default(),
             notetaker: Notetaker::default(),
-            speech_model: "./models/ggml-large-v3-turbo.bin".into(),
+            speech: Speech::default(),
             ask_per_minute: 20,
             embedder: "hash".into(),
             max_concurrent_calls: 2,
@@ -107,6 +131,17 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Startup check: transcription cannot run without the speech key.
+    pub fn require_speech_key(&self) -> anyhow::Result<()> {
+        if self.speech.api_key.trim().is_empty() {
+            anyhow::bail!(
+                "RECAPZ_SPEECH_KEY is not set: put the {} key in the environment file (never in config.toml)",
+                Speech::PROVIDER
+            );
+        }
+        Ok(())
+    }
+
     pub fn load(path: &str) -> anyhow::Result<Self> {
         let mut cfg = match std::fs::read_to_string(path) {
             Ok(s) => toml::from_str(&s)?,
@@ -114,6 +149,27 @@ impl Config {
             Err(e) => return Err(e.into()),
         };
         cfg.secret_key = std::env::var("RECAPZ_SECRET_KEY").unwrap_or_default();
+        cfg.speech.api_key = std::env::var("RECAPZ_SPEECH_KEY").unwrap_or_default();
         Ok(cfg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn start_is_refused_without_a_speech_key_and_the_key_never_comes_from_the_file() {
+        let mut cfg: Config = toml::from_str("[speech]\napi_key = \"from-file\"").unwrap();
+        assert_eq!(cfg.speech.api_key, "", "a key in config.toml is ignored");
+        let e = cfg.require_speech_key().unwrap_err().to_string();
+        assert!(
+            e.contains("RECAPZ_SPEECH_KEY") && !e.contains("from-file"),
+            "{e}"
+        );
+        cfg.speech.api_key = "  ".into();
+        assert!(cfg.require_speech_key().is_err());
+        cfg.speech.api_key = "k".into();
+        assert!(cfg.require_speech_key().is_ok());
     }
 }

@@ -8,7 +8,7 @@ sudo install -m 0755 target/release/recapz /usr/local/bin/recapz
 sudo useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
 sudo install -d -m 0750 -o recapz -g recapz /etc/recapz
 sudo install -m 0640 -o recapz -g recapz config.toml /etc/recapz/config.toml   # never commit config.toml
-sudo install -m 0640 -o recapz -g recapz /dev/null /etc/recapz/recapz.env       # then add RECAPZ_SECRET_KEY, see below
+sudo install -m 0640 -o recapz -g recapz /dev/null /etc/recapz/recapz.env       # then add RECAPZ_SECRET_KEY and RECAPZ_SPEECH_KEY, see below
 sudo install -m 0644 deploy/recapz.service deploy/recapz-xvfb.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
@@ -26,6 +26,8 @@ journalctl -u recapz -f
 ```sh
 sudo apt install chromium xvfb          # or your distribution's Chromium; or set [notetaker] chromium_path
 echo "RECAPZ_SECRET_KEY=$(openssl rand -hex 32)" | sudo tee -a /etc/recapz/recapz.env >/dev/null
+# the Deepgram key: the server refuses to start without it (add it by editing the file, not on the command line)
+sudoedit /etc/recapz/recapz.env   # add a line: RECAPZ_SPEECH_KEY=...
 ```
 
 - `RECAPZ_SECRET_KEY` encrypts stored Google refresh tokens. Keep a copy somewhere safe: losing it means every member reconnects the calendar. Never put it in `config.toml`.

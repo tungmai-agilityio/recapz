@@ -2,27 +2,15 @@ use crate::report_model::LlmReportModel;
 use recapz_core::{
     db, document, embed::Embedder, index_job, jobs, label_job, report_job, transcribe_job,
 };
+#[cfg(test)]
+use recapz_speech::transcribe::StubTranscriber;
 use recapz_speech::transcribe::Transcriber;
 use std::{path::PathBuf, sync::Arc, time::Duration};
-
-/// Loads the recognizer once. Without the `whisper` feature or a model file, transcribe jobs fail
-/// with a clear error (and retry) instead of storing made-up text.
-fn load_transcriber(model: &std::path::Path) -> Option<Box<dyn Transcriber>> {
-    #[cfg(feature = "whisper")]
-    if model.is_file() {
-        return recapz_speech::transcribe::WhisperTranscriber::load(model)
-            .map(|t| Box::new(t) as Box<dyn Transcriber>)
-            .map_err(|e| tracing::error!("speech model: {e:#}"))
-            .ok();
-    }
-    let _ = model;
-    None
-}
 
 /// Report jobs run only when a language model is configured; otherwise they stay queued.
 fn run_pending(
     data_dir: &std::path::Path,
-    tx: Option<&dyn Transcriber>,
+    tx: &dyn Transcriber,
     report: Option<&LlmReportModel>,
     embedder: &dyn Embedder,
 ) -> anyhow::Result<bool> {
@@ -46,15 +34,14 @@ fn run_pending(
     let mut ran = false;
     for tenant in db::tenant_ids(&control)? {
         let conn = db::open_tenant(data_dir, &tenant)?;
-        ran |= jobs::run_once(&conn, kinds, |c, j| match (j.kind.as_str(), tx, report) {
-            (transcribe_job::KIND, Some(tx), r) => {
+        ran |= jobs::run_once(&conn, kinds, |c, j| match (j.kind.as_str(), report) {
+            (transcribe_job::KIND, r) => {
                 transcribe_job::handle(c, j, data_dir, &tenant, tx, r.is_some())
             }
-            (transcribe_job::KIND, None, _) => anyhow::bail!("no speech model configured"),
-            (label_job::KIND, _, _) => label_job::handle(c, j, data_dir, &tenant),
-            (report_job::KIND, _, Some(m)) => report_job::handle(c, j, m),
-            (index_job::KIND, _, _) => index_job::handle(c, j, embedder),
-            (document::KIND, _, _) => document::handle(c, data_dir, &tenant, j, embedder),
+            (label_job::KIND, _) => label_job::handle(c, j, data_dir, &tenant),
+            (report_job::KIND, Some(m)) => report_job::handle(c, j, m),
+            (index_job::KIND, _) => index_job::handle(c, j, embedder),
+            (document::KIND, _) => document::handle(c, data_dir, &tenant, j, embedder),
             _ => anyhow::bail!("no handler for {}", j.kind),
         })?;
     }
@@ -75,12 +62,11 @@ fn requeue_stale(data_dir: &std::path::Path, embedder_id: &str) -> anyhow::Resul
 /// Polls every tenant's queue once a second, draining while work remains.
 pub fn spawn(
     data_dir: PathBuf,
-    model: PathBuf,
+    tx: Arc<dyn Transcriber>,
     report: Option<Arc<LlmReportModel>>,
     embedder: Arc<dyn Embedder>,
 ) {
     tokio::spawn(async move {
-        let tx: Option<std::sync::Arc<dyn Transcriber>> = load_transcriber(&model).map(Into::into);
         let (d, e) = (data_dir.clone(), embedder.clone());
         match tokio::task::spawn_blocking(move || requeue_stale(&d, e.id())).await {
             Ok(Ok(n)) if n > 0 => {
@@ -98,7 +84,7 @@ pub fn spawn(
                 embedder.clone(),
             );
             match tokio::task::spawn_blocking(move || {
-                run_pending(&d, t.as_deref(), r.as_deref(), e.as_ref())
+                run_pending(&d, t.as_ref(), r.as_deref(), e.as_ref())
             })
             .await
             {
@@ -142,7 +128,7 @@ mod tests {
         .unwrap();
         let off = document::add(&conn, dir.path(), &tenant, "m1", "a.txt", b"alpha beta").unwrap();
         let emb = Counting(Default::default());
-        assert!(run_pending(dir.path(), None, None, &emb).unwrap());
+        assert!(run_pending(dir.path(), &StubTranscriber, None, &emb).unwrap());
         assert_eq!(emb.0.load(SeqCst), 0, "toggle off: nothing is embedded");
         let chunks = |id: &str| -> i64 {
             conn.query_row(
@@ -154,7 +140,7 @@ mod tests {
         };
         assert_eq!(chunks(&off), 1, "still keyword-searchable");
         assert!(document::set_llm_ok(&conn, "m1", &off, true).unwrap());
-        assert!(run_pending(dir.path(), None, None, &emb).unwrap());
+        assert!(run_pending(dir.path(), &StubTranscriber, None, &emb).unwrap());
         assert_eq!(emb.0.load(SeqCst), 1, "toggle on: one chunk embedded");
     }
 
@@ -168,7 +154,13 @@ mod tests {
         let conn = db::open_tenant(dir.path(), &tenants[0]).unwrap();
         let id = jobs::enqueue(&conn, report_job::KIND, Some("m1"), None).unwrap();
         assert!(
-            !run_pending(dir.path(), None, None, &recapz_core::embed::HashEmbedder).unwrap(),
+            !run_pending(
+                dir.path(),
+                &StubTranscriber,
+                None,
+                &recapz_core::embed::HashEmbedder
+            )
+            .unwrap(),
             "no job should run"
         );
         assert_eq!(
