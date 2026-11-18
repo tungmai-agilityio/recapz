@@ -28,4 +28,4 @@ lint:
 
 release:
 	pnpm -C web build
-	cargo build --release
+	cargo build --release -p recapz-server --features whisper,cuda

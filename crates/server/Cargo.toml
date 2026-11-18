@@ -36,3 +36,4 @@ async-trait = "0.1"
 
 [features]
 whisper = ["recapz-speech/whisper"]
+cuda = ["whisper", "recapz-speech/cuda"]
