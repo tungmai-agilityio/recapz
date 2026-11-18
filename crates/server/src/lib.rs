@@ -8,3 +8,4 @@ pub mod notetaker_loop;
 pub mod report_model;
 pub mod routes;
 pub mod runner;
+pub mod storage;

@@ -31,6 +31,8 @@ pub struct App {
     /// Language-model router for Ask; `None` when no provider is configured.
     llm: Option<Arc<recapz_llm::Router>>,
     embedder: Arc<dyn recapz_core::embed::Embedder>,
+    /// Object store holding finished recordings; `None` keeps them on local disk.
+    store: Option<Arc<crate::storage::S3Store>>,
     /// When each member last asked, newest last; pruned to the last minute on every check.
     // ponytail: in memory and per process; a restart resets it, which is fine for one server.
     asks: Arc<
@@ -59,7 +61,15 @@ pub fn router_with_llm(
 ) -> Router {
     let embedder =
         crate::embedder::from_config(&cfg.embedder, &cfg.llm).expect("embedder checked at start");
+    let store =
+        crate::storage::S3Store::from_config(&cfg.storage, tokio::runtime::Handle::current())
+            .unwrap_or_else(|e| {
+                tracing::error!("storage config: {e:#}");
+                None
+            })
+            .map(Arc::new);
     let app = App {
+        store,
         embedder,
         cfg: Arc::new(cfg),
         control,
@@ -648,6 +658,7 @@ async fn delete_meeting(
 ) -> Res<StatusCode> {
     let u = app.current_user(&jar).await?;
     let (dir, tenant) = (app.cfg.data_dir.clone(), u.tenant_id.clone());
+    let store = app.store.clone();
     app.tenant(tenant.clone(), move |c| {
         ensure_member(c, &u)?;
         let Some(m) = visible_meeting(c, &u.id, &id)? else {
@@ -668,7 +679,15 @@ async fn delete_meeting(
         ) {
             return Ok(Err(ApiError::Conflict("meeting is still processing")));
         }
-        if purge_meeting(c, &dir, &tenant, &id)? {
+        if purge_meeting(
+            c,
+            &dir,
+            &tenant,
+            &id,
+            store
+                .as_deref()
+                .map(|s| s as &dyn recapz_core::blobs::Blobs),
+        )? {
             tracing::info!(tenant = %tenant, meeting = %id, member = %u.id, "meeting deleted");
         }
         Ok(Ok(()))
@@ -851,20 +870,24 @@ async fn meeting_audio(
 ) -> Res<Response> {
     let u = app.current_user(&jar).await?;
     let (uid, tenant) = (u.id.clone(), u.tenant_id.clone());
-    let rel = app
+    let (rel, remote) = app
         .tenant(tenant.clone(), move |c| {
             ensure_member(c, &u)?;
             if visible_meeting(c, &uid, &id)?.is_none() {
                 return Ok(None);
             }
-            Ok(c.query_row(
-                "SELECT audio_path FROM meetings WHERE id = ?1",
+            let (path, remote) = c.query_row(
+                "SELECT audio_path, audio_remote FROM meetings WHERE id = ?1",
                 [&id],
-                |r| r.get::<_, Option<String>>(0),
-            )?)
+                |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, bool>(1)?)),
+            )?;
+            Ok(path.map(|p| (p, remote)))
         })
         .await?
         .ok_or(ApiError::NotFound)?;
+    if remote {
+        return remote_audio(&app, &tenant, &rel, &headers).await;
+    }
     let mut f = tokio::fs::File::open(db::tenant_dir(&app.cfg.data_dir, &tenant).join(&rel))
         .await
         .map_err(|_| ApiError::NotFound)?;
@@ -897,6 +920,38 @@ async fn meeting_audio(
             format!("bytes {start}-{end}/{len}").parse().unwrap(),
         );
     }
+    Ok(res)
+}
+
+/// Largest piece fetched from the bucket for one ranged request. A player asking `bytes=0-` for a
+/// whole recording gets this much with 206 and asks again for the rest.
+const REMOTE_CHUNK: u64 = 8 * 1024 * 1024;
+
+/// Plays a recording that lives in the object store: ranged requests become ranged GETs, a plain
+/// request streams the whole object. The bucket is private; this is the only way to reach it.
+async fn remote_audio(app: &App, tenant: &str, rel: &str, headers: &HeaderMap) -> Res<Response> {
+    let store = app
+        .store
+        .as_ref()
+        .ok_or(ApiError::Unavailable("recording storage is not configured"))?;
+    let key = recapz_core::blobs::audio_key(tenant, rel);
+    let len = store.size(&key).await?.ok_or(ApiError::NotFound)?;
+    let ctype = [
+        (header::CONTENT_TYPE, audio_type(rel).to_string()),
+        (header::ACCEPT_RANGES, "bytes".to_string()),
+    ];
+    let Some(h) = headers.get(header::RANGE).and_then(|v| v.to_str().ok()) else {
+        let body = Body::from_stream(store.stream(&key).await?);
+        return Ok((StatusCode::OK, ctype, body).into_response());
+    };
+    let (start, end) = parse_range(h, len).ok_or(ApiError::BadRange(len))?;
+    let end = end.min(start + REMOTE_CHUNK - 1);
+    let bytes = store.range(&key, start, end).await?;
+    let mut res = (StatusCode::PARTIAL_CONTENT, ctype, bytes).into_response();
+    res.headers_mut().insert(
+        header::CONTENT_RANGE,
+        format!("bytes {start}-{end}/{len}").parse().unwrap(),
+    );
     Ok(res)
 }
 
