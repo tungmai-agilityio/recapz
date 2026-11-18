@@ -19,7 +19,8 @@ and a hosted provider was an opt-in. Provider facts were read from provider docs
 | Cost | Per-meeting usage (audio seconds, tokens) stored; estimated cost shown to admins; a monthly cap in config pauses new jobs |
 | Failure | Audio stays on disk, jobs retry with backoff, streaming failure never blocks recording and the live view says "live transcript unavailable". Auth and quota errors fail fast with an admin alert. No automatic second provider |
 | Local whisper | Dropped: `whisper-rs`, the CUDA build and model files leave the build and docs. The `Transcriber` trait stays so a local engine can return. Upload decoding (symphonia) stays |
-| Deploy | 2 vCPU, 4 GB RAM, 40 GB disk, `max_concurrent_calls = 2`. Chromium per call is the memory driver and WAV audio (about 115 MB per hour) the disk driver |
+| Recording storage | Hetzner Object Storage (S3-compatible), decided 2026-11-18. The notetaker still writes WAV to local disk during the call; after a successful batch transcript the file is uploaded to the bucket and the local copy removed. Playback streams from the bucket with range requests. Deleting a meeting, opt-out or participant purge hard-deletes the objects. The bucket is private, one deployment key in the env file, and is named on the privacy screen as a place audio is kept |
+| Deploy | 2 vCPU, 4 GB RAM, 40 GB disk, `max_concurrent_calls = 2`. Chromium per call is the memory driver and in-call WAV (about 115 MB per hour, local only until uploaded) the disk driver; recordings live in object storage |
 
 ## Why Deepgram
 
@@ -55,12 +56,15 @@ hour meeting with the live view on costs about $1. The monthly cap in config is 
 | 5 | `feat(speech): add the Deepgram batch transcriber` | Mock-server tests for parsing, speaker mapping, retry on 429, no retry on 401, no key or text in errors |
 | 6 | `feat(server): add speech provider config and disclosure` | Missing key fails at start; `/api/me` reports the provider |
 | 7 | `feat(web): name the speech provider on upload and privacy` | jsdom test; matches the prototype per `docs/ui-parity.md` |
+| 8a | `feat(core): keep recordings in object storage` | Upload after transcript, ranged playback, hard delete of objects on delete, opt-out and purge; mock S3 tests; one new dependency with its reason |
 | 8 | `feat(core): record usage and enforce the monthly cap` | Usage rows per meeting; cap pauses new jobs; admin sees estimated cost |
 | 9 | `feat(speech): add the Deepgram streaming transcriber` | Mock WebSocket test; failure never stops recording (Live Ask ticket #191 uses it) |
 | 10 | `refactor(speech): remove whisper and CUDA` | Build, Makefile, config, `docs/running-locally.md` and README no longer mention it |
 | 11 | Manual check, no PR | A 2 hour file and a live call on a real key confirm limits, Vietnamese quality and the 6 s Live Ask bar |
 
 ## Open questions
+
+- Hetzner Object Storage regions: whether one sits near the Singapore VM (*unverified*; if not, playback latency and cross-region transfer need a check). Audio retention period (suggested 90 days, admin-settable).
 
 - Exact Deepgram and OpenAI settings that give no training and no retention (*unverified*).
 - Whether Deepgram streaming accepts the notetaker's 16 kHz mono i16 frames as they are (expected yes).
