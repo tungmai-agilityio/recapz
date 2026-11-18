@@ -3,7 +3,7 @@
 //! event with the moments used, then `done`. Retrieval applies the access rule inside the query.
 use super::*;
 use recapz_core::search;
-use recapz_llm::ask::{answer_stream, Excerpt};
+use recapz_llm::ask::{answer_stream, Excerpt, Source};
 use tokio::io::AsyncWriteExt;
 
 const TOP_K: usize = 6;
@@ -53,7 +53,15 @@ pub async fn ask(
     let excerpts: Vec<Excerpt> = sendable
         .iter()
         .map(|h| Excerpt {
-            start_ms: h.start_ms,
+            source: if h.meeting_id.is_some() {
+                Source::Meeting {
+                    start_ms: h.start_ms,
+                }
+            } else {
+                Source::Document {
+                    title: h.title.clone(),
+                }
+            },
             text: h.text.clone(),
         })
         .collect();
