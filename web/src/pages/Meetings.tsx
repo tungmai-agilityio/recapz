@@ -6,6 +6,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
+import { LiveCard } from './LiveCard'
 import { NextUp } from './NextUp'
 import { Face } from '../ui/Face'
 import { Ribbon } from '../ui/Ribbon'
@@ -136,6 +137,7 @@ export function Meetings() {
           <Button variant="primary" onClick={() => setSending(true)}>Send notetaker</Button>
         </>} />
       {sending && <SendNotetaker onClose={() => setSending(false)} />}
+      {data?.filter((m) => m.status === 'recording').map((m) => <LiveCard key={m.id} m={m} />)}
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
       <div className="frame flex min-w-0 flex-col gap-7">
       {isLoading && <p className="text-mute">Loading…</p>}

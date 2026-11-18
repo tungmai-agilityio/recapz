@@ -65,8 +65,11 @@ definition of done for every web PR.
 - [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
       no opted-out state exists in the list data)
 - [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
-- [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording (not built: the live
-      view exists at `/meetings/:id/live` but the list has no card yet; rows with status `recording` show a Recording badge, and the rail links to the live view)
+- [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
+      Open: built without the ribbon (the live stream has no speaker labels): Recording badge, title, platform, time
+      since the call was admitted (counts every second), and an "Open live view" link; one card per recording call
+      above the list. Checked in jsdom only, no screenshot and no prototype side-by-side. Rows with status `recording`
+      also keep their Recording badge, and the rail links to the live view.
 - [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
 `GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built and ticked after the screenshot pass.

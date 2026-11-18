@@ -169,7 +169,9 @@ test('recording and joining meetings get their stage badge; Send notetaker opens
   const rows = [{ id: '1', title: 'Live one', platform: 'meet', status: 'recording', started_at: 5, created_at: 5 }]
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
   show()
-  expect((await screen.findByText('Recording')).className).toContain('text-signal-ink')
+  // The row keeps its badge next to the card's.
+  const row = (await screen.findByRole('link', { name: 'Live one' })).closest('li')!
+  expect(within(row).getByText('Recording').className).toContain('text-signal-ink')
   fireEvent.click(screen.getByRole('button', { name: 'Send notetaker' }))
   expect(screen.getByRole('dialog', { name: 'Send notetaker' })).toBeTruthy()
   fireEvent.keyDown(document.body, { key: 'Escape' })
@@ -211,4 +213,32 @@ test('shows duration, action items, ribbon and faces from the list data, and hid
   expect(bare.querySelector('[data-variant]')).toBeNull()
   expect(within(bare).queryAllByRole('img')).toEqual([])
   expect(screen.getByText('3 meetings this month · 48 min recorded · all audio stays on your server')).toBeTruthy()
+})
+
+test('a call being recorded gets a card with its elapsed time that keeps counting and a link to its live view', async () => {
+  const now = new Date(2026, 10, 12, 12).getTime()
+  vi.useFakeTimers({ toFake: ['Date'], now })
+  const rows = [
+    { id: 'r1', title: 'Client call', platform: 'meet', status: 'recording', started_at: now - 125_000, created_at: now },
+    { id: 'r2', title: 'Board call', platform: 'meet', status: 'recording', started_at: now - 3_725_000, created_at: now },
+    { id: 'd1', title: 'Finished call', platform: 'meet', status: 'ready', started_at: now - 9_000_000, created_at: now },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  show()
+  const cards = await screen.findAllByTestId('live-card')
+  expect(cards).toHaveLength(2)
+  expect(within(cards[0]).getByText('Client call')).toBeTruthy()
+  expect(within(cards[0]).getByText('2:05')).toBeTruthy()
+  expect(within(cards[1]).getByText('1:02:05')).toBeTruthy()
+  expect(within(cards[0]).getByRole('link', { name: 'Open live view' }).getAttribute('href')).toBe('/meetings/r1/live')
+  expect(within(cards[1]).getByRole('link', { name: 'Open live view' }).getAttribute('href')).toBe('/meetings/r2/live')
+  vi.setSystemTime(now + 5_000)
+  await waitFor(() => expect(within(cards[0]).getByText('2:10')).toBeTruthy(), { timeout: 2500 })
+})
+
+test('no card without a recording call', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ id: '1', title: 'Weekly sync', platform: 'meet', status: 'ready', started_at: 1, created_at: 1 }]))))
+  show()
+  await screen.findByText('Weekly sync')
+  expect(screen.queryByTestId('live-card')).toBeNull()
 })
