@@ -40,6 +40,17 @@ SQLite per tenant via rusqlite. Speech via whisper-rs. LLM via crates/llm (Anthr
 - Branches `<type>/<name>`, commits and PR titles `type(scope): summary` (Conventional Commits, CONTRIBUTING.md). Merge your own PRs under "Merging and escalation" below. After a merge, clean up the local branch as the `pull-request` skill says.
 - `gh`: use the account that has access to this repository; if several are logged in, set `GH_TOKEN` per command and never `gh auth switch` (see `pull-request`).
 
+## Autonomy
+
+A spec the maintainer confirmed, and the tickets planned from it, are approved work. Do not ask the maintainer for
+review, confirmation or a choice while shipping them. After `plan-tickets`, go on with `ship-epic` in the same
+session unless the maintainer said "spec only".
+
+When something is unclear, decide in this order and record it under "Decisions made" in the PR: the ticket's
+Acceptance, the spec, `docs/decisions/`, an existing pattern in the code, then the smallest reversible option.
+Never use the interactive question tool or end a turn with a question inside `ship-ticket` or `ship-epic`;
+stop only for the conditions under "Merging and escalation".
+
 ## Merging and escalation
 
 Work autonomously. Merge your own PR (squash, `--match-head-commit` on the commit you checked) once CI is green on
@@ -47,14 +58,23 @@ the current HEAD, `code-reviewer` has approved that HEAD (docs-only PRs skip the
 open decision. Do not wait for the maintainer.
 
 Escalate only when the change is critical: leave the PR open, set the ticket `status:needs-human` with a comment
-saying why, and notify the maintainer. Critical means any of:
+saying why, and notify the maintainer. Then go on with independent tickets. Critical means any of:
+
+*Always critical* (a spec cannot pre-approve these):
 - it breaks, or needs to bend, a hard rule or the clean-room rules;
-- meeting access, sign-in, sessions, secrets, or anything that decides who can see data;
-- data leaving the server, data deletion, or a migration that rewrites or drops data;
+- sign-in, sessions, CSRF or secrets;
+- data going to a destination the hard rules do not already allow;
+- a migration that rewrites or drops data, or a deletion of user data the spec does not name;
 - a production deploy, a new dependency with a doubtful licence or security record, or a new system requirement;
 - the guard rails themselves: `CLAUDE.md`, the push and test guards, `scripts/git-hooks/`, the auto-merge scripts, CI;
-- a product decision the spec does not make, or a spec that turns out to be wrong;
+- the change deviates from the spec, the spec turns out to be wrong, or a product decision is needed that the spec
+  does not make;
 - CI still red or reviewer blockers still open after the retry caps in `docs/specs/delivery-pipeline.md`.
+
+*Critical only when the spec does not decide it*: meeting access rules (who can see a meeting), transcript text,
+questions or marked documents going to the language-model and embedding providers, an additive migration, and
+deleting user data. If the spec decides it, the ticket's Acceptance names it and `code-reviewer` confirms the diff
+matches, it is routine: merge it.
 
 `scripts/automerge-check.sh` is a signal, not the rule: read its reasons. A reason that is only a denylisted path,
 for a change that is not critical by the list above, may be merged anyway; name the overridden paths in the audit
