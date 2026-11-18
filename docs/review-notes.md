@@ -189,3 +189,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `GET /api/usage` (admin only) returns the month's totals, the cap, `paused`, and the 20 costliest meetings. **Not built yet:** the admin alert and per-meeting cost on screen; they need a web PR (next). Nothing logs or notifies when the cap is first reached.
 - Not verified: the estimate against a real Deepgram or provider invoice.
 - Per-meeting cost follows the same access rule as every meeting read: an admin sees titles and costs only for meetings they own or that are shared with the workspace; the month totals count every meeting. Deleting a meeting removes its usage rows, so a purge lowers the reported spend (and can lift a pause), same as `llm_usage` already did.
+
+## Usage card (web part of #223)
+- Recording & privacy shows admins a "Usage this month" card: estimated total, cap (or "no cap set"), speech and language-model split, a red alert when the cap is reached, and the cost per meeting (up to 20, only meetings the admin may see). Members never call `/api/usage`. Amounts are estimates from list prices, said so on the card.
+- Checked in Chrome at 1280 px (Daylight light) with the API mocked, not Ink, dark, a phone width of this card, or a real server. Nothing notifies an admin outside this screen when the cap is first reached (no email or banner elsewhere).
