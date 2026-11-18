@@ -40,6 +40,7 @@ pub struct App {
 
 mod ask;
 mod connect;
+mod documents;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
     let llm = crate::report_model::router_from_config(&cfg.llm)
@@ -95,6 +96,15 @@ pub fn router_with_llm(
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
         .route("/api/ask", post(ask::ask))
+        .route(
+            "/api/documents",
+            get(documents::list)
+                .merge(post(documents::upload).layer(DefaultBodyLimit::max(documents::BODY_LIMIT))),
+        )
+        .route(
+            "/api/documents/{id}",
+            patch(documents::set_llm_ok).delete(documents::delete),
+        )
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
