@@ -4,13 +4,9 @@ One command once the setup below is done: `make local` (server with real transcr
 
 ## Setup (once)
 
-1. Install Rust (version pinned in `rust-toolchain.toml`), Node and pnpm, then `brew install cmake` (builds the speech engine).
-2. Download a ggml speech model. For a quick local test the small multilingual one (about 470 MB) is enough; the default `large-v3-turbo` is 1.6 GB.
-   ```sh
-   mkdir -p models && curl -L -o models/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
-   ```
+1. Install Rust (version pinned in `rust-toolchain.toml`), Node and pnpm, then `brew install cmake` (until the local speech engine leaves the build).
+2. Get a Deepgram API key and export it before starting: `export RECAPZ_SPEECH_KEY=...` (read from the environment only, never `config.toml`). The server refuses to start without it, and call and upload audio is sent to Deepgram.
 3. `cp config.example.toml config.toml` (never commit it) and set:
-   - `speech_model = "./models/ggml-small.bin"`
    - `bootstrap_admin_email = "you@example.com"`
    - `dev_login = true` (local only; Google sign-in is not needed)
    - `base_url = "http://localhost:5173"`: the server rejects browser POSTs (upload, Ask) whose Origin is not `base_url`, and the browser talks to the web app on :5173. Leave the default and every upload and Ask in the browser returns 403.

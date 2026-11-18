@@ -2,12 +2,17 @@ data_dir = "./data"
 base_url = "http://localhost:8080"
 bind = "127.0.0.1:8080"
 bootstrap_admin_email = ""   # first admin, invited on first start
-speech_model = "./models/ggml-large-v3-turbo.bin"  # ggml file; needs a build with --features whisper
 embedder = "hash"  # Ask text embedder: "hash" (built in, no download) or "hosted" (uses [llm] embedding_*; sends text to that provider)
 ask_per_minute = 20  # questions per member per minute
 dev_login = false            # local development only: enables POST /auth/dev-login
 max_concurrent_calls = 2     # calls the notetaker may be in at once
 max_call_minutes = 240       # hard cap on one call
+
+# Hosted speech (Deepgram). All call and upload audio is sent to this provider.
+# The key is never read from this file: set RECAPZ_SPEECH_KEY in the environment (or /etc/recapz/recapz.env).
+# The server refuses to start without it.
+[speech]
+# base_url = "https://api.deepgram.com"   # override only for tests
 
 [google]
 client_id = ""
@@ -15,7 +20,7 @@ client_secret = ""
 
 # Meeting reports. Leave `provider` empty to skip reports.
 # Only transcript text, documents marked "May be sent to the language model" and a member's question
-# text are sent to the provider (also to the embedding endpoint); audio never leaves the server.
+# text are sent to the provider (also to the embedding endpoint); audio goes only to the speech provider above.
 [llm]
 provider = ""            # "anthropic" or "openai" (any OpenAI-compatible server)
 base_url = ""            # required for "openai", e.g. http://localhost:8000/v1

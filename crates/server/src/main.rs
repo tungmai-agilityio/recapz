@@ -1,5 +1,6 @@
 use recapz_core::db;
 use recapz_server::{config::Config, report_model::LlmReportModel, routes, runner};
+use recapz_speech::deepgram::DeepgramTranscriber;
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -14,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(result) = recapz_server::cli::run(std::env::args().nth(1).as_deref(), &cfg) {
         return result;
     }
+    cfg.require_speech_key()?;
     let control = db::open_control(&cfg.data_dir)?;
     if !cfg.bootstrap_admin_email.is_empty() {
         db::bootstrap_admin(&control, &cfg.bootstrap_admin_email)?;
@@ -32,7 +34,10 @@ async fn main() -> anyhow::Result<()> {
     let embedder = recapz_server::embedder::from_config(&cfg.embedder, &cfg.llm)?; // fail fast on a bad name
     runner::spawn(
         cfg.data_dir.clone(),
-        cfg.speech_model.clone(),
+        Arc::new(DeepgramTranscriber::new(
+            &cfg.speech.base_url,
+            &cfg.speech.api_key,
+        )?),
         report,
         embedder,
     );
