@@ -49,7 +49,7 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 
 Two adapters (Anthropic Messages, OpenAI-compatible Chat Completions) behind a `Provider` trait and a
 per-task `Router`. Reports are written once and stored. Ask sends only top retrieved chunks. Outputs are
-JSON validated against a schema. Only transcript text, and text of documents the uploader marked "May be sent to the language model", go to providers; audio never leaves the server.
+JSON validated against a schema. Only transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent to the language model", go to providers; audio never leaves the server.
 
 ## Web
 
