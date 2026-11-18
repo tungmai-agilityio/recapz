@@ -37,7 +37,7 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   fireEvent.click(screen.getByRole('button', { name: 'Account' }))
   expect(screen.getByRole('menu').textContent).toContain('Admin')
   expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
-  expect(screen.getAllByTestId('v1-dot').length).toBe(4)
+  expect(screen.getAllByTestId('v1-dot').length).toBe(5)
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
 })
