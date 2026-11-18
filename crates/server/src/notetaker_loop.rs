@@ -25,8 +25,8 @@ const LEAD_MS: i64 = 60_000;
 
 /// What the call posts in chat on admission. A setting for it comes with the settings API; the
 /// words "opt out" must stay, they are what members are told to type.
-const NOTICE: &str = "Recapz notetaker is recording and transcribing this call. \
-Type 'opt out' to make it leave and delete the recording.";
+const NOTICE: &str = "Recapz notetaker is recording this call and transcribing it live; \
+the audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording.";
 
 pub struct Settings {
     pub data_dir: PathBuf,
@@ -34,6 +34,8 @@ pub struct Settings {
     pub chromium: PathBuf,
     pub max_concurrent: usize,
     pub max_call_minutes: u32,
+    /// Streaming speech for the live view; `None` leaves it off.
+    pub live: Option<crate::notetaker::Live>,
 }
 
 fn tmp_dir(data_dir: &Path) -> PathBuf {
@@ -149,6 +151,7 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
             &url,
             max_call_ms,
             &mut driver,
+            s.live.as_ref(),
             now_ms,
         )
         .await
@@ -433,5 +436,11 @@ mod tests {
     fn the_notice_names_the_phrase_people_type_to_opt_out() {
         assert!(NOTICE.contains("'opt out'"));
         assert!(recapz_notetaker::optout::is_opt_out("opt out"));
+    }
+
+    #[test]
+    fn the_notice_says_the_call_is_live_and_names_the_speech_provider() {
+        assert!(NOTICE.contains("live"));
+        assert!(NOTICE.contains(crate::config::Speech::PROVIDER));
     }
 }

@@ -1,6 +1,7 @@
 //! Runs the notetaker for `scheduled` meetings: claim them (capped), join through a `CallDriver`,
 //! record, then hand the audio to transcription or fail the meeting with a reason.
 //! A real driver and the spawned loop come with the Meet driver; this is the part that needs no browser.
+use crate::live::{hub, Msg};
 use anyhow::Result;
 use recapz_core::{
     db::{now_ms, tenant_dir},
@@ -13,11 +14,13 @@ use recapz_notetaker::{
     session::{Action, Event, LeaveReason, Session},
     wav::{self, WavWriter},
 };
+use recapz_speech::stream::{DeepgramStream, LiveEvent};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
     path::Path,
+    sync::mpsc::Receiver,
 };
 
 /// After a crash, less audio than this is not worth transcribing.
@@ -110,6 +113,26 @@ pub fn salvage(
     }
 }
 
+/// Where the call's audio is streamed for the live view. `None` turns the live transcript off.
+pub struct Live {
+    pub base_url: String,
+    pub api_key: String,
+}
+
+/// Moves what the stream has produced so far into the live view. `at_ms` is how far into the call we are.
+fn pump(id: &str, rx: &Receiver<LiveEvent>, at_ms: i64) {
+    while let Ok(e) = rx.try_recv() {
+        hub().push(
+            id,
+            match e {
+                LiveEvent::Partial(t) => Msg::Partial(t),
+                LiveEvent::Final(text) => Msg::Final { at_ms, text },
+                LiveEvent::Unavailable => Msg::Unavailable,
+            },
+        );
+    }
+}
+
 struct Outcome {
     end: Result<LeaveReason, DriverError>,
     samples: u64,
@@ -126,10 +149,12 @@ pub async fn run_meeting<D: CallDriver>(
     url: &str,
     max_call_ms: i64,
     driver: &mut D,
+    live: Option<&Live>,
     now: impl Fn() -> i64,
 ) -> Result<()> {
     let dir = tenant_dir(data_dir, tenant).join("audio").join(id);
-    let captured = capture(&c, &dir, id, url, max_call_ms, driver, &now).await;
+    let captured = capture(&c, &dir, id, url, max_call_ms, driver, live, &now).await;
+    hub().clear(id); // the live transcript never outlives the call, whatever ended it
     driver.leave().await; // always, even when capture hit a disk error
     let out = captured?;
     if let Err(e) = &out.end {
@@ -176,6 +201,7 @@ pub async fn run_meeting<D: CallDriver>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn capture<D: CallDriver>(
     c: &Connection,
     dir: &Path,
@@ -183,6 +209,7 @@ async fn capture<D: CallDriver>(
     url: &str,
     max_call_ms: i64,
     driver: &mut D,
+    live: Option<&Live>,
     now: &impl Fn() -> i64,
 ) -> Result<Outcome> {
     let mut session = Session::new(now()).with_max_call_ms(max_call_ms);
@@ -195,6 +222,7 @@ async fn capture<D: CallDriver>(
     }
     // Opened on admission: audio and speaker samples before that are not part of the call.
     let mut files: Option<(WavWriter<BufWriter<File>>, BufWriter<File>)> = None;
+    let mut stream: Option<(DeepgramStream, Receiver<LiveEvent>)> = None;
     let end = loop {
         match driver.next().await {
             Err(e) => break Err(e),
@@ -213,12 +241,25 @@ async fn capture<D: CallDriver>(
                         "UPDATE meetings SET status='recording', started_at=?2, audio_path=?3 WHERE id=?1",
                         params![id, now_ms(), format!("audio/{id}/recording.wav")],
                     )?;
+                    if let Some(l) = live {
+                        let lang: String =
+                            c.query_row("SELECT language FROM meetings WHERE id=?1", [id], |r| {
+                                r.get(0)
+                            })?;
+                        hub().start(id);
+                        let (s, rx) = DeepgramStream::start(&l.base_url, &l.api_key, &lang);
+                        stream = Some((s, rx));
+                    }
                 }
             }
             Ok(DriverEvent::Audio(a)) => {
                 if let Some((w, _)) = &mut files {
                     w.write(&a)?;
                     samples += a.len() as u64;
+                    if let Some((s, rx)) = &stream {
+                        s.send_frame(&a); // a dropped frame only costs live text, never the recording
+                        pump(id, rx, (samples / 16) as i64);
+                    }
                 }
             }
             Ok(DriverEvent::Speaker(s)) => {
@@ -314,6 +355,16 @@ mod tests {
         script: Script,
         max_ms: i64,
     ) -> ScriptedDriver {
+        run_with(dir, tenant, script, max_ms, None).await
+    }
+
+    async fn run_with(
+        dir: &tempfile::TempDir,
+        tenant: &str,
+        script: Script,
+        max_ms: i64,
+        live: Option<&Live>,
+    ) -> ScriptedDriver {
         let c = open(dir, tenant);
         meeting(&c, "m1", "joining", 0);
         let mut d = ScriptedDriver::new(script);
@@ -325,6 +376,7 @@ mod tests {
             "https://meet.example/abc",
             max_ms,
             &mut d,
+            live,
             || 0,
         )
         .await
@@ -372,6 +424,80 @@ mod tests {
             )
             .unwrap();
         assert_eq!(joining, 3);
+    }
+
+    #[test]
+    fn stream_events_reach_the_live_view_stamped_with_the_call_clock() {
+        hub().start("pump1");
+        let (tx, rx) = std::sync::mpsc::channel();
+        for e in [
+            LiveEvent::Partial("hel".into()),
+            LiveEvent::Final("hello".into()),
+            LiveEvent::Partial("wor".into()),
+            LiveEvent::Unavailable,
+        ] {
+            tx.send(e).unwrap();
+        }
+        pump("pump1", &rx, 5_000);
+        let s = hub().subscribe("pump1").unwrap();
+        assert_eq!(s.lines, vec![(5_000, "hello".to_string())]);
+        assert_eq!((s.partial.as_str(), s.unavailable), ("wor", true));
+        hub().clear("pump1");
+    }
+
+    /// A speech link that cannot connect: nothing is streamed, yet the call is recorded in full.
+    fn dead_link() -> Live {
+        Live {
+            base_url: "ws://127.0.0.1:1/v1/listen".into(),
+            api_key: "k".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_live_stream_does_not_stop_the_recording_and_leaves_nothing_behind() {
+        let (dir, tenant) = setup();
+        run_with(
+            &dir,
+            &tenant,
+            vec![
+                call(Event::Admitted),
+                audio(2),
+                call(Event::CallEnded { at_ms: 9 }),
+            ],
+            i64::MAX,
+            Some(&dead_link()),
+        )
+        .await;
+        let c = open(&dir, &tenant);
+        assert_eq!(row(&c).0, "transcribing");
+        assert_eq!(transcribe_jobs(&c), 1);
+        assert!(
+            hub().subscribe("m1").is_none(),
+            "cleared when the call ended"
+        );
+    }
+
+    #[tokio::test]
+    async fn opting_out_clears_the_live_transcript_as_well() {
+        let (dir, tenant) = setup();
+        let chat = Event::Chat {
+            text: "opt out".into(),
+            from_self: false,
+        };
+        run_with(
+            &dir,
+            &tenant,
+            vec![call(Event::Admitted), audio(1), call(chat)],
+            i64::MAX,
+            Some(&dead_link()),
+        )
+        .await;
+        assert!(hub().subscribe("m1").is_none());
+        let c = open(&dir, &tenant);
+        let left: i64 = c
+            .query_row("SELECT COUNT(*) FROM meetings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 0);
     }
 
     #[tokio::test]

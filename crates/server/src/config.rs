@@ -66,6 +66,16 @@ pub struct Speech {
 impl Speech {
     /// Shown to members and in `/api/me`: where call audio is sent.
     pub const PROVIDER: &'static str = "Deepgram";
+
+    /// The streaming endpoint on the same host as `base_url` (`https` becomes `wss`).
+    pub fn listen_url(&self) -> String {
+        format!(
+            "{}/v1/listen",
+            self.base_url
+                .trim_end_matches('/')
+                .replacen("http", "ws", 1)
+        )
+    }
 }
 
 impl Default for Speech {
@@ -189,6 +199,14 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_streaming_url_follows_the_speech_base_url() {
+        let mut s = Speech::default();
+        assert_eq!(s.listen_url(), recapz_speech::stream::DEEPGRAM_LISTEN);
+        s.base_url = "http://127.0.0.1:9/".into();
+        assert_eq!(s.listen_url(), "ws://127.0.0.1:9/v1/listen");
+    }
 
     #[test]
     fn start_is_refused_without_a_speech_key_and_the_key_never_comes_from_the_file() {
