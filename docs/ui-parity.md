@@ -111,7 +111,7 @@ non-owners once the list returns the owner.
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
-- [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet.
+- [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet. The lede names the speech provider from `/api/me` (jsdom test; checked by eye at 1280 and 390 px, Daylight light, no prototype side-by-side).
 - [ ] Fields: title, language, speaker count; button "Process recording". Built in #138; no screenshot yet. Only title is built: the upload API reads
       no language or speaker count, so those are hidden rather than faked.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
@@ -140,4 +140,5 @@ non-owners once the list returns the owner.
 - [ ] Notetaker sign-in status on this screen: no API exposes it yet (a signed-out account only shows as a failed meeting's error), so there is nothing to show
 - [ ] Join rule radios, notetaker name, join message
 - [ ] Retention selects (audio, transcripts); "Where data lives" read-only text
+      Open: a "Where audio goes" card names the speech provider from `/api/me` (jsdom test; checked by eye at 1280 and 390 px, Daylight light, 2026-11-18, no side-by-side with the prototype state). Retention selects and the rest of the "Where data lives" text have no settings API yet.
 - [ ] Delete everything one participant said, with confirm; Save changes; saved toast

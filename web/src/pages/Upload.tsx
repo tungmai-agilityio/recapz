@@ -5,6 +5,7 @@ import { getMeeting, uploadRecording } from '../api'
 import { Button } from '../ui/Button'
 import { Field, inputClass } from '../ui/Field'
 import { PageHead } from '../ui/PageHead'
+import { useSpeechProvider } from '../speech'
 
 /** Formats the server's decoder reads, and its upload limit (crates/speech, crates/server). */
 const EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'mp4', 'ogg', 'flac', 'mkv']
@@ -20,6 +21,7 @@ function problem(f: File): string | null {
 }
 
 export function Upload() {
+  const provider = useSpeechProvider()
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [over, setOver] = useState(false)
@@ -38,7 +40,7 @@ export function Upload() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="Upload a recording"
-        lede="For in-person meetings or calls the notetaker didn't join. Processed on your server." />
+        lede={`For in-person meetings or calls the notetaker didn't join. The audio is sent to ${provider} to be transcribed.`} />
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
         <div className="frame flex flex-col gap-5">
           <label htmlFor="file" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}

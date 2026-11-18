@@ -76,3 +76,9 @@ test('an unknown outcome shows nothing, and Dismiss removes a shown one', async 
   fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
   expect(screen.queryByText('Google Calendar is connected.')).toBeNull()
 })
+
+test('names the speech provider from /api/me', async () => {
+  show('/recording', { email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram', connected: false, needs_reconnect: false })
+  expect(await screen.findByText('Deepgram')).toBeTruthy()
+  expect(screen.getByText(/is sent to/).textContent).toMatch(/Audio is sent to Deepgram for transcription/)
+})

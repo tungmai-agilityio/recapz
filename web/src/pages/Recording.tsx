@@ -7,6 +7,7 @@ import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
+import { useSpeechProvider } from '../speech'
 
 /** What the server redirects back with after Google's consent screen. */
 const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
@@ -18,6 +19,7 @@ const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
 }
 
 export function Recording() {
+  const provider = useSpeechProvider()
   const qc = useQueryClient()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
@@ -73,6 +75,15 @@ export function Recording() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+      <div className="mt-4 rounded-lg border border-hair bg-sheet">
+        <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+          <div>
+            <h2 className="font-semibold">Where audio goes</h2>
+            <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
+          </div>
+          <p className="text-sm">Audio is sent to <b>{provider}</b> for transcription, live during a call and again from the recorded file afterwards. Nothing else is sent to it.</p>
         </div>
       </div>
       {asking && (
