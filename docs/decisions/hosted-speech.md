@@ -31,8 +31,10 @@ No provider has been measured on Vietnamese; the check is a consented sample bef
 
 ## Cost per meeting (list prices, to verify)
 
-Batch about $0.31 per hour of audio, streaming about $0.46 per hour (*unverified*), plus a few cents of LLM. A one
-hour meeting with the live view on costs about $1. The monthly cap in config is the guard.
+Batch about $0.31 per hour of audio before speaker labels; with diarization (about $0.0020 per minute, a paid add-on) and
+Nova-3 multilingual batch at about $0.0058 per minute (promo price) it is about $0.47 per hour (*second-hand from
+Deepgram's pricing pages on 2026-11-16, unverified*). Streaming about $0.46 per hour (*unverified*), plus a few cents of
+LLM. A one hour meeting with the live view on costs about $1. The monthly cap in config is the guard.
 
 ## Design
 

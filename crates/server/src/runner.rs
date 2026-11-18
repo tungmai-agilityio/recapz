@@ -10,6 +10,22 @@ use recapz_speech::transcribe::StubTranscriber;
 use recapz_speech::transcribe::Transcriber;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
+/// Job kinds that call a paid provider (speech, language model, embeddings).
+const PAID: [&str; 4] = [
+    transcribe_job::KIND,
+    report_job::KIND,
+    index_job::KIND,
+    document::KIND,
+];
+
+/// Estimated-cost settings the runner needs.
+#[derive(Clone, Copy)]
+pub struct Limits {
+    pub speech_micro_usd_per_minute: u64,
+    /// 0 means no cap.
+    pub monthly_cap_micro_usd: u64,
+}
+
 /// Report jobs run only when a language model is configured; otherwise they stay queued.
 fn run_pending(
     data_dir: &std::path::Path,
@@ -17,6 +33,7 @@ fn run_pending(
     blobs: Option<&dyn Blobs>,
     report: Option<&LlmReportModel>,
     embedder: &dyn Embedder,
+    limits: Limits,
 ) -> anyhow::Result<bool> {
     let mut kinds = vec![
         transcribe_job::KIND,
@@ -34,9 +51,27 @@ fn run_pending(
     let mut ran = false;
     for tenant in db::tenant_ids(&control)? {
         let conn = db::open_tenant(data_dir, &tenant)?;
+        // Past the monthly cap the jobs that cost money stay queued; archive and label still run.
+        let paused = recapz_core::usage::paused(&conn, limits.monthly_cap_micro_usd, db::now_ms())?;
+        let kinds: Vec<&str> = kinds
+            .iter()
+            .copied()
+            .filter(|k| !(paused && PAID.contains(k)))
+            .collect();
         ran |= jobs::run_once(&conn, &kinds, |c, j| match (j.kind.as_str(), report) {
             (transcribe_job::KIND, r) => {
                 transcribe_job::handle(c, j, data_dir, &tenant, tx, r.is_some())?;
+                // An estimate must never fail a transcript that was stored (a retry would pay again).
+                if let Some(mid) = j.meeting_id.as_deref() {
+                    if let Err(e) = recapz_core::usage::record_speech(
+                        c,
+                        mid,
+                        limits.speech_micro_usd_per_minute,
+                        db::now_ms(),
+                    ) {
+                        tracing::warn!("speech usage not recorded: {e:#}");
+                    }
+                }
                 // Queued last so the recording moves only after everything that reads it was queued.
                 if blobs.is_some() {
                     jobs::enqueue(c, archive_job::KIND, j.meeting_id.as_deref(), None)?;
@@ -85,6 +120,7 @@ pub fn spawn(
     blobs: Option<Arc<dyn Blobs>>,
     report: Option<Arc<LlmReportModel>>,
     embedder: Arc<dyn Embedder>,
+    limits: Limits,
 ) {
     tokio::spawn(async move {
         let (d, e) = (data_dir.clone(), embedder.clone());
@@ -119,7 +155,14 @@ pub fn spawn(
                 embedder.clone(),
             );
             match tokio::task::spawn_blocking(move || {
-                run_pending(&d, t.as_ref(), b.as_deref(), r.as_deref(), e.as_ref())
+                run_pending(
+                    &d,
+                    t.as_ref(),
+                    b.as_deref(),
+                    r.as_deref(),
+                    e.as_ref(),
+                    limits,
+                )
             })
             .await
             {
@@ -136,6 +179,11 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const NO_LIMITS: Limits = Limits {
+        speech_micro_usd_per_minute: 0,
+        monthly_cap_micro_usd: 0,
+    };
 
     struct Counting(std::sync::atomic::AtomicUsize);
     impl Embedder for Counting {
@@ -163,7 +211,7 @@ mod tests {
         .unwrap();
         let off = document::add(&conn, dir.path(), &tenant, "m1", "a.txt", b"alpha beta").unwrap();
         let emb = Counting(Default::default());
-        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb).unwrap());
+        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
         assert_eq!(emb.0.load(SeqCst), 0, "toggle off: nothing is embedded");
         let chunks = |id: &str| -> i64 {
             conn.query_row(
@@ -175,7 +223,7 @@ mod tests {
         };
         assert_eq!(chunks(&off), 1, "still keyword-searchable");
         assert!(document::set_llm_ok(&conn, "m1", &off, true).unwrap());
-        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb).unwrap());
+        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
         assert_eq!(emb.0.load(SeqCst), 1, "toggle on: one chunk embedded");
     }
 
@@ -194,7 +242,8 @@ mod tests {
                 &StubTranscriber,
                 None,
                 None,
-                &recapz_core::embed::HashEmbedder
+                &recapz_core::embed::HashEmbedder,
+                NO_LIMITS
             )
             .unwrap(),
             "no job should run"
@@ -232,10 +281,121 @@ mod tests {
         .unwrap();
         let id = jobs::enqueue(&conn, archive_job::KIND, Some("m1"), None).unwrap();
         let emb = recapz_core::embed::HashEmbedder;
-        assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb).unwrap());
+        assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
         assert_eq!(jobs::state(&conn, id).unwrap(), Some(("queued".into(), 0)));
-        assert!(run_pending(dir.path(), &StubTranscriber, Some(&Keep), None, &emb).unwrap());
+        assert!(run_pending(
+            dir.path(),
+            &StubTranscriber,
+            Some(&Keep),
+            None,
+            &emb,
+            NO_LIMITS
+        )
+        .unwrap());
         assert_eq!(jobs::state(&conn, id).unwrap().unwrap().0, "done");
         assert!(!wav.join("a.wav").exists());
+    }
+
+    #[test]
+    fn at_the_monthly_cap_paid_jobs_stay_queued_but_archive_still_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let control = db::open_control(dir.path()).unwrap();
+        db::bootstrap_admin(&control, "boss@example.com").unwrap();
+        let tenant = db::tenant_ids(&control).unwrap().remove(0);
+        let conn = db::open_tenant(dir.path(), &tenant).unwrap();
+        let wav = tenant_dir(dir.path(), &tenant).join("audio/m1");
+        std::fs::create_dir_all(&wav).unwrap();
+        std::fs::write(wav.join("a.wav"), b"RIFF").unwrap();
+        conn.execute(
+            "INSERT INTO meetings (id, title, platform, status, audio_path) VALUES ('m1','t','upload','ready','audio/m1/a.wav')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO llm_usage (task, provider, model, cost_micro_usd, at) VALUES ('ask','p','m',5,?1)",
+            [db::now_ms()],
+        )
+        .unwrap();
+        let index = jobs::enqueue(&conn, index_job::KIND, Some("m1"), None).unwrap();
+        let emb = recapz_core::embed::HashEmbedder;
+        let cap = |n| Limits {
+            speech_micro_usd_per_minute: 0,
+            monthly_cap_micro_usd: n,
+        };
+        // spend (5) has reached the cap (5): the index job waits
+        assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(5)).unwrap());
+        assert_eq!(
+            jobs::state(&conn, index).unwrap(),
+            Some(("queued".into(), 0))
+        );
+        // a recording can still be moved to storage while paused
+        let archive = jobs::enqueue(&conn, archive_job::KIND, Some("m1"), None).unwrap();
+        assert!(run_pending(
+            dir.path(),
+            &StubTranscriber,
+            Some(&Keep),
+            None,
+            &emb,
+            cap(5)
+        )
+        .unwrap());
+        assert_eq!(jobs::state(&conn, archive).unwrap().unwrap().0, "done");
+        assert_eq!(
+            jobs::state(&conn, index).unwrap(),
+            Some(("queued".into(), 0))
+        );
+        // raising the cap (or a new month) lets it run
+        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(6)).unwrap());
+        assert_eq!(jobs::state(&conn, index).unwrap().unwrap().0, "done");
+    }
+
+    #[test]
+    fn a_finished_transcribe_job_records_its_speech_cost_once_even_when_rerun() {
+        let dir = tempfile::tempdir().unwrap();
+        let control = db::open_control(dir.path()).unwrap();
+        db::bootstrap_admin(&control, "boss@example.com").unwrap();
+        let tenant = db::tenant_ids(&control).unwrap().remove(0);
+        let conn = db::open_tenant(dir.path(), &tenant).unwrap();
+        // 60 s of 16 kHz mono 16-bit silence
+        let data = vec![0u8; 60 * 32_000];
+        let mut w = Vec::new();
+        w.extend(b"RIFF");
+        w.extend((36 + data.len() as u32).to_le_bytes());
+        w.extend(b"WAVEfmt ");
+        for v in [16u32, 0x0001_0001, 16_000, 32_000, 0x0010_0002] {
+            w.extend(v.to_le_bytes());
+        }
+        w.extend(b"data");
+        w.extend((data.len() as u32).to_le_bytes());
+        w.extend(data);
+        let a = tenant_dir(dir.path(), &tenant).join("audio/m1");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::write(a.join("a.wav"), w).unwrap();
+        conn.execute(
+            "INSERT INTO meetings (id, title, platform, status, audio_path) VALUES ('m1','t','upload','uploaded','audio/m1/a.wav')",
+            [],
+        )
+        .unwrap();
+        let limits = Limits {
+            speech_micro_usd_per_minute: 7_800,
+            monthly_cap_micro_usd: 0,
+        };
+        let emb = recapz_core::embed::HashEmbedder;
+        for _ in 0..2 {
+            jobs::enqueue(&conn, transcribe_job::KIND, Some("m1"), None).unwrap();
+            assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits).unwrap());
+        }
+        let rows: Vec<(i64, i64)> = conn
+            .prepare("SELECT audio_seconds, cost_micro_usd FROM speech_usage")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![(60, 7_800)],
+            "one minute at the configured rate, one row"
+        );
     }
 }
