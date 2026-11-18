@@ -3,6 +3,7 @@
 use std::{
     collections::HashMap,
     sync::{Mutex, OnceLock},
+    time::Instant,
 };
 use tokio::sync::broadcast;
 
@@ -23,6 +24,7 @@ pub enum Msg {
 }
 
 struct Call {
+    started: Instant,
     lines: Vec<(i64, String)>,
     partial: String,
     unavailable: bool,
@@ -48,6 +50,7 @@ impl LiveHub {
         self.calls.lock().unwrap().insert(
             id.into(),
             Call {
+                started: Instant::now(),
                 lines: Vec::new(),
                 partial: String::new(),
                 unavailable: false,
@@ -79,6 +82,32 @@ impl LiveHub {
         if let Some(c) = self.calls.lock().unwrap().remove(id) {
             let _ = c.tx.send(Msg::End);
         }
+    }
+
+    /// What was said in the last `window_ms` of the call, oldest first; `None` when the call is not live.
+    // ponytail: the call clock is the time since `start`, which is when the call was admitted.
+    pub fn recent(&self, id: &str, window_ms: i64) -> Option<Vec<String>> {
+        let calls = self.calls.lock().unwrap();
+        let c = calls.get(id)?;
+        let from = c.started.elapsed().as_millis() as i64 - window_ms;
+        Some(
+            c.lines
+                .iter()
+                .filter(|(at, _)| *at >= from)
+                .map(|(_, t)| t.clone())
+                .collect(),
+        )
+    }
+
+    /// The finished line stamped `at_ms` with `n` lines either side; empty when there is no such line.
+    pub fn around(&self, id: &str, at_ms: i64, n: usize) -> Option<Vec<String>> {
+        let calls = self.calls.lock().unwrap();
+        let c = calls.get(id)?;
+        let Some(i) = c.lines.iter().position(|(at, _)| *at == at_ms) else {
+            return Some(Vec::new());
+        };
+        let (a, b) = (i.saturating_sub(n), (i + n + 1).min(c.lines.len()));
+        Some(c.lines[a..b].iter().map(|(_, t)| t.clone()).collect())
     }
 
     /// `None` when the call is not live here.
@@ -162,6 +191,28 @@ mod tests {
             h.subscribe("m").is_none(),
             "a push after clear keeps nothing"
         );
+    }
+
+    #[test]
+    fn recent_and_around_pick_lines_by_the_call_clock() {
+        let h = LiveHub::default();
+        assert!(h.recent("m", 60_000).is_none() && h.around("m", 0, 1).is_none());
+        h.start("m");
+        for (at, t) in [(0, "old"), (1, "a"), (2, "b"), (3, "c"), (4, "d")] {
+            h.push(
+                "m",
+                Msg::Final {
+                    at_ms: at,
+                    text: t.into(),
+                },
+            );
+        }
+        // The call is milliseconds old, so everything is inside 60 s and a 0 ms window holds nothing.
+        assert_eq!(h.recent("m", 60_000).unwrap(), ["old", "a", "b", "c", "d"]);
+        assert!(h.recent("m", -1_000_000).unwrap().is_empty());
+        assert_eq!(h.around("m", 2, 1).unwrap(), ["a", "b", "c"]);
+        assert_eq!(h.around("m", 0, 1).unwrap(), ["old", "a"]);
+        assert!(h.around("m", 99, 1).unwrap().is_empty());
     }
 
     #[test]
