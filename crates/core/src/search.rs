@@ -50,7 +50,7 @@ fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<i64>> {
 // ponytail: brute-force scan of the member's visible chunks; switch to an index when a workspace
 // holds more than ~100k chunks.
 fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Result<Vec<i64>> {
-    let qvec = e.embed(query);
+    let qvec = e.embed(query)?;
     // Only chunks embedded by this same embedder are comparable; the rest are reached by keyword
     // until they are re-indexed.
     let sql = format!(
@@ -146,7 +146,7 @@ mod tests {
     fn add(c: &Connection, meeting: &str, start_ms: i64, text: &str) {
         c.execute(
             "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding) VALUES (?1, ?2, ?2 + 1000, ?3, ?4)",
-            params![meeting, start_ms, text, to_blob(&HashEmbedder.embed(text))],
+            params![meeting, start_ms, text, to_blob(&HashEmbedder.embed(text).unwrap())],
         )
         .unwrap();
     }
@@ -237,9 +237,26 @@ mod tests {
         fn id(&self) -> &'static str {
             self.0
         }
-        fn embed(&self, _: &str) -> Vec<f32> {
-            vec![1.0, 0.0]
+        fn embed(&self, _: &str) -> anyhow::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0])
         }
+    }
+
+    struct Down;
+    impl Embedder for Down {
+        fn id(&self) -> &'static str {
+            "flat-2"
+        }
+        fn embed(&self, _: &str) -> anyhow::Result<Vec<f32>> {
+            Err(anyhow::anyhow!("embedder down"))
+        }
+    }
+
+    #[test]
+    fn a_failing_query_embedder_is_an_error_not_an_empty_result() {
+        let (_d, c) = setup();
+        let err = search(&c, "alice", "alpha", &Down, 5).unwrap_err();
+        assert_eq!(err.to_string(), "embedder down");
     }
 
     #[test]

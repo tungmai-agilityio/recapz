@@ -134,7 +134,7 @@ fn seed(dir: &std::path::Path) -> (String, String) {
         .unwrap();
         t.execute(
             "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding) VALUES (?1, 90000, 150000, ?2, ?3)",
-            params![id, text, to_blob(&HashEmbedder.embed(text))],
+            params![id, text, to_blob(&HashEmbedder.embed(text).unwrap())],
         )
         .unwrap();
     }
