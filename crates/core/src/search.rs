@@ -1,6 +1,7 @@
 //! Hybrid search over chunks for Ask: FTS5 keyword ranking and vector similarity, merged by
 //! reciprocal rank. The meeting access rule is part of every query, so a chunk of a meeting the
-//! member cannot see is never read, ranked or returned.
+//! member cannot see is never read, ranked or returned. The member's own documents are searched
+//! with a separate rule (`documents.member_id`): the uploader only, never the meeting rule.
 use crate::embed::{cosine, from_blob, keywords, Embedder};
 use anyhow::Result;
 use rusqlite::{params, Connection};
@@ -8,6 +9,10 @@ use std::collections::HashMap;
 
 /// The one meeting access rule as SQL, for a meeting aliased `m` and the member id as `?1`.
 const VISIBLE: &str = "(m.owner_id = ?1 OR m.share = 'workspace')";
+/// The document access rule as SQL, for a document aliased `d` and the member id as `?1`.
+const OWN_DOC: &str = "d.member_id = ?1";
+/// A chunk is a meeting chunk (`false`) or a document chunk (`true`); their ids are separate.
+type Key = (bool, i64);
 const POOL: usize = 50;
 const RRF_K: f32 = 60.0;
 /// Vector matches below this cosine are noise (shared filler words), not hits. Tuned for the
@@ -17,12 +22,19 @@ const MIN_SIMILARITY: f32 = 0.2;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
     pub chunk_id: i64,
-    pub meeting_id: String,
+    /// Exactly one of `meeting_id` and `document_id` is set.
+    pub meeting_id: Option<String>,
+    pub document_id: Option<String>,
+    /// The meeting title or the document name.
     pub title: String,
+    /// Moment in the meeting; 0 for a document.
     pub start_ms: i64,
     pub end_ms: i64,
     pub text: String,
     pub score: f32,
+    /// False for a document whose owner did not allow sending it to the language model: show it as
+    /// a cited passage, never build a generated answer from its text.
+    pub llm_ok: bool,
 }
 
 /// Words only, each quoted, so user text can never be read as FTS syntax.
@@ -31,42 +43,78 @@ fn fts_query(q: &str) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" OR "))
 }
 
-fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<i64>> {
+fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<Key>> {
     let Some(m) = fts_query(q) else {
         return Ok(vec![]);
     };
-    let sql = format!(
-        "SELECT k.id FROM chunks_fts f JOIN chunks k ON k.id = f.rowid
-         JOIN meetings m ON m.id = k.meeting_id
-         WHERE chunks_fts MATCH ?2 AND {VISIBLE} ORDER BY f.rank LIMIT {POOL}"
-    );
-    let mut st = c.prepare(&sql)?;
-    let ids = st
-        .query_map(params![member, m], |r| r.get(0))?
-        .collect::<Result<_, _>>()?;
-    Ok(ids)
+    let mut out = vec![];
+    for (doc, sql) in [
+        (
+            false,
+            format!(
+                "SELECT k.id, f.rank FROM chunks_fts f JOIN chunks k ON k.id = f.rowid
+                 JOIN meetings m ON m.id = k.meeting_id
+                 WHERE chunks_fts MATCH ?2 AND {VISIBLE} ORDER BY f.rank LIMIT {POOL}"
+            ),
+        ),
+        (
+            true,
+            format!(
+                "SELECT k.id, f.rank FROM document_chunks_fts f JOIN document_chunks k ON k.id = f.rowid
+                 JOIN documents d ON d.id = k.document_id
+                 WHERE document_chunks_fts MATCH ?2 AND {OWN_DOC} ORDER BY f.rank LIMIT {POOL}"
+            ),
+        ),
+    ] {
+        let mut st = c.prepare(&sql)?;
+        let rows: Vec<(i64, f64)> = st
+            .query_map(params![member, m], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        out.extend(rows.into_iter().map(|(id, r)| ((doc, id), r)));
+    }
+    // bm25 ranks (lower is better) from the two indexes are merged as if comparable.
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out.truncate(POOL);
+    Ok(out.into_iter().map(|(k, _)| k).collect())
 }
 
 // ponytail: brute-force scan of the member's visible chunks; switch to an index when a workspace
 // holds more than ~100k chunks.
-fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Result<Vec<i64>> {
+fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Result<Vec<Key>> {
     let qvec = e.embed(query)?;
     // Only chunks embedded by this same embedder are comparable; the rest are reached by keyword
-    // until they are re-indexed.
-    let sql = format!(
-        "SELECT k.id, k.embedding FROM chunks k JOIN meetings m ON m.id = k.meeting_id
-         WHERE {VISIBLE} AND k.embedder = ?2"
-    );
-    let mut st = c.prepare(&sql)?;
-    let mut scored: Vec<(i64, f32)> = st
-        .query_map(params![member, e.id()], |r| {
-            Ok((r.get(0)?, r.get::<_, Vec<u8>>(1)?))
-        })?
-        .map(|r| r.map(|(id, b)| (id, cosine(&qvec, &from_blob(&b)))))
-        .collect::<Result<_, _>>()?;
+    // until they are re-indexed. A document vector is read only while its toggle is on.
+    let mut scored: Vec<(Key, f32)> = vec![];
+    for (doc, sql) in [
+        (
+            false,
+            format!(
+                "SELECT k.id, k.embedding FROM chunks k JOIN meetings m ON m.id = k.meeting_id
+                 WHERE {VISIBLE} AND k.embedder = ?2"
+            ),
+        ),
+        (
+            true,
+            format!(
+                "SELECT v.chunk_id, v.embedding FROM document_vectors v JOIN documents d ON d.id = v.document_id
+                 WHERE {OWN_DOC} AND d.llm_ok = 1 AND v.embedder = ?2"
+            ),
+        ),
+    ] {
+        let mut st = c.prepare(&sql)?;
+        let rows = st
+            .query_map(params![member, e.id()], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        scored.extend(
+            rows.into_iter()
+                .map(|(id, b)| ((doc, id), cosine(&qvec, &from_blob(&b)))),
+        );
+    }
     scored.retain(|(_, s)| *s >= MIN_SIMILARITY);
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
-    Ok(scored.into_iter().take(POOL).map(|(id, _)| id).collect())
+    Ok(scored.into_iter().take(POOL).map(|(k, _)| k).collect())
 }
 
 /// Top `limit` chunks the member may see, best first. `embedder` embeds the query and must be the
@@ -78,7 +126,7 @@ pub fn search(
     embedder: &dyn Embedder,
     limit: usize,
 ) -> Result<Vec<Hit>> {
-    let mut score: HashMap<i64, f32> = HashMap::new();
+    let mut score: HashMap<Key, f32> = HashMap::new();
     for ids in [
         keyword_ids(c, member, query)?,
         vector_ids(c, member, embedder, query)?,
@@ -87,28 +135,50 @@ pub fn search(
             *score.entry(id).or_default() += 1.0 / (RRF_K + rank as f32 + 1.0);
         }
     }
-    let mut ranked: Vec<(i64, f32)> = score.into_iter().collect();
+    let mut ranked: Vec<(Key, f32)> = score.into_iter().collect();
     ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     ranked.truncate(limit);
 
-    let mut get = c.prepare(
+    let mut get_meeting = c.prepare(
         "SELECT k.meeting_id, m.title, k.start_ms, k.end_ms, k.text
          FROM chunks k JOIN meetings m ON m.id = k.meeting_id WHERE k.id = ?1",
     )?;
+    let mut get_doc = c.prepare(
+        "SELECT k.document_id, d.name, k.text, d.llm_ok
+         FROM document_chunks k JOIN documents d ON d.id = k.document_id WHERE k.id = ?1",
+    )?;
     ranked
         .into_iter()
-        .map(|(id, score)| {
-            Ok(get.query_row([id], |r| {
-                Ok(Hit {
-                    chunk_id: id,
-                    meeting_id: r.get(0)?,
-                    title: r.get(1)?,
-                    start_ms: r.get(2)?,
-                    end_ms: r.get(3)?,
-                    text: r.get(4)?,
-                    score,
-                })
-            })?)
+        .map(|((doc, id), score)| {
+            Ok(if doc {
+                get_doc.query_row([id], |r| {
+                    Ok(Hit {
+                        chunk_id: id,
+                        meeting_id: None,
+                        document_id: Some(r.get(0)?),
+                        title: r.get(1)?,
+                        start_ms: 0,
+                        end_ms: 0,
+                        text: r.get(2)?,
+                        score,
+                        llm_ok: r.get::<_, i64>(3)? == 1,
+                    })
+                })?
+            } else {
+                get_meeting.query_row([id], |r| {
+                    Ok(Hit {
+                        chunk_id: id,
+                        meeting_id: Some(r.get(0)?),
+                        document_id: None,
+                        title: r.get(1)?,
+                        start_ms: r.get(2)?,
+                        end_ms: r.get(3)?,
+                        text: r.get(4)?,
+                        score,
+                        llm_ok: true,
+                    })
+                })?
+            })
         })
         .collect()
 }
@@ -161,7 +231,10 @@ mod tests {
         add(&c, "secret", 0, "the launch budget is nine thousand");
         add(&c, "team", 0, "the launch date moved to May");
         let hits = ask(&c, "alice", "launch budget");
-        let ids: Vec<&str> = hits.iter().map(|h| h.meeting_id.as_str()).collect();
+        let ids: Vec<&str> = hits
+            .iter()
+            .map(|h| h.meeting_id.as_deref().unwrap())
+            .collect();
         assert_eq!(
             ids,
             vec!["team"],
@@ -178,7 +251,7 @@ mod tests {
         add(&c, "mine", 65_000, "we ordered noodles for lunch");
         let hits = ask(&c, "alice", "when does the pricing page ship");
         assert_eq!(hits[0].start_ms, 5_000);
-        assert_eq!(hits[0].meeting_id, "mine");
+        assert_eq!(hits[0].meeting_id.as_deref(), Some("mine"));
         assert_eq!(
             hits.len(),
             1,
@@ -283,5 +356,98 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    /// Adds a document for `owner`; the chunk is embedded only when `llm_ok`, as ingest does.
+    fn add_doc(c: &Connection, id: &str, owner: &str, llm_ok: bool, text: &str) {
+        c.execute(
+            "INSERT INTO documents (id, member_id, name, kind, size_bytes, path, llm_ok, created_at)
+             VALUES (?1, ?2, ?1 || '.md', 'md', 1, 'p', ?3, 0)",
+            params![id, owner, llm_ok as i64],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO document_chunks (document_id, seq, text) VALUES (?1, 0, ?2)",
+            params![id, text],
+        )
+        .unwrap();
+        if llm_ok {
+            c.execute(
+                "INSERT INTO document_vectors (chunk_id, document_id, embedder, embedding)
+                 VALUES (last_insert_rowid(), ?1, ?2, ?3)",
+                params![
+                    id,
+                    HashEmbedder.id(),
+                    to_blob(&HashEmbedder.embed(text).unwrap())
+                ],
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn documents_are_visible_to_the_uploader_only() {
+        let (_d, c) = setup();
+        add_doc(&c, "bobdoc", "bob", true, "zebrafish retainer terms");
+        add_doc(&c, "alicedoc", "alice", true, "zebrafish retainer terms");
+        let hits = ask(&c, "alice", "zebrafish retainer");
+        let ids: Vec<_> = hits.iter().map(|h| h.document_id.as_deref()).collect();
+        assert_eq!(ids, vec![Some("alicedoc")]);
+        assert_eq!(hits[0].title, "alicedoc.md");
+        assert_eq!(hits[0].meeting_id, None);
+        let hits = ask(&c, "bob", "zebrafish retainer");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].document_id.as_deref(), Some("bobdoc"));
+        assert!(ask(&c, "carol", "zebrafish retainer").is_empty());
+    }
+
+    #[test]
+    fn a_toggle_off_document_is_keyword_only_and_marked() {
+        let (_d, c) = setup();
+        add_doc(&c, "off", "alice", false, "walrus escrow clause");
+        let hits = ask(&c, "alice", "walrus escrow");
+        assert_eq!(hits.len(), 1);
+        assert!(!hits[0].llm_ok);
+        // A vector row planted for a toggle-off document is still never read.
+        c.execute(
+            "INSERT INTO document_vectors (chunk_id, document_id, embedder, embedding)
+             SELECT id, document_id, 'flat-2', ?1 FROM document_chunks",
+            params![to_blob(&[1.0, 0.0])],
+        )
+        .unwrap();
+        assert!(search(&c, "alice", "qqq", &Flat("flat-2"), 5)
+            .unwrap()
+            .is_empty());
+        // A toggle-on document is marked sendable; meetings always are.
+        add_doc(&c, "on", "alice", true, "walrus escrow clause");
+        add(&c, "mine", 0, "walrus escrow clause");
+        let mut marks: Vec<_> = ask(&c, "alice", "walrus escrow")
+            .iter()
+            .map(|h| (h.document_id.clone(), h.llm_ok))
+            .collect();
+        marks.sort();
+        assert_eq!(
+            marks,
+            vec![
+                (None, true),
+                (Some("off".into()), false),
+                (Some("on".into()), true)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_hit_names_its_document_or_its_meeting() {
+        let (_d, c) = setup();
+        add_doc(&c, "d1", "alice", true, "quokka handbook");
+        add(&c, "mine", 3_000, "quokka standup");
+        let hits = ask(&c, "alice", "quokka");
+        assert_eq!(hits.len(), 2);
+        for h in hits {
+            assert_eq!(
+                h.meeting_id.is_some() as u8 + h.document_id.is_some() as u8,
+                1
+            );
+        }
     }
 }
