@@ -87,6 +87,7 @@ data) escalates. Never use `--admin`, `--auto`, a merge commit or any flag that 
 A PR that breaks any of these, or a Conventions rule above, is rejected.
 
 - The clean-room rules above, in every file, commit, branch and PR text.
+- Commits are authored and committed with the work email (`@asnet.com.vn`) or the work account's GitHub noreply address, never a personal one; `make hooks` enforces it. In a clone outside `~/Work`, set `user.name` and `user.email` locally.
 - Never skip, disable or delete a test to make CI pass.
 - Never push to `main` or force-push a shared branch; on your own branch use `--force-with-lease` only. Never use `git commit --no-verify`.
 - Never commit `config.toml`, API keys, recordings or real meeting data. Logs hold IDs, never transcript text.
