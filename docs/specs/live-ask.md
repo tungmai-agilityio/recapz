@@ -23,7 +23,7 @@ answer they can say back to the client. Answers are private to the member who as
 | Knowledge base | Per member: their uploaded documents plus the meetings they can already see |
 | Document access | Uploader only |
 | Search scope | All of the member's documents and visible meetings; every citation names its document or meeting |
-| Document types | Text-layer PDF, Markdown, TXT. 20 MB per file, 500 MB per member. No OCR |
+| Document types | Markdown and TXT first; text-layer PDF later, after a text-extraction crate is vetted. 20 MB per file, 500 MB per member. No OCR |
 | Leaving the server | A per-document toggle "May be sent to the language model", default off, covering both embeddings and answers. Documents with it off are found by keyword search only and shown as cited passages with no generated answer |
 | Embeddings | Hosted, through an embeddings call on the existing OpenAI-compatible adapter (`POST /v1/embeddings`), configured under `[llm]`. Replaces `hash-256`; meetings re-index through `enqueue_stale` |
 | API | `POST /api/meetings/{id}/live-ask` with its own prompt `live_answer.v1`. Reuses `search`, the Ask rate limit, the SSE event names and the citation shape, with citations that point at a document or a meeting |
@@ -52,16 +52,16 @@ answer they can say back to the client. Answers are private to the member who as
 
 - 6 s or less from pressing Ask now to the answer card.
 - At least 80% correct with the right citation, or a correct "not in your documents", on a 30-question
-  eval set built from one real client's documents.
+  eval set built from synthetic client documents.
 
 If the spike (row 2) misses the latency target, stop and write up the numbers. The maintainer then decides
 between shorter windows, a smaller model or hosted speech (`docs/decisions/hosted-speech.md`). Only the live rows
-(6 to 9) wait for the spike; the document rows (3 to 5 and 10) do not depend on live audio and may run in parallel.
+(8 to 11) wait for the spike; the embedder and document rows (3 to 7 and 12) do not depend on live audio and may run in parallel.
 
 ## Acceptance
 
 - [ ] Ask now returns a cited answer card in 6 s or less from the button press.
-- [ ] At least 80% of a 30-question eval set built from one real client's documents is answered correctly with the
+- [ ] At least 80% of a 30-question eval set built from synthetic client documents is answered correctly with the
       right citation, or with a correct "not in your documents".
 - [ ] A member never sees another member's documents or asks, in search, citations or answers.
 - [ ] Documents with "May be sent to the language model" off are found by keyword search only and never sent to a
@@ -75,25 +75,26 @@ best guesses and are checked by the ticket's author. Testing scope follows the m
 
 | # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|
-| 1 (#186) | `fix(build): build whisper with CUDA for release` | tooling | none | `Makefile`, `crates/server/Cargo.toml` | small | `make release` builds; a GPU run is logged; fmt and clippy |
-| 2 (#187) | `docs(speech): measure windowed live whisper` | speech | 1 | `docs/live-ask-spike.md` | small | docs only; no product code merged. Latency and Vietnamese/English WER per window size |
-| 3 (#188) | `feat(llm): add hosted embeddings` | llm | none | `crates/llm/` | medium | `-p llm` with mock HTTP tests; `[llm]` config; meetings re-index on the new embedder id |
-| 4 (#189) | `feat(core): store and ingest member documents` | core | 3 | `crates/core/` | medium | Full workspace. Migration, upload limits, per-document toggle, hard delete of file, chunks and vectors |
-| 5 (#190) | `feat(core): search documents with meetings` | core | 4 | `crates/core/src/search.rs` | medium | Full workspace. Uploader-only rule; toggle-off documents keyword only; another member's documents never appear |
-| 6 (#191) | `feat(server): stream the live transcript` | server | 2 | `crates/server/` | medium | Full workspace. In-memory windows, `GET /api/meetings/{id}/live` SSE, GPU priority, opt-out clears it |
-| 7 (#192) | `feat(llm): add the live answer prompt` | llm | 5 | `crates/llm/prompts/`, `crates/eval/` | medium | `cargo run -p eval` meets the bar; `live_answer.v1` with schema; 30-question eval set |
-| 8 (#193) | `feat(server): answer live questions` | server | 6, 7 | `crates/server/` | medium | Full workspace. `POST /api/meetings/{id}/live-ask`; access, rate limit and toggle tests |
-| 9 (#194) | `feat(web): live view with Ask now` | web | 8 | `web/src/` | medium | Web tests and lint; matches the prototype per `docs/ui-parity.md` S6, both skins, mobile |
-| 10 (#195) | `feat(web): manage my documents` | web | 4 | `web/src/` | medium | Web tests and lint; upload, toggle, delete; matches the prototype |
+| 1 (#186) | `fix(build): build whisper with CUDA for release` | tooling | none | `Makefile`, `crates/speech/Cargo.toml`, `crates/server/Cargo.toml`, `Cargo.lock` | small | fmt and clippy on default features; CUDA build and GPU run by the maintainer on the CUDA host |
+| 2 (#187) | `docs(speech): measure windowed live whisper` | speech | 1 | `docs/live-ask-spike.md` | small | docs only; harness outside the repo; no recordings committed |
+| 3 (#188) | `refactor(core): make the embedder fallible` | core | none | `crates/core/src/embed.rs`, `index_job.rs`, `search.rs`, `crates/server/src/embedder.rs` | small | Full workspace |
+| 4 (#197) | `feat(server): add the hosted embedder` | server, llm | 3 | `crates/server/src/embedder.rs`, `config.rs`, `runner.rs`, `Cargo.toml`, `config.example.toml` | medium | Full workspace; mock HTTP tests |
+| 5 (#189) | `feat(core): store and ingest member documents` | core | 4 | `crates/core/migrations/tenant_006.sql`, `db.rs`, `jobs.rs`, `document.rs`, `purge.rs` | medium | Full workspace |
+| 6 (#198) | `feat(server): add document routes and the ingest job` | server | 5 | `crates/server/src/routes.rs`, `routes/documents.rs`, `runner.rs`, `tests/` | medium | Full workspace |
+| 7 (#190) | `feat(core): search documents with meetings` | core, server | 5 | `crates/core/src/search.rs`, `crates/server/src/routes/ask.rs`, `tests/ask.rs`, `crates/eval/src/ask.rs`, `web/src/api.ts` | medium | Full workspace; web tests for the `Citation` type |
+| 8 (#191) | `feat(server): stream the live transcript` | server, core, speech | 2 | `crates/server/src/notetaker.rs`, `notetaker_loop.rs`, `runner.rs`, `routes/live.rs`, `crates/speech/src/transcribe.rs`, `crates/core/src/jobs.rs`, `transcribe_job.rs` | medium | Full workspace |
+| 9 (#192) | `feat(llm): add the live answer prompt` | llm, server | 7 | `crates/llm/prompts/`, `crates/llm/src/ask.rs`, `crates/eval/` (synthetic fixtures) | medium | `cargo run -p eval`, `-p llm`, `-p eval` |
+| 10 (#193) | `feat(server): answer live questions` | server, llm, core | 8, 9 | `crates/server/src/routes/live_ask.rs`, `routes.rs`, `tests/live_ask.rs`, `crates/llm/src/lib.rs` | medium | Full workspace |
+| 11 (#194) | `feat(web): live view with Ask now` | web | 10 | `web/src/App.tsx`, `Shell.tsx`, `api.ts`, `pages/Live.tsx`, `docs/ui-parity.md` | medium | Web tests and lint; browser flow |
+| 12 (#195) | `feat(web): manage my documents` | web | 6 | `web/src/pages/Documents.tsx`, `ui/Table.tsx`, `api.ts`, `App.tsx`, `Shell.tsx`, `docs/ui-parity.md` | medium | Web tests and lint |
 
-New dependencies, each with its reason in its PR: a PDF text extractor in row 4.
+New dependencies, each with its reason in its PR: none planned. PDF text extraction is a later ticket after a crate is vetted.
 
 ## Open questions
 
 - Meet live check (`docs/specs/meet-notetaker.md` row 16) must pass before any ticket starts. The maintainer runs it
   and reports the result.
-- `CLAUDE.md` describes `make release` as a production build with CUDA, but the target runs a plain
-  `cargo build --release` with no `whisper` feature. Row 1 settles which is right.
+- None open. Row 1 makes `make release` a CUDA build, as `CLAUDE.md` describes it; the GPU run is done on the CUDA host by the maintainer.
 
 ## Out of scope
 
