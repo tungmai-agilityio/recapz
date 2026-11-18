@@ -112,6 +112,11 @@ function Source({ c }: { c: Citation }) {
 /** The live transcript of a call in progress, with Ask now beside it. */
 export function Live() {
   const { id = '' } = useParams()
+  // Keyed by meeting, so moving to another live call starts with an empty transcript.
+  return <LiveView key={id} id={id} />
+}
+
+function LiveView({ id }: { id: string }) {
   const meeting = useQuery({ queryKey: ['meeting', id], queryFn: () => getMeeting(id) })
   const [lines, setLines] = useState<Line[]>([])
   const [partial, setPartial] = useState('')
