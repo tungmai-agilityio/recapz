@@ -355,24 +355,26 @@ mod tests {
         script: Script,
         max_ms: i64,
     ) -> ScriptedDriver {
-        run_with(dir, tenant, script, max_ms, None).await
+        run_with(dir, tenant, "m1", script, max_ms, None).await
     }
 
+    /// The live store is shared by the whole process, so tests that look at it use their own meeting id.
     async fn run_with(
         dir: &tempfile::TempDir,
         tenant: &str,
+        id: &str,
         script: Script,
         max_ms: i64,
         live: Option<&Live>,
     ) -> ScriptedDriver {
         let c = open(dir, tenant);
-        meeting(&c, "m1", "joining", 0);
+        meeting(&c, id, "joining", 0);
         let mut d = ScriptedDriver::new(script);
         run_meeting(
             c,
             dir.path(),
             tenant,
-            "m1",
+            id,
             "https://meet.example/abc",
             max_ms,
             &mut d,
@@ -395,7 +397,7 @@ mod tests {
 
     fn transcribe_jobs(c: &Connection) -> i64 {
         c.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE kind='transcribe' AND meeting_id='m1'",
+            "SELECT COUNT(*) FROM jobs WHERE kind='transcribe'",
             [],
             |r| r.get(0),
         )
@@ -459,6 +461,7 @@ mod tests {
         run_with(
             &dir,
             &tenant,
+            "live-dead",
             vec![
                 call(Event::Admitted),
                 audio(2),
@@ -469,10 +472,17 @@ mod tests {
         )
         .await;
         let c = open(&dir, &tenant);
-        assert_eq!(row(&c).0, "transcribing");
+        let status: String = c
+            .query_row(
+                "SELECT status FROM meetings WHERE id='live-dead'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "transcribing");
         assert_eq!(transcribe_jobs(&c), 1);
         assert!(
-            hub().subscribe("m1").is_none(),
+            hub().subscribe("live-dead").is_none(),
             "cleared when the call ended"
         );
     }
@@ -487,12 +497,13 @@ mod tests {
         run_with(
             &dir,
             &tenant,
+            "live-optout",
             vec![call(Event::Admitted), audio(1), call(chat)],
             i64::MAX,
             Some(&dead_link()),
         )
         .await;
-        assert!(hub().subscribe("m1").is_none());
+        assert!(hub().subscribe("live-optout").is_none());
         let c = open(&dir, &tenant);
         let left: i64 = c
             .query_row("SELECT COUNT(*) FROM meetings", [], |r| r.get(0))
