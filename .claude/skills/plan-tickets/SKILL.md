@@ -40,3 +40,7 @@ title `docs(specs): link <feature> tickets`) with the `pull-request` skill, and 
 
 On any failure part-way, do not delete issues already created. Set the intent to `status:needs-human` with a
 comment listing what exists and what is missing, and stop.
+
+## Next
+
+Unless the maintainer said "spec only", continue with the `ship-epic` skill for this spec (`CLAUDE.md`, Autonomy).

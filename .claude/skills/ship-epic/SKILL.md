@@ -9,7 +9,8 @@ Input: a spec file in `docs/specs/` whose tickets exist (created by `plan-ticket
 `max-tickets` (default 10 tickets started in this run) and `max-parallel` (default 3, never above 3).
 Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
 
-The run stops only on `status:needs-human`; the spec merge and every denylisted PR still need the maintainer.
+The run stops only on `status:needs-human`; the spec merge and every critical PR (`CLAUDE.md`, Merging and
+escalation) still need the maintainer. No worker asks the maintainer a question; see "Autonomy" in `CLAUDE.md`.
 
 ## Before starting
 

@@ -24,14 +24,15 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 
 ## Merge
 
-Given a PR number, check every item before merging:
+Ticket PRs merge through `ship-ticket` section 4. For any other PR (for example a docs-only PR), check every item
+before merging:
 
 1. `gh pr view <n> --json state,isDraft,baseRefName,mergeable,labels,title` — must be open, not draft, target `main`, and be mergeable.
 2. `gh pr checks <n>` shows every check passing, and the recorded `test-runner` PASS matches the PR's HEAD (docs-only PRs skip the PASS).
 3. The PR body confirms `code-reviewer` approved, or that every blocker raised is fixed (docs-only PRs skip this).
 4. Size is within the guide (about 300 small, 600 medium, warning above 800 source lines), or the PR has the `size-exception` label.
 5. The branch, title and every commit subject follow CONTRIBUTING.md and no commit carries a tool trailer.
-6. The change is not critical under "Merging and escalation" in `CLAUDE.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD or gave only non-critical denylisted-path reasons, which you name in the audit comment.
+6. The change is not critical under "Merging and escalation" in `CLAUDE.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD (`--reviewer-risk na` for a docs-only PR) or gave only non-critical denylisted-path reasons, which you name in the audit comment.
 
 Only if all hold, run `gh pr merge <n> --squash --delete-branch --match-head-commit <the full sha you checked>`. Never use `--admin`, `--auto`, a merge commit or rebase merge, or any flag that skips checks.
 

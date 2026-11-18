@@ -5,19 +5,19 @@
 REQUIRED_CHECKS="commits size guards rust web"
 
 # denied_path <repo-relative path>: succeeds when a change to this path must go to the maintainer.
-# Over-matching is cheap: this list only forces escalation.
+# Over-matching is cheap: this list only forces escalation. Meeting access in crates/core is not listed: the reviewer
+# checks it and a spec-approved change is not critical (CLAUDE.md, Merging and escalation).
 denied_path() {
   shopt -s nocasematch
   local r=1
   case "$1" in
-    crates/core/* | */migrations/* | crates/llm/* | crates/server/* | crates/eval/*) r=0 ;; # core, meeting access, schema, prompts, API, model routing
-    web/src/api.ts) r=0 ;;                                                                  # shared API types
+    */migrations/*) r=0 ;;                                                                  # schema
     *auth* | *access* | *session* | *csrf* | *privacy* | *purge*) r=0 ;;
     Cargo.toml | */Cargo.toml | Cargo.lock | rust-toolchain.toml) r=0 ;;                    # dependencies and toolchain
     package.json | */package.json | pnpm-lock.yaml | */pnpm-lock.yaml | pnpm-workspace.yaml | */pnpm-workspace.yaml) r=0 ;;
     .npmrc | */.npmrc | .nvmrc | */.nvmrc) r=0 ;;
     deploy/* | scripts/* | .claude/* | .github/* | Makefile | config.example.toml) r=0 ;;
-    CLAUDE.md | CONTRIBUTING.md | docs/specs/* | docs/decisions/*) r=0 ;;                   # policy docs and specs
+    CLAUDE.md | CONTRIBUTING.md) r=0 ;;                                                     # policy docs
   esac
   shopt -u nocasematch
   return $r

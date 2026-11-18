@@ -76,8 +76,11 @@ ticket missing a required label.
   also checks the diff against the ticket's acceptance list and grades risk.
 - **Parallel work:** until `ship-epic` exists (rollout step 8), the maintainer starts one worktree per ticket. `ship-ticket` claims a ticket by setting
   `status:in-progress` and refuses one whose `touches:` overlap another `in-progress` ticket. At most 3 at once.
-- **Retry caps:** 3 failed test-fix cycles or 2 reviewer CHANGES REQUESTED rounds stop the ticket with
-  `status:needs-human` and the last failure in a comment.
+- **Retry caps:** 3 failed test-fix cycles or 2 reviewer CHANGES REQUESTED rounds (blockers only; nits never count)
+  stop the ticket with `status:needs-human` and the last failure in a comment. An infrastructure-looking CI failure
+  is re-run once without counting.
+- **No questions:** a confirmed spec and its tickets are approved work. Unclear points are decided by the order in
+  `CLAUDE.md` (Autonomy) and recorded in the PR under "Decisions made"; only the stop conditions escalate.
 - **Drift:** if the spec is wrong or the ticket too big, stop, comment, set `status:needs-human`. Never deviate
   silently or widen the PR. A spec amendment goes through a docs-only PR, then the ticket resumes.
 
@@ -90,20 +93,25 @@ maintainer. This section is how a ticket PR is checked. It merges without the ma
    skipped job. Editing a PR's title or labels must not replace the heavy results, so `ci.yml` (rust, web, guards)
    does not run on those edits and `pr-meta.yml` (commits, size) does.
 2. `code-reviewer` returns APPROVE with zero blockers for that HEAD, and every acceptance item is met.
-3. The PR's "Decisions needing the maintainer" section is empty. Anything touching privacy, data deletion or
-   data sent to language-model providers escalates regardless.
-4. Both the implementer and the reviewer grade the risk as low; any disagreement escalates.
-5. The path denylist does not match: `crates/core`, `crates/server`, `crates/llm` and `crates/eval` (meeting
-   access, API handlers, prompts and model routing), migrations, `web/src/api.ts` (shared API types), any path
-   containing auth, access, session, csrf, privacy or purge, dependency manifests, lockfiles and toolchain files,
-   `deploy/`, `scripts/`, `Makefile`, `config.example.toml`, the project's skill and helper directory, `.github/`,
-   `CLAUDE.md`, `CONTRIBUTING.md`, `docs/specs/` and `docs/decisions/`. Both names of a renamed file are checked.
+3. The PR's "Decisions needing the maintainer" section is exactly `None`. Choices settled from the spec go under
+   "Decisions made", which does not block. A change touching privacy, data deletion or data sent to language-model
+   providers is not an escalation by itself: it escalates only when the spec does not decide it (`CLAUDE.md`,
+   Merging and escalation).
+4. Both the implementer and the reviewer grade the risk as low; any disagreement escalates. `high` means critical
+   under `CLAUDE.md`, not "unsure": a doubt is resolved from the spec and the code. A docs-only PR has no reviewer
+   and passes `--reviewer-risk na`, accepted only when every changed file is Markdown.
+5. The path denylist does not match: migrations, any path containing auth, access, session, csrf, privacy or purge,
+   dependency manifests, lockfiles and toolchain files, `deploy/`, `scripts/`, `Makefile`, `config.example.toml`,
+   the project's skill and helper directory, `.github/`, `CLAUDE.md` and `CONTRIBUTING.md`. Meeting access in
+   `crates/core`, prompts, API handlers and specs are not listed: the reviewer checks them against the spec. Both
+   names of a renamed file are checked.
    The denylist is a signal and never grants a merge by itself: a path-only reason for a change that is not critical
    under `CLAUDE.md` may be overridden, naming the overridden paths in the audit comment. `scripts/automerge-lib.sh`
    holds the list.
 6. No `human-merge` label.
 
-Otherwise, and for any critical change, the PR gets `status:needs-human` and the maintainer merges or decides. Merging is a squash merge;
+Otherwise, and for any critical change, the PR gets `status:needs-human`, the maintainer is notified once, the run
+continues with independent tickets, and the maintainer merges or decides. Merging is a squash merge;
 the guards against pushing to `main` are unchanged.
 
 **How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
@@ -176,7 +184,8 @@ Known gaps:
 ## Epic runs
 
 `ship-epic <spec>` runs a spec's tickets in the background without the maintainer starting each one. It stops
-only on `status:needs-human`; the spec merge and any denylist merge still need the maintainer.
+only on `status:needs-human`; the spec merge and critical PRs (`CLAUDE.md`) still need the maintainer. It starts
+by itself after `plan-tickets` unless the maintainer said "spec only".
 
 - Reads the spec's tickets, applies the order rule, the `touches:` overlap check and the cap of 3, and starts
   one worker per eligible ticket in its own worktree; when one finishes it starts the next.
