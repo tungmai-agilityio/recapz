@@ -40,10 +40,28 @@ pub fn handle(
     c.execute_batch("BEGIN")?;
     let stored = (|| -> Result<()> {
         c.execute("DELETE FROM segments WHERE meeting_id=?1", [mid])?;
+        c.execute("DELETE FROM speakers WHERE meeting_id=?1", [mid])?;
+        // Provider tag -> speaker row, numbered by first appearance.
+        let mut ids: Vec<(&str, String)> = Vec::new();
         for s in &segments {
+            let sid = match s.speaker.as_deref() {
+                None => None,
+                Some(tag) => Some(match ids.iter().find(|(t, _)| *t == tag) {
+                    Some((_, id)) => id.clone(),
+                    None => {
+                        let id = uuid::Uuid::now_v7().to_string();
+                        c.execute(
+                            "INSERT INTO speakers (id, meeting_id, label) VALUES (?1, ?2, ?3)",
+                            params![id, mid, format!("Speaker {}", ids.len() + 1)],
+                        )?;
+                        ids.push((tag, id.clone()));
+                        id
+                    }
+                }),
+            };
             c.execute(
-                "INSERT INTO segments (meeting_id, start_ms, end_ms, text) VALUES (?1, ?2, ?3, ?4)",
-                params![mid, s.start_ms, s.end_ms, s.text],
+                "INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![mid, sid, s.start_ms, s.end_ms, s.text],
             )?;
         }
         // Names come before the report and the index so both read the labelled transcript: jobs run
@@ -152,6 +170,66 @@ mod tests {
             )
             .unwrap();
         assert_eq!(queued, 1, "one index job, even after a rerun");
+    }
+
+    struct Tagged(Vec<Option<&'static str>>);
+    impl Transcriber for Tagged {
+        fn transcribe(
+            &self,
+            _: &[f32],
+            _: &str,
+        ) -> Result<Vec<recapz_speech::transcribe::Segment>> {
+            Ok(self
+                .0
+                .iter()
+                .enumerate()
+                .map(|(i, sp)| recapz_speech::transcribe::Segment {
+                    start_ms: i as i64 * 100,
+                    end_ms: i as i64 * 100 + 100,
+                    text: format!("t{i}"),
+                    speaker: sp.map(String::from),
+                })
+                .collect())
+        }
+    }
+
+    #[test]
+    fn speaker_tags_become_numbered_rows_once_and_untagged_stays_null() {
+        let wav = wav_1s();
+        let (dir, c, job) = setup(Some(&wav));
+        let tx = Tagged(vec![Some("1"), Some("0"), None, Some("1")]);
+        for _ in 0..2 {
+            handle(&c, &job, dir.path(), "t1", &tx, false).unwrap();
+        }
+        let labels: Vec<String> = c
+            .prepare("SELECT label FROM speakers WHERE meeting_id='m1' ORDER BY label")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            labels,
+            vec!["Speaker 1", "Speaker 2"],
+            "no duplicates after a retry"
+        );
+        let per_seg: Vec<Option<String>> = c
+            .prepare("SELECT s.label FROM segments g LEFT JOIN speakers s ON s.id=g.speaker_id ORDER BY g.start_ms")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let some = |l: &str| Some(l.to_string());
+        assert_eq!(
+            per_seg,
+            vec![
+                some("Speaker 1"),
+                some("Speaker 2"),
+                None,
+                some("Speaker 1")
+            ]
+        );
     }
 
     #[test]
