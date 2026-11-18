@@ -38,7 +38,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
   // The rail shows "Live meeting" only while a call is being recorded.
   const meetings = useQuery({ queryKey: ['meetings'], queryFn: getMeetings, enabled: !!me.data, refetchInterval: 15_000 })
-  const live = meetings.data?.find((m) => m.status === 'recording')
+  const live = meetings.data?.filter((m) => m.status === 'recording') ?? []
   const navigate = useNavigate()
   const out = useMutation({ mutationFn: logout, onSuccess: () => qc.resetQueries() })
 
@@ -66,7 +66,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
-        {groups.map((g) => ({ ...g, items: g.label === 'Work' && live ? [...g.items, { to: `/meetings/${live.id}/live`, label: 'Live meeting' }] : g.items })).map((g) => (
+        {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting' }))] as typeof g.items : g.items })).map((g) => (
           <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (

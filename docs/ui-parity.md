@@ -41,7 +41,7 @@ definition of done for every web PR.
 - [ ] Rail: glyph and wordmark; groups Work (Meetings, Meeting report, Ask, Live meeting, Upload) and Workspace
       (Members, Recording & privacy); v1 dot; active item has `aria-current="page"` and an amber marker (Ink) or
       blue marker (Daylight)
-      Open: Members stays out of the rail until its screen exists. Live meeting appears only while a call is being recorded (the rail asks `GET /api/meetings` every 15 s); v1 dots and the glyph are in.
+      Open: Members stays out of the rail until its screen exists. Live meeting appears only while a call is being recorded, one item per recording call, named by its title when there are several (the rail asks `GET /api/meetings` every 15 s); v1 dots and the glyph are in.
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
 - [x] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),

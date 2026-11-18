@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import App from '../App'
@@ -114,4 +114,22 @@ test('the rail offers the live meeting while a call is recorded', async () => {
   const link = await screen.findByRole('link', { name: 'Live meeting' })
   expect(link.getAttribute('href')).toBe('/meetings/m1/live')
   expect(link.getAttribute('aria-current')).toBe('page')
+})
+
+test('with two calls recording the rail lists each by title', async () => {
+  const other = { ...meeting, id: 'm2', title: 'Board call' }
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role: 'member' }))
+    if (url === '/api/meetings') return new Response(JSON.stringify([meeting, other, { ...meeting, id: 'm3', title: 'Done', status: 'ready' }]))
+    return new Response('', { status: 404 })
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+  const a = await screen.findByRole('link', { name: 'Live: Client call' })
+  const b = screen.getByRole('link', { name: 'Live: Board call' })
+  expect([a.getAttribute('href'), b.getAttribute('href')]).toEqual(['/meetings/m1/live', '/meetings/m2/live'])
+  expect(within(screen.getByRole('navigation', { name: 'Screens' })).queryByRole('link', { name: /Done/ })).toBeNull()
 })
