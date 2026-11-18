@@ -38,6 +38,10 @@ pub struct Llm {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// Used when `embedder = "hosted"`: model for `POST {base}/embeddings`.
+    pub embedding_model: String,
+    /// Endpoint for embeddings; empty uses `base_url`. The `api_key` above is reused.
+    pub embedding_base_url: String,
     pub max_tokens: u32,
     /// Micro-USD per million tokens.
     pub price_input: u64,
@@ -69,7 +73,7 @@ pub struct Config {
     pub speech_model: PathBuf,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
-    /// Text embedder for Ask search: `hash` (built in). Changing it re-indexes meetings at start.
+    /// Text embedder for Ask search: `hash` (built in) or `hosted` (see `[llm] embedding_model`). Changing it re-indexes meetings at start.
     pub embedder: String,
     /// Calls the notetaker may be in at once (each runs a browser next to the speech model).
     pub max_concurrent_calls: usize,
