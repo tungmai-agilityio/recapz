@@ -230,3 +230,54 @@ export const setDocumentLlmOk = async (id: string, llm_ok: boolean) => {
 }
 
 export const deleteDocument = async (id: string) => { await check(await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: csrf() })) }
+
+export type LiveEvent =
+  | { type: 'final'; at_ms: number; text: string }
+  | { type: 'partial'; text: string }
+  | { type: 'unavailable' }
+  | { type: 'end' }
+
+/** The meeting is not being recorded right now, or the member cannot see it. */
+export class NotLive extends Error {}
+
+/** Reads the live transcript until the call ends, the stream drops or `signal` aborts. */
+export async function watchLive(id: string, onEvent: (e: LiveEvent) => void, signal: AbortSignal): Promise<void> {
+  const first = await fetch(`/api/meetings/${id}/live`, { signal })
+  if (first.status === 404) throw new NotLive()
+  const res = await check(first)
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    buf += decoder.decode(value, { stream: !done })
+    const { events, rest } = parseEvents(done ? buf + '\n\n' : buf)
+    buf = rest
+    for (const e of events) onEvent({ type: e.name, ...(e.data as object) } as LiveEvent)
+    if (done) return
+  }
+}
+
+/** What to ask about: a clicked line (its `at_ms`) or, without one, the last 60 s; `text` is extra words. */
+export interface LiveAsk { text?: string; at_ms?: number }
+
+/** One answer to a live question; `citations` with `answered: false` are passages only. */
+export async function liveAsk(id: string, body: LiveAsk): Promise<{ answer: string; citations: Citation[] }> {
+  const first = await fetch(`/api/meetings/${id}/live-ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...csrf() },
+    body: JSON.stringify(body),
+  })
+  if (first.status === 404) throw new NotLive()
+  if (first.status === 429) throw new RateLimited()
+  if (first.status === 503) throw new NoModel()
+  const res = await check(first)
+  let answer = ''
+  let citations: Citation[] = []
+  for (const e of parseEvents((await res.text()) + '\n\n').events) {
+    if (e.name === 'token') answer += (e.data as { text: string }).text
+    if (e.name === 'error') throw new AnswerFailed()
+    if (e.name === 'citations') citations = e.data as Citation[]
+  }
+  return { answer, citations }
+}

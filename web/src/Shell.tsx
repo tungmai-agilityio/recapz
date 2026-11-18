@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
-import { getMe, logout, Unauthorized } from './api'
+import { getMe, getMeetings, logout, Unauthorized } from './api'
 import { ThemeSwitch } from './ThemeSwitch'
 import { Badge } from './ui/Badge'
 import { Face } from './ui/Face'
@@ -17,6 +17,7 @@ function crumb(path: string) {
   if (path === '/upload') return <>Meetings / <b className="font-medium text-ink">Upload</b></>
   if (path === '/documents') return <>Work / <b className="font-medium text-ink">My documents</b></>
   if (path === '/ask') return <b className="font-medium text-ink">Ask</b>
+  if (path.startsWith('/meetings/') && path.endsWith('/live')) return <>Work / <b className="font-medium text-ink">Live meeting</b></>
   if (path.startsWith('/meetings/')) return <>Meetings / <b className="font-medium text-ink">Meeting report</b></>
   return <b className="font-medium text-ink">Meetings</b>
 }
@@ -35,6 +36,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const { pathname } = useLocation()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
+  // The rail shows "Live meeting" only while a call is being recorded.
+  const meetings = useQuery({ queryKey: ['meetings'], queryFn: getMeetings, enabled: !!me.data, refetchInterval: 15_000 })
+  const live = meetings.data?.find((m) => m.status === 'recording')
   const navigate = useNavigate()
   const out = useMutation({ mutationFn: logout, onSuccess: () => qc.resetQueries() })
 
@@ -62,7 +66,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
-        {groups.map((g) => (
+        {groups.map((g) => ({ ...g, items: g.label === 'Work' && live ? [...g.items, { to: `/meetings/${live.id}/live`, label: 'Live meeting' }] : g.items })).map((g) => (
           <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (
