@@ -26,10 +26,11 @@ pub fn is_stop(word: &str) -> bool {
 
 /// The seam for a real model. `id` names the model and its output size (for example
 /// `hash-256`); it is stored with every vector, because vectors from different embedders cannot
-/// be compared. Change `id` whenever the output would change.
+/// be compared. Change `id` whenever the output would change. `embed` fails instead of returning a
+/// wrong vector; callers must not store anything for a failed text.
 pub trait Embedder: Send + Sync {
     fn id(&self) -> &'static str;
-    fn embed(&self, text: &str) -> Vec<f32>;
+    fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>>;
 }
 
 pub const HASH_DIM: usize = 256;
@@ -50,7 +51,7 @@ impl Embedder for HashEmbedder {
         "hash-256"
     }
 
-    fn embed(&self, text: &str) -> Vec<f32> {
+    fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let words: Vec<String> = keywords(text).map(|w| w.to_lowercase()).collect();
         let mut v = vec![0f32; HASH_DIM];
         for (i, w) in words.iter().enumerate() {
@@ -63,7 +64,7 @@ impl Embedder for HashEmbedder {
         if norm > 0.0 {
             v.iter_mut().for_each(|x| *x /= norm);
         }
-        v
+        Ok(v)
     }
 }
 
@@ -97,16 +98,18 @@ mod tests {
     #[test]
     fn same_text_is_identical_and_related_text_beats_unrelated() {
         let e = HashEmbedder;
-        let a = e.embed("we agreed to ship the pricing page on Friday");
+        let a = e
+            .embed("we agreed to ship the pricing page on Friday")
+            .unwrap();
         assert_eq!(a.len(), HASH_DIM);
         assert!((cosine(&a, &a) - 1.0).abs() < 1e-5);
-        let related = e.embed("Pricing page ships Friday, agreed");
-        let other = e.embed("lunch menu includes noodles and tea");
+        let related = e.embed("Pricing page ships Friday, agreed").unwrap();
+        let other = e.embed("lunch menu includes noodles and tea").unwrap();
         assert!(cosine(&a, &related) > cosine(&a, &other) + 0.2);
     }
 
     #[test]
     fn empty_text_is_the_zero_vector() {
-        assert!(HashEmbedder.embed("  ").iter().all(|x| *x == 0.0));
+        assert!(HashEmbedder.embed("  ").unwrap().iter().all(|x| *x == 0.0));
     }
 }
