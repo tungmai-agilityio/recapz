@@ -1,7 +1,7 @@
 # Recapz
 
 Private meeting notetaker for one team on one server. A notetaker joins Google Meet and Zoom, transcribes
-mixed Vietnamese and English on our own GPU server, writes a meeting report, and lets the team search every
+mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team search every
 meeting with cited answers. One Rust binary (axum) with an embedded React + Vite + TypeScript + Tailwind app.
 
 Status: early development, building toward v1. See `docs/spec.md` for the feature spec.
