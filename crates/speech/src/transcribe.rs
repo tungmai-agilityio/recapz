@@ -6,6 +6,8 @@ pub struct Segment {
     pub start_ms: i64,
     pub end_ms: i64,
     pub text: String,
+    /// Provider's speaker tag, when it gives one. Only equality matters; the job names the rows.
+    pub speaker: Option<String>,
 }
 
 /// Turns 16 kHz mono samples into timed segments. `language` is a hint such as "vi" or "auto".
@@ -25,11 +27,13 @@ impl Transcriber for StubTranscriber {
                 start_ms: 0,
                 end_ms: half,
                 text: "Xin chào mọi người.".into(),
+                speaker: None,
             },
             Segment {
                 start_ms: half,
                 end_ms: total_ms,
                 text: "Let's start the weekly sync.".into(),
+                speaker: None,
             },
         ])
     }
@@ -129,6 +133,7 @@ mod real {
                         start_ms: state.full_get_segment_t0(i)? * 10,
                         end_ms: state.full_get_segment_t1(i)? * 10,
                         text: state.full_get_segment_text_lossy(i)?.trim().to_string(),
+                        speaker: None,
                     })
                 })
                 .filter(|s| !s.as_ref().is_ok_and(|s| is_non_speech(&s.text)))
