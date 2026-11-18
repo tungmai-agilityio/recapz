@@ -31,6 +31,14 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    let store = recapz_server::storage::S3Store::from_config(
+        &cfg.storage,
+        tokio::runtime::Handle::current(),
+    )?
+    .map(Arc::new);
+    if store.is_none() {
+        tracing::warn!("no [storage] bucket configured: recordings stay on local disk");
+    }
     let embedder = recapz_server::embedder::from_config(&cfg.embedder, &cfg.llm)?; // fail fast on a bad name
     runner::spawn(
         cfg.data_dir.clone(),
@@ -38,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
             &cfg.speech.base_url,
             &cfg.speech.api_key,
         )?),
+        store.map(|s| s as Arc<dyn recapz_core::blobs::Blobs>),
         report,
         embedder,
     );

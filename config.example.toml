@@ -14,6 +14,15 @@ max_call_minutes = 240       # hard cap on one call
 [speech]
 # base_url = "https://api.deepgram.com"   # override only for tests
 
+# Private S3-compatible bucket (for example Hetzner Object Storage) for finished recordings. After a
+# successful transcript the recording is uploaded and the local copy removed; playback streams from the
+# bucket through the server. Leave `bucket` empty to keep recordings on local disk.
+# The access key is never read from this file: set RECAPZ_STORAGE_KEY_ID and RECAPZ_STORAGE_SECRET in the environment.
+[storage]
+endpoint = ""            # e.g. "https://fsn1.your-objectstorage.com"
+region = ""              # e.g. "fsn1"
+bucket = ""              # must be private
+
 [google]
 client_id = ""
 client_secret = ""

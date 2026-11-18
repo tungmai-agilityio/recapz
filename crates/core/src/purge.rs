@@ -1,17 +1,23 @@
 //! Hard delete of one meeting: audio files, then every database row about it, including search rows.
 //! Used for opt-out; retention and per-participant purge reuse it later.
-use crate::db::tenant_dir;
+use crate::{
+    blobs::{audio_key, Blobs},
+    db::tenant_dir,
+};
 use anyhow::{bail, Result};
 use rusqlite::{Connection, OptionalExtension};
 use std::{fs, io, path::Path};
 
-/// Returns false when the meeting does not exist. Safe to repeat: files go first, so a failure
-/// partway leaves nothing readable and a retry finishes the job.
+/// Returns false when the meeting does not exist. Safe to repeat: the recording goes first (the
+/// object in the store, then local files), so a failure partway leaves nothing readable and a
+/// retry finishes the job. A recording that lives in the store with no `blobs` given is an error,
+/// never a silently kept object.
 pub fn purge_meeting(
     c: &Connection,
     data_dir: &Path,
     tenant_id: &str,
     meeting_id: &str,
+    blobs: Option<&dyn Blobs>,
 ) -> Result<bool> {
     if meeting_id.is_empty()
         || !meeting_id
@@ -19,6 +25,19 @@ pub fn purge_meeting(
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
     {
         bail!("unsafe meeting id");
+    }
+    let remote: Option<(Option<String>, bool)> = c
+        .query_row(
+            "SELECT audio_path, audio_remote FROM meetings WHERE id = ?1",
+            [meeting_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    if let Some((Some(rel), true)) = remote {
+        let Some(b) = blobs else {
+            bail!("recording is in object storage but no store is configured");
+        };
+        b.delete(&audio_key(tenant_id, &rel))?;
     }
     match fs::remove_dir_all(
         tenant_dir(data_dir, tenant_id)
@@ -122,7 +141,7 @@ mod tests {
             "seed must be searchable"
         );
 
-        assert!(purge_meeting(&c, dir.path(), "t1", "m1").unwrap());
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap());
 
         for (table, col) in [
             ("meetings", "id"),
@@ -166,7 +185,7 @@ mod tests {
         assert!(!tenant_dir(dir.path(), "t1").join("audio/m1").exists());
         assert!(tenant_dir(dir.path(), "t1").join("audio/m2/a.wav").exists());
         assert!(
-            !purge_meeting(&c, dir.path(), "t1", "m1").unwrap(),
+            !purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap(),
             "second call finds nothing"
         );
     }
@@ -176,7 +195,42 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let c = open_tenant(dir.path(), "t1").unwrap();
         for bad in ["", "..", "../x", "a/b"] {
-            assert!(purge_meeting(&c, dir.path(), "t1", bad).is_err(), "{bad}");
+            assert!(
+                purge_meeting(&c, dir.path(), "t1", bad, None).is_err(),
+                "{bad}"
+            );
         }
+    }
+
+    #[test]
+    fn a_recording_in_the_store_is_deleted_there_first_and_never_kept_silently() {
+        use crate::{archive_job::tests::Fake, blobs::Blobs};
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafish");
+        c.execute("UPDATE meetings SET audio_remote=1 WHERE id='m1'", [])
+            .unwrap();
+        let store = Fake::default();
+        store.objects.lock().unwrap().extend([
+            ("t1/audio/m1/a.wav".to_string(), vec![1]),
+            ("t1/audio/m2/a.wav".to_string(), vec![2]),
+        ]);
+        // No store configured: refuse, and leave the meeting and the object alone.
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", None).is_err());
+        assert_eq!(count(&c, "SELECT count(*) FROM meetings"), 1);
+        assert_eq!(store.objects.lock().unwrap().len(), 2);
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", Some(&store as &dyn Blobs)).unwrap());
+        assert_eq!(
+            store
+                .objects
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|o| o.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["t1/audio/m2/a.wav"],
+            "only that meeting's object goes"
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM meetings"), 0);
     }
 }

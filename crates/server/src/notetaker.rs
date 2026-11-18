@@ -146,7 +146,7 @@ pub async fn run_meeting<D: CallDriver>(
     };
     match out.end {
         Ok(LeaveReason::OptOut) => {
-            purge_meeting(&c, data_dir, tenant, id)?; // the row goes too, so no status remains
+            purge_meeting(&c, data_dir, tenant, id, None)?; // still recording: nothing is in the store yet; the row goes too, so no status remains
             Ok(())
         }
         Ok(LeaveReason::LobbyTimeout) => {
