@@ -16,6 +16,7 @@ export function useRecordingStorage() {
 }
 
 export function useSpeechProvider(): string {
-  const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
+  // The Shell already fetches `me`; asking again on mount would refetch a failed (401) `me` each time the page swaps to the sign-in card.
+  const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2, refetchOnMount: false, retryOnMount: false })
   return me.data?.speech_provider ?? 'the speech provider'
 }

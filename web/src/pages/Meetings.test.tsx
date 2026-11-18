@@ -210,5 +210,13 @@ test('shows duration, action items, ribbon and faces from the list data, and hid
   expect(bare.textContent).not.toMatch(/min|action item/)
   expect(bare.querySelector('[data-variant]')).toBeNull()
   expect(within(bare).queryAllByRole('img')).toEqual([])
-  expect(screen.getByText('3 meetings this month · 48 min recorded · all audio stays on your server')).toBeTruthy()
+  expect(screen.getByText('3 meetings this month · 48 min recorded · audio is processed by the speech provider')).toBeTruthy()
+  expect(document.body.textContent).not.toMatch(/stays on your server/)
+})
+
+test('the month line names the speech provider from /api/me', async () => {
+  const rows = [{ id: '1', title: 'Weekly sync', platform: 'meet', status: 'ready', started_at: Date.now(), created_at: 1 }]
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/me' ? { email: 'a@example.com', name: null, role: 'member', speech_provider: 'Deepgram' } : rows))))
+  show()
+  expect(await screen.findByText(/audio is processed by Deepgram/)).toBeTruthy()
 })
