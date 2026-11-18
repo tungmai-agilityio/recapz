@@ -31,13 +31,20 @@ pub struct DeepgramTranscriber {
 
 impl DeepgramTranscriber {
     pub fn new(base_url: &str, api_key: &str) -> Result<Self> {
+        // reqwest's blocking client starts its own runtime and panics when built on a thread that is
+        // running async code (the server's `main`), so it is built on a plain thread of its own.
+        let http = std::thread::spawn(|| {
+            reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(600))
+                .build()
+        })
+        .join()
+        .map_err(|_| anyhow!("http client: thread panicked"))?
+        .map_err(|e| anyhow!("http client: {}", e.without_url()))?;
         Ok(Self {
             base: base_url.trim_end_matches('/').to_string(),
             key: api_key.to_string(),
-            http: reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(600))
-                .build()
-                .map_err(|e| anyhow!("http client: {}", e.without_url()))?,
+            http,
             backoff: Duration::from_secs(2),
         })
     }
