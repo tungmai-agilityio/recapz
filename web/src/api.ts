@@ -59,6 +59,18 @@ export const getMe = async (): Promise<Me> => (await check(await fetch('/api/me'
 export const getAudioRetention = async (): Promise<{ days: number }> =>
   (await check(await fetch('/api/settings/audio-retention'))).json()
 
+export interface Usage {
+  speech_micro_usd: number
+  llm_micro_usd: number
+  total_micro_usd: number
+  cap_micro_usd: number
+  paused: boolean
+  meetings: { id: string; title: string; speech_micro_usd: number; llm_micro_usd: number }[]
+}
+
+/** Admin only: this month's estimated cost, the cap and the costliest meetings. */
+export const getUsage = async (): Promise<Usage> => (await check(await fetch('/api/usage'))).json()
+
 export const getMeetings = async (): Promise<Meeting[]> =>
   (await check(await fetch('/api/meetings'))).json()
 
