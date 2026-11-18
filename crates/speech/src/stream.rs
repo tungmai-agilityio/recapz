@@ -220,7 +220,11 @@ mod tests {
             LiveEvent::Final("xin chào".into())
         );
         drop(s);
-        // closing sends no Unavailable and no further text
+        // the flushed tail arrives after the drop, then the channel ends without Unavailable
+        assert_eq!(
+            events.recv_timeout(WAIT).unwrap(),
+            LiveEvent::Final("hết".into())
+        );
         assert_eq!(
             events.recv_timeout(WAIT),
             Err(RecvTimeoutError::Disconnected)
