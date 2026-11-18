@@ -32,7 +32,7 @@ prepush() { # expected-exit remote-ref
 }
 precommit() { # expected-exit author-email committer-email
   n=$((n + 1))
-  GIT_AUTHOR_EMAIL=$2 GIT_COMMITTER_EMAIL=$3 scripts/git-hooks/pre-commit 2>/dev/null
+  GIT_AUTHOR_NAME=t GIT_COMMITTER_NAME=t GIT_AUTHOR_EMAIL=$2 GIT_COMMITTER_EMAIL=$3 scripts/git-hooks/pre-commit 2>/dev/null
   got=$?
   [ "$got" = "$1" ] || { echo "pre-commit: want $1, got $got: $2 / $3"; fail=1; }
 }
