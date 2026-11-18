@@ -43,6 +43,7 @@ pub struct App {
 mod ask;
 mod connect;
 mod documents;
+mod live;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
     let llm = crate::report_model::router_from_config(&cfg.llm)
@@ -110,6 +111,7 @@ pub fn router_with_llm(
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
+        .route("/api/meetings/{id}/live", get(live::live))
         .route("/api/ask", post(ask::ask))
         .route(
             "/api/documents",

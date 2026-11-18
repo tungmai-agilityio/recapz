@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod embedder;
 pub mod google_calendar;
+pub mod live;
 pub mod notetaker;
 pub mod notetaker_loop;
 pub mod report_model;
