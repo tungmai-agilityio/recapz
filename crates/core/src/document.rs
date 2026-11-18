@@ -387,11 +387,12 @@ mod tests {
         assert_eq!(count(&c, "SELECT COUNT(*) FROM documents"), 2);
 
         assert!(purge_document(&c, d.path(), "t", "m1", &a).unwrap());
-        for (table, col) in [
-            ("documents", "id"),
-            ("document_chunks", "document_id"),
-            ("document_vectors", "document_id"),
-            ("jobs", "payload"),
+        // Document b keeps its row, one chunk, one vector and its two ingest jobs (add, toggle on).
+        for (table, col, kept) in [
+            ("documents", "id", 1),
+            ("document_chunks", "document_id", 1),
+            ("document_vectors", "document_id", 1),
+            ("jobs", "payload", 2),
         ] {
             assert_eq!(
                 count(
@@ -405,8 +406,8 @@ mod tests {
                 count(
                     &c,
                     &format!("SELECT COUNT(*) FROM {table} WHERE {col}='{b}'")
-                ) > 0,
-                true,
+                ),
+                kept,
                 "{table}: other stays"
             );
         }
