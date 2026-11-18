@@ -73,6 +73,21 @@ impl Default for Speech {
     }
 }
 
+/// Private S3-compatible bucket for finished recordings. Empty `bucket` keeps them on local disk.
+/// The access key never comes from the config file: `Config::load` reads `RECAPZ_STORAGE_KEY_ID`
+/// and `RECAPZ_STORAGE_SECRET` from the environment.
+#[derive(Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Storage {
+    pub endpoint: String,
+    pub region: String,
+    pub bucket: String,
+    #[serde(skip)]
+    pub key_id: String,
+    #[serde(skip)]
+    pub secret: String,
+}
+
 /// Settings for the browser notetaker.
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
@@ -95,6 +110,7 @@ pub struct Config {
     pub llm: Llm,
     pub notetaker: Notetaker,
     pub speech: Speech,
+    pub storage: Storage,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
     /// Text embedder for Ask search: `hash` (built in) or `hosted` (see `[llm] embedding_model`). Changing it re-indexes meetings at start.
@@ -121,6 +137,7 @@ impl Default for Config {
             llm: Llm::default(),
             notetaker: Notetaker::default(),
             speech: Speech::default(),
+            storage: Storage::default(),
             ask_per_minute: 20,
             embedder: "hash".into(),
             max_concurrent_calls: 2,
@@ -150,6 +167,8 @@ impl Config {
         };
         cfg.secret_key = std::env::var("RECAPZ_SECRET_KEY").unwrap_or_default();
         cfg.speech.api_key = std::env::var("RECAPZ_SPEECH_KEY").unwrap_or_default();
+        cfg.storage.key_id = std::env::var("RECAPZ_STORAGE_KEY_ID").unwrap_or_default();
+        cfg.storage.secret = std::env::var("RECAPZ_STORAGE_SECRET").unwrap_or_default();
         Ok(cfg)
     }
 }
