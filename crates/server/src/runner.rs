@@ -1,5 +1,7 @@
 use crate::report_model::LlmReportModel;
-use recapz_core::{db, embed::Embedder, index_job, jobs, label_job, report_job, transcribe_job};
+use recapz_core::{
+    db, document, embed::Embedder, index_job, jobs, label_job, report_job, transcribe_job,
+};
 use recapz_speech::transcribe::Transcriber;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -29,10 +31,16 @@ fn run_pending(
             transcribe_job::KIND,
             label_job::KIND,
             index_job::KIND,
+            document::KIND,
             report_job::KIND,
         ]
     } else {
-        &[transcribe_job::KIND, label_job::KIND, index_job::KIND]
+        &[
+            transcribe_job::KIND,
+            label_job::KIND,
+            index_job::KIND,
+            document::KIND,
+        ]
     };
     let control = db::open_control(data_dir)?;
     let mut ran = false;
@@ -46,6 +54,7 @@ fn run_pending(
             (label_job::KIND, _, _) => label_job::handle(c, j, data_dir, &tenant),
             (report_job::KIND, _, Some(m)) => report_job::handle(c, j, m),
             (index_job::KIND, _, _) => index_job::handle(c, j, embedder),
+            (document::KIND, _, _) => document::handle(c, data_dir, &tenant, j, embedder),
             _ => anyhow::bail!("no handler for {}", j.kind),
         })?;
     }
@@ -106,6 +115,48 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Counting(std::sync::atomic::AtomicUsize);
+    impl Embedder for Counting {
+        fn id(&self) -> &'static str {
+            "counting"
+        }
+        fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            recapz_core::embed::HashEmbedder.embed(text)
+        }
+    }
+
+    #[test]
+    fn ingest_runs_and_only_a_toggled_on_document_reaches_the_embedder() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let dir = tempfile::tempdir().unwrap();
+        let control = db::open_control(dir.path()).unwrap();
+        db::bootstrap_admin(&control, "boss@example.com").unwrap();
+        let tenant = db::tenant_ids(&control).unwrap().remove(0);
+        let conn = db::open_tenant(dir.path(), &tenant).unwrap();
+        conn.execute(
+            "INSERT INTO members (id, email, role) VALUES ('m1','boss@example.com','admin')",
+            [],
+        )
+        .unwrap();
+        let off = document::add(&conn, dir.path(), &tenant, "m1", "a.txt", b"alpha beta").unwrap();
+        let emb = Counting(Default::default());
+        assert!(run_pending(dir.path(), None, None, &emb).unwrap());
+        assert_eq!(emb.0.load(SeqCst), 0, "toggle off: nothing is embedded");
+        let chunks = |id: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM document_chunks WHERE document_id=?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(chunks(&off), 1, "still keyword-searchable");
+        assert!(document::set_llm_ok(&conn, "m1", &off, true).unwrap());
+        assert!(run_pending(dir.path(), None, None, &emb).unwrap());
+        assert_eq!(emb.0.load(SeqCst), 1, "toggle on: one chunk embedded");
+    }
 
     #[test]
     fn report_job_stays_queued_without_a_language_model() {
