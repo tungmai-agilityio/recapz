@@ -140,5 +140,5 @@ non-owners once the list returns the owner.
 - [ ] Notetaker sign-in status on this screen: no API exposes it yet (a signed-out account only shows as a failed meeting's error), so there is nothing to show
 - [ ] Join rule radios, notetaker name, join message
 - [ ] Retention selects (audio, transcripts); "Where data lives" read-only text
-      Open: a "Where audio goes" card names the speech provider from `/api/me` (jsdom test; checked by eye at 1280 and 390 px, Daylight light, 2026-11-18, no side-by-side with the prototype state). Retention selects and the rest of the "Where data lives" text have no settings API yet.
+      Open: a "Where audio goes" card names the speech provider from `/api/me` (jsdom test; checked by eye at 1280 and 390 px, Daylight light, 2026-11-18, no side-by-side with the prototype state). The same card now says where recordings are kept (object storage or local disk) and how long their audio stays (read from `GET /api/settings/audio-retention`); checked by eye at 1280 px only. The retention select itself is not built: `PUT` exists on the API for admins, the control does not. Transcript retention and the rest of "Where data lives" have no settings API yet.
 - [ ] Delete everything one participant said, with confirm; Save changes; saved toast

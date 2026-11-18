@@ -67,6 +67,17 @@ fn requeue_stale(data_dir: &std::path::Path, embedder_id: &str) -> anyhow::Resul
     Ok(n)
 }
 
+/// Deletes expired audio in every tenant; returns how many meetings were cleared.
+fn retention_sweep(data_dir: &std::path::Path, blobs: Option<&dyn Blobs>) -> anyhow::Result<usize> {
+    let control = db::open_control(data_dir)?;
+    let mut n = 0;
+    for tenant in db::tenant_ids(&control)? {
+        let conn = db::open_tenant(data_dir, &tenant)?;
+        n += recapz_core::retention::sweep(&conn, data_dir, &tenant, blobs, db::now_ms())?;
+    }
+    Ok(n)
+}
+
 /// Polls every tenant's queue once a second, draining while work remains.
 pub fn spawn(
     data_dir: PathBuf,
@@ -85,7 +96,21 @@ pub fn spawn(
             Ok(Err(e)) => tracing::error!("re-index check: {e:#}"),
             Err(e) => tracing::error!("re-index check panicked: {e}"),
         }
+        let mut last_sweep: Option<std::time::Instant> = None;
         loop {
+            // Audio retention, about once an hour (and once at start).
+            if last_sweep.is_none_or(|t| t.elapsed() >= Duration::from_secs(3600)) {
+                last_sweep = Some(std::time::Instant::now());
+                let (d, b) = (data_dir.clone(), blobs.clone());
+                match tokio::task::spawn_blocking(move || retention_sweep(&d, b.as_deref())).await {
+                    Ok(Ok(n)) if n > 0 => {
+                        tracing::info!("retention: deleted audio of {n} meetings")
+                    }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => tracing::error!("retention sweep: {e:#}"),
+                    Err(e) => tracing::error!("retention sweep panicked: {e}"),
+                }
+            }
             let (d, t, b, r, e) = (
                 data_dir.clone(),
                 tx.clone(),

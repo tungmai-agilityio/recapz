@@ -958,3 +958,37 @@ async fn meeting_list_returns_duration_action_count_and_capped_speakers() {
     assert_eq!(rows[0]["action_item_count"], 0);
     assert_eq!(rows[0]["speakers"], serde_json::json!([]));
 }
+
+#[tokio::test]
+async fn audio_retention_defaults_to_90_days_and_only_an_admin_changes_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+
+    let path = "/api/settings/audio-retention";
+    let (s, _, body) = send(&app, get(path, &amy)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, r#"{"days":90}"#));
+    let (s, ..) = send(&app, json_req("PUT", path, &amy, r#"{"days":1}"#)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, body) = send(&app, json_req("PUT", path, &boss, r#"{"days":30}"#)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, r#"{"days":30}"#));
+    let (s, _, body) = send(&app, get(path, &amy)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, r#"{"days":30}"#));
+    let (s, ..) = send(&app, json_req("PUT", path, &boss, r#"{"days":99999}"#)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (_, _, body) = send(&app, get(path, &boss)).await;
+    assert_eq!(body, r#"{"days":30}"#, "a rejected value changes nothing");
+    let (_, _, me) = send(&app, get("/api/me", &boss)).await;
+    assert!(me.contains(r#""recording_storage":"local_disk""#), "{me}");
+}
