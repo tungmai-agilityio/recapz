@@ -89,6 +89,10 @@ pub fn router_with_llm(
             "/api/calendar",
             get(connect::status).delete(connect::disconnect),
         )
+        .route(
+            "/api/settings/audio-retention",
+            get(get_audio_retention).put(put_audio_retention),
+        )
         .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
@@ -430,6 +434,8 @@ struct Me {
     role: String,
     /// Where call audio is sent; the upload and privacy screens name it.
     speech_provider: &'static str,
+    /// Where finished recordings are kept: `object_storage` or `local_disk`.
+    recording_storage: &'static str,
 }
 
 async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
@@ -447,8 +453,49 @@ async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)
             name: u.name,
             role: u.role,
             speech_provider: crate::config::Speech::PROVIDER,
+            recording_storage: if app.store.is_some() {
+                "object_storage"
+            } else {
+                "local_disk"
+            },
         }),
     ))
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct AudioRetention {
+    /// Days finished recordings keep their audio; 0 keeps it forever.
+    days: u32,
+}
+
+async fn get_audio_retention(State(app): State<App>, jar: CookieJar) -> Res<Json<AudioRetention>> {
+    let u = app.current_user(&jar).await?;
+    let days = app
+        .tenant(u.tenant_id.clone(), |c| {
+            recapz_core::settings::audio_retention_days(c)
+        })
+        .await?;
+    Ok(Json(AudioRetention { days }))
+}
+
+/// Admin only. Takes effect at the next hourly sweep.
+async fn put_audio_retention(
+    State(app): State<App>,
+    jar: CookieJar,
+    Json(body): Json<AudioRetention>,
+) -> Res<Json<AudioRetention>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can change retention"));
+    }
+    app.tenant(u.tenant_id.clone(), move |c| {
+        Ok(
+            recapz_core::settings::set_audio_retention_days(c, body.days)
+                .map_err(|_| ApiError::BadRequest("retention is at most 3650 days")),
+        )
+    })
+    .await??;
+    Ok(Json(AudioRetention { days: body.days }))
 }
 
 /// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).

@@ -12,6 +12,7 @@ pub mod jobs;
 pub mod label_job;
 pub mod purge;
 pub mod report_job;
+pub mod retention;
 pub mod search;
 pub mod settings;
 pub mod speakers;

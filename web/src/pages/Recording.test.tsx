@@ -82,3 +82,18 @@ test('names the speech provider from /api/me', async () => {
   expect(await screen.findByText('Deepgram')).toBeTruthy()
   expect(screen.getByText(/is sent to/).textContent).toMatch(/Audio is sent to Deepgram for transcription/)
 })
+
+test('names where recordings are kept and the retention period', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(
+    u === '/api/me' ? { email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram', recording_storage: 'object_storage' }
+      : u === '/api/settings/audio-retention' ? { days: 90 } : { connected: false, needs_reconnect: false },
+  ))))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  expect((await screen.findByText(/Finished recordings are kept/)).textContent).toBe(
+    'Finished recordings are kept in private object storage and their audio is deleted after 90 days. Transcripts and reports stay.',
+  )
+})
