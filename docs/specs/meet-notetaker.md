@@ -134,7 +134,7 @@ assumes.
   every 15 s and claims `scheduled` meetings whose calendar start is within 1 minute, or that were
   pasted (no start time), by moving them to `joining` in one `UPDATE ... WHERE status = 'scheduled'`.
 - `max_concurrent_calls` in config, default 2 (one Chromium uses a few hundred MB *(unverified)*; the
-  server also runs whisper).
+  server also waits on the hosted speech provider).
 - `CallDriver` trait in `crates/notetaker` with a Meet implementation and a scripted fake, so the loop is
   tested without a browser.
 - Restart recovery: on start, any meeting left in `joining` fails with `server_restarted`; any meeting in
@@ -233,7 +233,7 @@ model matches Meet; that gap is accepted and called out in each PR.
 | Google terms on automated access | Real *(not legal advice)* | Account suspension | Internal use only, dedicated account; no official replacement exists once the Media API shuts down |
 | Workspace settings block the account | Medium | Knocks or denied | Same-domain account; `Denied` reported clearly |
 | Mixed audio only | Likely | Weaker speaker labels | Active-speaker samples; diarization later |
-| Chromium plus whisper on one GPU server | Medium | Memory pressure | `max_concurrent_calls`, transcription runs after the call |
+| Chromium plus job processing on one small server | Medium | Memory pressure | `max_concurrent_calls`, transcription runs after the call |
 | Refresh tokens leak via backups | Low | Calendar read access | Encrypted, key outside the data dir |
 | Recording without valid consent | Low with the notice | Legal | Notice or leave, opt-out, Recording & privacy settings |
 

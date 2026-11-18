@@ -34,7 +34,3 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
 async-trait = "0.1"
-
-[features]
-whisper = ["recapz-speech/whisper"]
-cuda = ["whisper", "recapz-speech/cuda"]

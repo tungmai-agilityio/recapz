@@ -4,7 +4,7 @@ One command once the setup below is done: `make local` (server with real transcr
 
 ## Setup (once)
 
-1. Install Rust (version pinned in `rust-toolchain.toml`), Node and pnpm, then `brew install cmake` (until the local speech engine leaves the build).
+1. Install Rust (version pinned in `rust-toolchain.toml`), Node and pnpm.
 2. Get a Deepgram API key and export it before starting: `export RECAPZ_SPEECH_KEY=...` (read from the environment only, never `config.toml`). The server refuses to start without it, and call and upload audio is sent to Deepgram.
 3. `cp config.example.toml config.toml` (never commit it) and set:
    - `bootstrap_admin_email = "you@example.com"`

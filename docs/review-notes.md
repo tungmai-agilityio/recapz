@@ -199,3 +199,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `deepgram_language()` maps `vi`, `en` and `multi` explicitly, and `vi+en` and `auto` (what meetings made before this carry) to `multi`. An unknown value fails the batch job with "unsupported meeting language" and makes the stream report unavailable, without contacting the provider. Existing meetings keep their stored value and keep working.
 - The schema default for `meetings.language` is still `vi+en` (a column default cannot be changed without rebuilding the table); every insert path now sets the language explicitly.
 - Still unverified (#226): `language=multi` with Vietnamese plus English, `vi` alone, and diarization on Vietnamese.
+
+## Whisper and CUDA removed (#225)
+- Gone: the `whisper` and `cuda` features in `recapz-speech` and `recapz-server`, `whisper-rs` and its cmake/CUDA build, the whisper transcriber, the language window helper only it used (and its test), `--features whisper[,cuda]` in the Makefile, and the whisper, CUDA and cmake lines in `docs/deploy.md`, `docs/running-locally.md`, `docs/specs/live-ask.md` and `docs/specs/meet-notetaker.md`. `speech_model` left the config in #220. The `Transcriber` trait, `StubTranscriber`, `is_non_speech` and upload decoding stay.
+- Not changed on purpose: `docs/decisions/` (the decision record and the superseded model comparison are history) and this file. `CLAUDE.md` still says `make release` builds "with CUDA": it is a guard-rail file, so that one line is a separate PR left for the maintainer.
+- Verified: `make -n release` shows a plain `cargo build --release`; the workspace builds, tests and lints without the feature. Not run here: a real `make release` (full release build).
