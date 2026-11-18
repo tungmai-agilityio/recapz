@@ -70,3 +70,25 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 
 - Exact Deepgram and OpenAI settings that give no training and no retention (*unverified*).
 - Whether Deepgram streaming accepts the notetaker's 16 kHz mono i16 frames as they are (expected yes).
+
+## Real-key check (PR 11, maintainer-run)
+
+Nothing here has been run. Every provider test in the repo uses a mock server, so the points below are still unverified against Deepgram and the object store. Run them once with a real key, write the results under "Results" and tick the ticket (#226). Use only consented recordings; commit none.
+
+Setup: `RECAPZ_SPEECH_KEY` (and the storage variables) in the environment, never in `config.toml`. Read the usage card on Recording & privacy before and after to compare the estimate with the provider's invoice.
+
+| Check | How | Pass when |
+|---|---|---|
+| Vietnamese quality | 5 to 10 consented recordings, language `vi` | Written note per file: word errors seen, proper nouns, numbers |
+| Mixed language | 3 or more recordings that switch Vietnamese and English, language `multi` | Compared with the same file in `vi`; note which reads better |
+| `multi` with `diarize_model=latest` | Same mixed recordings | The request is accepted and speakers are labelled; if the provider rejects the pair, record the error text |
+| Vietnamese speaker labels | A recording with 2 to 4 known speakers | Speaker count and turn changes match what was said |
+| Long file | A 2 hour file, uploaded once | Finishes without a 504, or the provider limit is recorded and the split-file ticket is opened |
+| Cost | The same month's invoice | Estimate in the usage card is within about 15% of the invoice |
+| No retention | Dashboard or account settings | `mip_opt_out` is on for batch and streaming requests |
+| Live latency | A live call with the Live Ask button, 10 tries | 6 s or less from the button to the answer in at least 9 of 10 |
+| Storage | One upload, play it back, delete the meeting | Playback seeks; the object is gone afterwards |
+
+### Results
+
+(empty until the check is run)
