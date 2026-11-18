@@ -32,14 +32,14 @@ no "no section" bash -c ". scripts/automerge-lib.sh; printf '## Summary\nx\n' | 
 no "None plus non-latin text" bash -c ". scripts/automerge-lib.sh; printf '## Decisions needing the maintainer\nNone \xe2\x80\x94 \xe6\xb1\xba\xe5\xae\x9a\n' | decisions_empty"
 no "text between two comments" bash -c ". scripts/automerge-lib.sh; printf '## Decisions needing the maintainer\nNone <!-- a --> but decide X <!-- b -->\n' | decisions_empty"
 ok "None with a comment on each side" bash -c ". scripts/automerge-lib.sh; printf '## Decisions needing the maintainer\n<!-- a -->None<!-- b -->\n' | decisions_empty"
-all_pass='[{"name":"commits","bucket":"pass"},{"name":"size","bucket":"pass"},{"name":"guards","bucket":"pass"},{"name":"rust","bucket":"pass"},{"name":"web","bucket":"pass"}]'
+all_pass='[{"name":"guards","bucket":"pass"},{"name":"rust","bucket":"pass"},{"name":"web","bucket":"pass"}]'
 ok "all pass" test -z "$(echo "$all_pass" | ci_failures)"
 no "a skipped job" test -z "$(echo "${all_pass/\"web\",\"bucket\":\"pass\"/\"web\",\"bucket\":\"skipping\"}" | ci_failures)"
 no "a failed job" test -z "$(echo "${all_pass/\"rust\",\"bucket\":\"pass\"/\"rust\",\"bucket\":\"fail\"}" | ci_failures)"
 no "an extra failing job" test -z "$(echo "${all_pass%]},{\"name\":\"deploy\",\"bucket\":\"fail\"}]" | ci_failures)"
 no "garbage results" test -z "$(echo 'null' | ci_failures)"
-no "a missing job" test -z "$(echo '[{"name":"commits","bucket":"pass"}]' | ci_failures)"
-no "a pending job" test -z "$(echo "${all_pass/\"size\",\"bucket\":\"pass\"/\"size\",\"bucket\":\"pending\"}" | ci_failures)"
+no "a missing job" test -z "$(echo '[{"name":"guards","bucket":"pass"}]' | ci_failures)"
+no "a pending job" test -z "$(echo "${all_pass/\"guards\",\"bucket\":\"pass\"/\"guards\",\"bucket\":\"pending\"}" | ci_failures)"
 
 # --- automerge-check.sh itself, with a stub gh that serves canned data from $GH_FIX
 stub=$(mktemp -d); trap 'rm -rf "$stub"' EXIT

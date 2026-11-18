@@ -38,7 +38,7 @@
 ## Pull requests
 - One concern per PR; keep it reviewable. Title uses the same `type(scope): summary` format.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.
-- CI runs `commits`, `size`, `guards`, `rust` and `web` on every PR. Before opening a PR run the scoped checks in
+- CI runs `guards`, `rust` and `web` on every PR. Commit, title, branch and size rules are not checked in CI: before opening a PR run the scoped checks in
   `CLAUDE.md` (Commands), `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and
   `node scripts/pr-size.mjs origin/main`.
 - Merge with **squash**; the PR title becomes the commit subject on `main`.
