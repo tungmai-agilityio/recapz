@@ -41,7 +41,7 @@ definition of done for every web PR.
 - [ ] Rail: glyph and wordmark; groups Work (Meetings, Meeting report, Ask, Live meeting, Upload) and Workspace
       (Members, Recording & privacy); v1 dot; active item has `aria-current="page"` and an amber marker (Ink) or
       blue marker (Daylight)
-      Open: Live meeting, Upload and Members stay out of the rail until their screens exist; v1 dots and the glyph are in.
+      Open: Members stays out of the rail until its screen exists. Live meeting appears only while a call is being recorded (the rail asks `GET /api/meetings` every 15 s); v1 dots and the glyph are in.
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
 - [x] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
@@ -66,7 +66,7 @@ definition of done for every web PR.
       no opted-out state exists in the list data)
 - [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
 - [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording (not built: the live
-      view route does not exist yet; rows with status `recording` show a Recording badge)
+      view exists at `/meetings/:id/live` but the list has no card yet; rows with status `recording` show a Recording badge, and the rail links to the live view)
 - [ ] Empty, loading and error states (built in #137; no screenshot yet)
 
 `GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built and ticked after the screenshot pass.
@@ -117,13 +117,22 @@ non-owners once the list returns the owner.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
       link to the new meeting when ready. Built in #138; no screenshot yet. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
 
-## S6 Live meeting (blocked: events API and notetaker driver)
+## S6 Live meeting (built from the spec in #194, not checked against the prototype: it is not in the repo)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
+      Open: only the title and a "Recording" badge (and "Call ended") are built. Timer, platform and join time are not;
+      Pause and Stop have no backend route, so they are hidden.
 - [ ] Live ribbon, live transcript, speaking now, talk time, noted so far
+      Open: the live transcript is built (lines with the time into the call, the partial line in grey, click a line to
+      ask about it). The ribbon, speaking now, talk time and noted so far are not: the live stream has no speaker
+      labels or notes (`docs/decisions/hosted-speech.md`).
 - [ ] Live Ask panel ("Only you see these"): context line (last 60 s, or a clicked transcript line, with "use last 60 s"),
       optional extra words, Ask now button and `A` hotkey; answer cards newest first with asker, quote, time taken, answer,
       and Document or Meeting sources with page or time; "Passages only" card for documents not sent to the language model;
       waiting state (`docs/specs/live-ask.md`)
+      Open: built with jsdom tests, no screenshot and no prototype side-by-side. Cards show the context, time taken,
+      answer and sources (document or meeting with its time); there is no asker (only you see them) and no page number
+      (documents have none). The answer arrives in one piece, not token by token. The page has not been run in a
+      browser against a real call.
 
 ## S9 My documents (page built from the spec, not checked against the prototype: it is not in the repo)
 - [ ] Drop zone: Markdown and TXT, up to 20 MB each, done. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there

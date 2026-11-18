@@ -1,0 +1,117 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import { afterEach, expect, test, vi } from 'vitest'
+import App from '../App'
+
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+const meeting = { id: 'm1', title: 'Client call', platform: 'meet', status: 'recording', language: 'vi', started_at: 1, ended_at: null, created_at: 1, error: null, speakers: [] }
+const answerSse =
+  'event: token\ndata: {"text":"Net 30."}\n\n' +
+  'event: citations\ndata: [{"meeting_id":null,"document_id":"d1","title":"Rates.md","start_ms":null,"quote":"payment is net 30","answered":true},' +
+  '{"meeting_id":null,"document_id":"d2","title":"Private.md","start_ms":null,"quote":"walrus escrow","answered":false}]\n\n' +
+  'event: done\ndata: {}\n\n'
+
+/** A live stream the test writes into, and the live-ask requests it saw. */
+function mount(opts: { liveStatus?: number; me?: boolean } = {}) {
+  const enc = new TextEncoder()
+  let push: (s: string) => void = () => {}
+  let close: () => void = () => {}
+  const asks: unknown[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role: 'member' }))
+    if (url === '/api/meetings') return new Response(JSON.stringify([meeting]))
+    if (url === '/api/meetings/m1') return new Response(JSON.stringify(meeting))
+    if (url === '/api/meetings/m1/live') {
+      if (opts.liveStatus) return new Response('', { status: opts.liveStatus })
+      return new Response(new ReadableStream({ start(c) { push = (s) => c.enqueue(enc.encode(s)); close = () => c.close() } }))
+    }
+    if (url === '/api/meetings/m1/live-ask') { asks.push(JSON.parse(init!.body as string)); return new Response(answerSse) }
+    return new Response('', { status: 404 })
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/meetings/m1/live']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+  const send = (name: string, data: object) => act(async () => { push(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`) })
+  return { asks, send, close: () => act(async () => { close() }) }
+}
+
+test('shows what is said as it arrives and the call ending', async () => {
+  const { send, close } = mount()
+  expect(await screen.findByText('Waiting for the first words…')).toBeTruthy()
+  await send('partial', { text: 'good mor' })
+  expect(await screen.findByText('good mor')).toBeTruthy()
+  await send('final', { at_ms: 65000, text: 'good morning' })
+  expect(await screen.findByText('good morning')).toBeTruthy()
+  expect(screen.getByText('1:05')).toBeTruthy()
+  expect(screen.queryByText('good mor')).toBeNull()
+  await send('end', {})
+  await close()
+  expect(await screen.findByText('Call ended')).toBeTruthy()
+  expect((screen.getByRole('button', { name: /Ask now/ }) as HTMLButtonElement).disabled).toBe(true)
+})
+
+test('says the live transcript is unavailable, and the same when the connection drops', async () => {
+  const a = mount()
+  await a.send('unavailable', {})
+  expect((await screen.findByRole('status')).textContent).toContain('Live transcript unavailable')
+  cleanup()
+  const b = mount()
+  await screen.findByText('Waiting for the first words…')
+  await b.close()
+  expect((await screen.findByRole('status')).textContent).toContain('Live transcript unavailable')
+})
+
+test('a meeting that is not live says so', async () => {
+  mount({ liveStatus: 404 })
+  expect(await screen.findByText('This meeting is not being recorded right now.')).toBeTruthy()
+})
+
+test('Ask now sends the last 60 s, then a clicked line and the typed words, and shows answer and passages only', async () => {
+  const { asks, send } = mount()
+  await send('final', { at_ms: 5000, text: 'what are the terms' })
+  fireEvent.click(await screen.findByRole('button', { name: /Ask now/ }))
+  expect(await screen.findByText('Net 30.')).toBeTruthy()
+  expect(asks).toEqual([{}])
+  expect(screen.getByText('Last 60 s')).toBeTruthy()
+  expect(screen.getByText('Rates.md')).toBeTruthy()
+  expect(screen.getByText('Passages only')).toBeTruthy()
+  expect(screen.getByText('walrus escrow')).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: /what are the terms/ }))
+  expect(screen.getByText('Asking about the line at 0:05')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('Extra words'), { target: { value: ' and the deposit ' } })
+  fireEvent.click(screen.getByRole('button', { name: /Ask now/ }))
+  await waitFor(() => expect(asks).toHaveLength(2))
+  expect(asks[1]).toEqual({ at_ms: 5000, text: 'and the deposit' })
+  expect(screen.getAllByText('Net 30.')).toHaveLength(2)
+
+  fireEvent.click(screen.getByRole('button', { name: 'use last 60 s' }))
+  expect(screen.getByText('Asking about the last 60 s')).toBeTruthy()
+})
+
+test('the A key asks, except while typing', async () => {
+  const { asks } = mount()
+  await screen.findByRole('button', { name: /Ask now/ })
+  fireEvent.keyDown(screen.getByLabelText('Extra words'), { key: 'a' })
+  expect(asks).toHaveLength(0)
+  fireEvent.keyDown(document.body, { key: 'a' })
+  await waitFor(() => expect(asks).toHaveLength(1))
+})
+
+test('a refused ask shows why on its card', async () => {
+  mount()
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('/live-ask') ? new Response('', { status: 429 }) : new Response(new ReadableStream()))))
+  fireEvent.click(await screen.findByRole('button', { name: /Ask now/ }))
+  expect((await screen.findByRole('alert')).textContent).toBe('Too many questions. Try again in a minute.')
+})
+
+test('the rail offers the live meeting while a call is recorded', async () => {
+  mount()
+  const link = await screen.findByRole('link', { name: 'Live meeting' })
+  expect(link.getAttribute('href')).toBe('/meetings/m1/live')
+  expect(link.getAttribute('aria-current')).toBe('page')
+})
