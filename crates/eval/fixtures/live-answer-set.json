@@ -1,0 +1,65 @@
+{
+  "documents": [
+    {
+      "name": "kestrel-rates.md",
+      "text": "# Kestrel Freight pricing notes\n\nStandard pallet rate is 42 dollars per pallet within the Northern region. Cross-region pallets cost 58 dollars.\n\nCold-chain surcharge is 12 percent of the freight charge. Fuel surcharge is reviewed on the first Monday of each quarter.\n\nContracts of 12 months or longer get a 7 percent volume discount. Payment terms are net 30 days.\n"
+    },
+    {
+      "name": "harbor-clinic-onboarding.md",
+      "text": "# Harbor Clinic onboarding\n\nThe clinic has three sites: Millbrook, Eastgate and Ferrow Street. The main contact is Dana Whitcombe, the practice manager.\n\nGo-live is planned for 14 March. Staff training takes two half-days and is held at the Eastgate site.\n\nThe clinic sends appointment reminders by text message, 48 hours before each visit. Data is exported nightly at 02:00.\n"
+    },
+    {
+      "name": "alder-finch-terms.md",
+      "text": "# Alder and Finch Studio engagement terms\n\nThe project is a brand refresh with a fixed fee of 18,500 dollars. The fee is paid in three instalments: 40 percent on signing, 30 percent at the first review and 30 percent on delivery.\n\nThe studio includes two rounds of revisions. A third round is billed at 95 dollars an hour.\n\nThe agreed delivery date is 30 June. Ownership of the final artwork passes to the client once the last instalment is paid.\n"
+    },
+    {
+      "name": "meadowbrook-school-notes.md",
+      "text": "# Meadowbrook School timetable project notes\n\nThe school has 640 students and 48 teachers. The term starts on 8 September and ends on 19 December.\n\nThe head of operations, Priya Nandakumar, wants parent notices sent in English and Vietnamese. The pilot covers Year 7 and Year 8 only.\n\nThe school network blocks outgoing traffic except on port 443, so integrations must use HTTPS.\n"
+    },
+    {
+      "name": "tidewell-support-policy.md",
+      "text": "# Tidewell Cafes support policy\n\nSupport is available Monday to Friday, 8:00 to 18:00 Central time. Urgent tickets get a first reply within 2 hours; normal tickets within 1 business day.\n\nThe escalation contact is Marcus Oyelaran, reachable at extension 4417. Refunds above 500 dollars need written approval from the finance lead.\n\nThe till system is updated on the second Tuesday of every month.\n"
+    },
+    {
+      "name": "song-xanh-ghi-chu.md",
+      "text": "# Ghi chú khách hàng Sông Xanh\n\nCông ty Sông Xanh bán thiết bị làm vườn và có 25 nhân viên. Người liên hệ chính là chị Lê Thu Hà, giám đốc vận hành.\n\nHợp đồng bảo trì phần mềm có phí 6 triệu đồng mỗi tháng. Công ty muốn bắt đầu vào ngày 1 tháng 10.\n\nGiờ làm việc của công ty là từ 8 giờ đến 17 giờ, từ thứ Hai đến thứ Bảy.\n"
+    }
+  ],
+  "questions": [
+    {"q": "What is the standard pallet rate in the Northern region?", "doc": "kestrel-rates.md", "must": "42"},
+    {"q": "How much is the cold-chain surcharge?", "doc": "kestrel-rates.md", "must": "12 percent"},
+    {"q": "What discount do 12 month contracts get?", "doc": "kestrel-rates.md", "must": "7 percent"},
+    {"q": "What are the payment terms for Kestrel Freight?", "doc": "kestrel-rates.md", "must": "net 30"},
+    {"q": "Does Kestrel Freight offer same-day delivery?", "doc": null},
+
+    {"q": "Who is the main contact at Harbor Clinic?", "doc": "harbor-clinic-onboarding.md", "must": "Dana Whitcombe"},
+    {"q": "When is the Harbor Clinic go-live?", "doc": "harbor-clinic-onboarding.md", "must": "14 March"},
+    {"q": "How long before a visit are reminders sent?", "doc": "harbor-clinic-onboarding.md", "must": "48 hours"},
+    {"q": "Where is the Harbor Clinic staff training held?", "doc": "harbor-clinic-onboarding.md", "must": "Eastgate"},
+    {"q": "How many patients does Harbor Clinic see each year?", "doc": null},
+
+    {"q": "What is the fixed fee for the brand refresh?", "doc": "alder-finch-terms.md", "must": "18,500"},
+    {"q": "How many revision rounds does the studio include?", "doc": "alder-finch-terms.md", "must": "two"},
+    {"q": "What is the hourly rate for a third round of revisions?", "doc": "alder-finch-terms.md", "must": "95"},
+    {"q": "When does the client own the final artwork?", "doc": "alder-finch-terms.md", "must": "last instalment"},
+    {"q": "What is the studio's cancellation fee?", "doc": null},
+
+    {"q": "How many students does Meadowbrook School have?", "doc": "meadowbrook-school-notes.md", "must": "640"},
+    {"q": "Who wants parent notices in two languages?", "doc": "meadowbrook-school-notes.md", "must": "Priya Nandakumar"},
+    {"q": "Which year groups are in the Meadowbrook pilot?", "doc": "meadowbrook-school-notes.md", "must": "Year 7"},
+    {"q": "Which port can Meadowbrook integrations use?", "doc": "meadowbrook-school-notes.md", "must": "443"},
+    {"q": "What is the Meadowbrook School annual budget?", "doc": null},
+
+    {"q": "What are the Tidewell support hours?", "doc": "tidewell-support-policy.md", "must": "8:00 to 18:00"},
+    {"q": "How fast is the first reply to an urgent Tidewell ticket?", "doc": "tidewell-support-policy.md", "must": "2 hours"},
+    {"q": "Who is the Tidewell escalation contact?", "doc": "tidewell-support-policy.md", "must": "Marcus Oyelaran"},
+    {"q": "Refunds above what amount need written approval?", "doc": "tidewell-support-policy.md", "must": "500"},
+    {"q": "When is the Tidewell till system updated?", "doc": "tidewell-support-policy.md", "must": "second Tuesday"},
+    {"q": "What discount does the Tidewell loyalty programme give?", "doc": null},
+
+    {"q": "Người liên hệ chính của công ty Sông Xanh là ai?", "doc": "song-xanh-ghi-chu.md", "must": "Lê Thu Hà"},
+    {"q": "Phí bảo trì phần mềm của Sông Xanh mỗi tháng là bao nhiêu?", "doc": "song-xanh-ghi-chu.md", "must": "6 triệu"},
+    {"q": "Công ty Sông Xanh muốn bắt đầu vào ngày nào?", "doc": "song-xanh-ghi-chu.md", "must": "1 tháng 10"},
+    {"q": "Công ty Sông Xanh có bao nhiêu chi nhánh?", "doc": null}
+  ]
+}
