@@ -174,3 +174,4 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The player and the audio route treat a cleared `audio_path` as "no audio" (404). The report page's player was not checked for how it looks when the audio is gone.
 - `/api/me` reports `recording_storage` (`object_storage` or `local_disk`); the privacy card reads it. Checked by eye in Chrome at 1280 px, Daylight light only, API mocked.
 - Not verified: a sweep against a real bucket (mock only).
+- Known limits, from review: one failing object delete aborts that tenant's sweep (and the runner moves on to the next sweep an hour later), so a single stuck object delays the rest; per-meeting error handling is the fix. `PUT` maps every settings error to 400. Only the audio file is removed, not the whole `audio/{id}` folder. The sweep's retry path after a failed delete has no test.
