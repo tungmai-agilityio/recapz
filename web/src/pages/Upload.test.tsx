@@ -9,6 +9,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function run(statuses: string[], calls: string[] = []) {
   let n = 0
   vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    if (u === '/api/me') return new Response(JSON.stringify({ email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram' }))
     calls.push(`${init?.method ?? 'GET'} ${u}`)
     if (init?.method === 'POST') {
       calls.push(`title=${(init.body as FormData).get('title')}`)
@@ -75,4 +76,10 @@ test('failed shows the error; pressing the button again re-uploads', async () =>
   expect((await screen.findByText(/Processing failed: bad audio/)).textContent).toMatch(/try again/)
   fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
   await waitFor(() => expect(calls.filter((c) => c === 'POST /api/uploads').length).toBe(2))
+})
+
+test('the lede names the speech provider from /api/me', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram' }))))
+  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Upload /></MemoryRouter></QueryClientProvider>)
+  expect(await screen.findByText(/The audio is sent to Deepgram to be transcribed\./)).toBeTruthy()
 })

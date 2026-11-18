@@ -153,3 +153,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The server reads `RECAPZ_SPEECH_KEY` from the environment only (a key written under `[speech]` in `config.toml` is ignored) and refuses to start without it. `[speech] base_url` exists only so tests can point at a mock. The transcribe job now always uses the Deepgram transcriber; the whisper build feature and its model loader are no longer used by the server (removal is #225). `speech_model` is gone from the config.
 - `/api/me` returns `speech_provider: "Deepgram"`, a constant, since there is one provider. A second provider would need a config field and a real lookup.
 - Not verified: starting the real binary with a real key, and a real transcription. The start check and the `/api/me` field are covered by unit and router tests only.
+
+## Speech provider on upload and privacy
+- Upload's lede ("Processed on your server" was no longer true) now reads "The audio is sent to {provider} to be transcribed." Recording & privacy gets a "Where audio goes" card. Both read `speech_provider` from the Shell's existing `/api/me` query and fall back to "the speech provider" while it loads or if the server does not send it.
+- The card says only that audio goes to the provider live and from the recorded file. It does not claim no-training or no-retention, because those account settings are still unverified (`docs/decisions/hosted-speech.md`).
+- Checked in a real browser (Chrome, Vite dev server with the API mocked) at 1280 and 390 px, Daylight light only; not Ink or dark, not against the real server, no prototype side-by-side.
