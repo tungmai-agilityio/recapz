@@ -5,12 +5,14 @@ use std::io::ErrorKind;
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tungstenite::{client::IntoClientRequest, stream::MaybeTlsStream, Message};
 
 pub const DEEPGRAM_LISTEN: &str = "wss://api.deepgram.com/v1/listen";
 /// About 10 s of 100 ms frames; past that the link is stuck and frames are dropped, not queued.
 const BACKLOG: usize = 100;
+/// How long a finished stream waits for the provider's last results.
+const FLUSH: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +44,10 @@ impl DeepgramStream {
         );
         let key = api_key.to_string();
         thread::spawn(move || {
-            if run(&url, &key, &frx, &etx).is_err() {
+            let failed = run(&url, &key, &frx, &etx).is_err();
+            // Closed first, so frames are refused from the moment the event is seen.
+            drop(frx);
+            if failed {
                 let _ = etx.send(LiveEvent::Unavailable);
             }
         });
@@ -83,6 +88,27 @@ fn run(
                 Err(TryRecvError::Disconnected) => {
                     // The caller is done: ask the provider to flush, then leave.
                     let _ = ws.send(Message::Text(r#"{"type":"CloseStream"}"#.into()));
+                    // Collect the last results until the provider closes, for at most FLUSH.
+                    let end = Instant::now() + FLUSH;
+                    while Instant::now() < end {
+                        match ws.read() {
+                            Ok(Message::Text(t)) => {
+                                if let Some(ev) = parse(&t) {
+                                    let _ = events.send(ev);
+                                }
+                            }
+                            Ok(Message::Close(_)) | Err(tungstenite::Error::ConnectionClosed) => {
+                                break
+                            }
+                            Ok(_) => {}
+                            Err(tungstenite::Error::Io(e))
+                                if matches!(
+                                    e.kind(),
+                                    ErrorKind::WouldBlock | ErrorKind::TimedOut
+                                ) => {}
+                            Err(_) => break,
+                        }
+                    }
                     let _ = ws.close(None);
                     return Ok(());
                 }
@@ -173,7 +199,12 @@ mod tests {
             ws.send(results("", true)).unwrap(); // empty text is not an event
             ws.send(Message::Text(r#"{"type":"Metadata"}"#.into()))
                 .unwrap();
-            let _ = ws.read(); // CloseStream, sent when the stream is dropped
+            let Message::Text(t) = ws.read().unwrap() else {
+                panic!("not text")
+            };
+            assert!(t.contains("CloseStream"));
+            ws.send(results("hết", true)).unwrap(); // the flushed tail
+            let _ = ws.close(None);
         });
         let (s, events) = DeepgramStream::start(&url, "k3y", "vi+en");
         assert!(s.send_frame(&[1, -2, 256]));
