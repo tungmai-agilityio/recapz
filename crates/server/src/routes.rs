@@ -56,7 +56,8 @@ pub fn router_with_llm(
     control: Arc<Mutex<Connection>>,
     llm: Option<Arc<recapz_llm::Router>>,
 ) -> Router {
-    let embedder = crate::embedder::from_config(&cfg.embedder).expect("embedder checked at start");
+    let embedder =
+        crate::embedder::from_config(&cfg.embedder, &cfg.llm).expect("embedder checked at start");
     let app = App {
         embedder,
         cfg: Arc::new(cfg),
@@ -960,4 +961,18 @@ async fn upload(
     }
     res?;
     Ok((StatusCode::CREATED, Json(Created { id })))
+}
+
+#[cfg(test)]
+mod api_error_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn an_internal_error_never_reaches_the_client() {
+        let e = anyhow::anyhow!("GET http://10.0.0.5/v1/embeddings failed");
+        let r = ApiError::Internal(e).into_response();
+        assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let b = axum::body::to_bytes(r.into_body(), 1024).await.unwrap();
+        assert_eq!(b.len(), 0);
+    }
 }

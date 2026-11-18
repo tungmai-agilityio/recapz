@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    let embedder = recapz_server::embedder::from_config(&cfg.embedder)?; // fail fast on a bad name
+    let embedder = recapz_server::embedder::from_config(&cfg.embedder, &cfg.llm)?; // fail fast on a bad name
     runner::spawn(
         cfg.data_dir.clone(),
         cfg.speech_model.clone(),

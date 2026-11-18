@@ -3,7 +3,7 @@ base_url = "http://localhost:8080"
 bind = "127.0.0.1:8080"
 bootstrap_admin_email = ""   # first admin, invited on first start
 speech_model = "./models/ggml-large-v3-turbo.bin"  # ggml file; needs a build with --features whisper
-embedder = "hash"  # Ask text embedder; "hash" is built in (word overlap, no model download)
+embedder = "hash"  # Ask text embedder: "hash" (built in, no download) or "hosted" (uses [llm] embedding_*; sends text to that provider)
 ask_per_minute = 20  # questions per member per minute
 dev_login = false            # local development only: enables POST /auth/dev-login
 max_concurrent_calls = 2     # calls the notetaker may be in at once
@@ -14,12 +14,15 @@ client_id = ""
 client_secret = ""
 
 # Meeting reports. Leave `provider` empty to skip reports.
-# Only transcript text is sent to the provider; audio never leaves the server.
+# Only transcript text, documents marked "May be sent to the language model" and a member's question
+# text are sent to the provider (also to the embedding endpoint); audio never leaves the server.
 [llm]
 provider = ""            # "anthropic" or "openai" (any OpenAI-compatible server)
 base_url = ""            # required for "openai", e.g. http://localhost:8000/v1
 api_key = ""
 model = ""
+embedding_model = ""     # for embedder = "hosted": POST {base}/embeddings; changing it re-indexes meetings at start
+embedding_base_url = ""  # empty uses base_url; api_key is reused
 max_tokens = 2048   # reasoning models (gpt-5 family) spend this on thinking first; start at 8192 for them
 price_input = 0          # micro-USD per million input tokens
 price_output = 0         # micro-USD per million output tokens
