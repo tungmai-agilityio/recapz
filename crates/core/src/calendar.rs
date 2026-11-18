@@ -190,8 +190,8 @@ pub fn book_due(c: &Connection, now: i64, lead_ms: i64) -> Result<Vec<String>> {
                 None => {
                     let id = new_id();
                     c.execute(
-                        "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, created_at)
-                         VALUES (?1, ?2, ?3, ?4, 'scheduled', ?5, ?6)",
+                        "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, language, created_at)
+                         VALUES (?1, ?2, ?3, ?4, 'scheduled', ?5, 'vi', ?6)",
                         params![id, title, platform.unwrap_or_default(), url, member, now],
                     )?;
                     created.push(id.clone());

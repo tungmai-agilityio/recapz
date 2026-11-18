@@ -193,3 +193,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Usage card (web part of #223)
 - Recording & privacy shows admins a "Usage this month" card: estimated total, cap (or "no cap set"), speech and language-model split, a red alert when the cap is reached, and the cost per meeting (up to 20, only meetings the admin may see). Members never call `/api/usage`. Amounts are estimates from list prices, said so on the card.
 - Checked in Chrome at 1280 px (Daylight light) with the API mocked, not Ink, dark, a phone width of this card, or a real server. Nothing notifies an admin outside this screen when the cap is first reached (no email or banner elsewhere).
+
+## Per-meeting language (#245)
+- A meeting's language is `vi` (default), `en` or `multi`. Upload takes a `language` multipart field and `POST /api/meetings/join` a `language` JSON field; anything else is a 400, never silently another language. Calendar auto-join meetings are created as `vi`. The upload screen has a select (Vietnamese, English, Mixed languages); the Send notetaker form on Meetings has no language control yet (it sends none, so those meetings are `vi`).
+- `deepgram_language()` maps `vi`, `en` and `multi` explicitly, and `vi+en` and `auto` (what meetings made before this carry) to `multi`. An unknown value fails the batch job with "unsupported meeting language" and makes the stream report unavailable, without contacting the provider. Existing meetings keep their stored value and keep working.
+- The schema default for `meetings.language` is still `vi+en` (a column default cannot be changed without rebuilding the table); every insert path now sets the language explicitly.
+- Still unverified (#226): `language=multi` with Vietnamese plus English, `vi` alone, and diarization on Vietnamese.

@@ -1077,6 +1077,17 @@ fn safe_name(n: &str) -> String {
     s.trim_start_matches('.').chars().take(100).collect()
 }
 
+/// The speech language a member picks for a meeting: `vi` (the default), `en` or `multi` (mixed
+/// calls). Anything else is a bad request, never silently turned into another language.
+fn meeting_language(raw: Option<&str>) -> Result<&'static str, ApiError> {
+    match raw.map(str::trim).filter(|s| !s.is_empty()) {
+        None | Some("vi") => Ok("vi"),
+        Some("en") => Ok("en"),
+        Some("multi") => Ok("multi"),
+        Some(_) => Err(ApiError::BadRequest("language must be vi, en or multi")),
+    }
+}
+
 async fn upload(
     State(app): State<App>,
     jar: CookieJar,
@@ -1084,6 +1095,7 @@ async fn upload(
 ) -> Res<(StatusCode, Json<Created>)> {
     let u = app.current_user(&jar).await?;
     let mut title = None;
+    let mut language = None;
     let mut file: Option<(String, axum::body::Bytes)> = None;
     while let Some(f) = mp
         .next_field()
@@ -1092,6 +1104,7 @@ async fn upload(
     {
         match f.name() {
             Some("title") => title = f.text().await.ok().filter(|t| !t.trim().is_empty()),
+            Some("language") => language = f.text().await.ok(),
             Some("file") => {
                 let name = f.file_name().unwrap_or("upload").to_owned();
                 let bytes = f
@@ -1103,6 +1116,7 @@ async fn upload(
             _ => {}
         }
     }
+    let language = meeting_language(language.as_deref())?;
     let (name, bytes) = file.ok_or(ApiError::BadRequest("missing file field"))?;
     if bytes.is_empty() {
         return Err(ApiError::BadRequest("empty file"));
@@ -1119,9 +1133,9 @@ async fn upload(
         .tenant(u.tenant_id.clone(), move |c| {
             ensure_member(c, &u)?;
             c.execute(
-                "INSERT INTO meetings (id, title, platform, status, owner_id, audio_path, created_at)
-                 VALUES (?1, ?2, 'upload', 'uploaded', ?3, ?4, ?5)",
-                params![mid, title, u.id, rel2, db::now_ms()],
+                "INSERT INTO meetings (id, title, platform, status, owner_id, audio_path, language, created_at)
+                 VALUES (?1, ?2, 'upload', 'uploaded', ?3, ?4, ?5, ?6)",
+                params![mid, title, u.id, rel2, language, db::now_ms()],
             )?;
             jobs::enqueue(c, "transcribe", Some(&mid), None)?;
             Ok(())

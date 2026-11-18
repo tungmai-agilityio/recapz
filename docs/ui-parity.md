@@ -112,7 +112,7 @@ non-owners once the list returns the owner.
 
 ## S5 Upload
 - [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet. The lede names the speech provider from `/api/me` (jsdom test; checked by eye at 1280 and 390 px, Daylight light, no prototype side-by-side).
-- [ ] Fields: title, language, speaker count; button "Process recording". Built in #138; no screenshot yet. Only title is built: the upload API reads
+- [ ] Fields: title, language, speaker count; button "Process recording". The language select (Vietnamese default, English, Mixed languages) is built from #245 (checked by eye at 1280 px, Daylight light, no prototype side-by-side); speaker count is still hidden. Built in #138; no screenshot yet. Only title is built: the upload API reads
       no language or speaker count, so those are hidden rather than faked.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
       link to the new meeting when ready. Built in #138; no screenshot yet. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.

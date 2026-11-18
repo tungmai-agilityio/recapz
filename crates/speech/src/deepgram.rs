@@ -4,6 +4,18 @@ use crate::transcribe::{is_non_speech, Segment, Transcriber};
 use anyhow::{anyhow, bail, Result};
 use std::time::Duration;
 
+/// The `language` query value for a meeting's language: `vi`, `en`, or `multi` (Nova-3 multilingual,
+/// for mixed calls). `vi+en` and `auto`, which older meetings carry, mean `multi`. Anything else is
+/// refused rather than silently sent as `multi`.
+pub fn deepgram_language(language: &str) -> Option<&'static str> {
+    match language {
+        "vi" => Some("vi"),
+        "en" => Some("en"),
+        "multi" | "vi+en" | "auto" => Some("multi"),
+        _ => None,
+    }
+}
+
 pub const DEEPGRAM_BASE: &str = "https://api.deepgram.com";
 const RETRIES: u32 = 2;
 /// Longest wait honoured from `Retry-After`; a longer ask fails the job so the queue's own backoff takes over.
@@ -77,11 +89,8 @@ fn parse(body: &str) -> Result<Vec<Segment>> {
 
 impl Transcriber for DeepgramTranscriber {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<Vec<Segment>> {
-        // Nova-3 multilingual covers mixed vi+en; "auto" uses it too.
-        let lang = match language {
-            "vi" | "en" => language,
-            _ => "multi",
-        };
+        let lang =
+            deepgram_language(language).ok_or_else(|| anyhow!("unsupported meeting language"))?;
         let url = format!(
             "{}/v1/listen?model=nova-3&language={lang}&diarize_model=latest&mip_opt_out=true&utterances=true&punctuate=true",
             self.base
@@ -271,6 +280,33 @@ mod tests {
             .to_string();
         assert_eq!(reqs.try_iter().count(), 3);
         assert!(e.contains("unavailable") && e.contains("500"), "{e}");
+    }
+
+    #[test]
+    fn the_meeting_language_is_sent_explicitly_and_an_unknown_one_is_refused() {
+        for (lang, sent) in [
+            ("vi", "vi"),
+            ("en", "en"),
+            ("multi", "multi"),
+            ("vi+en", "multi"),
+            ("auto", "multi"),
+        ] {
+            let (url, reqs) = mock(vec![(200, "", OK.into())]);
+            client(&url).transcribe(&[0.0; 160], lang).unwrap();
+            let req = reqs.recv().unwrap();
+            assert!(
+                req.starts_with(&format!("POST /v1/listen?model=nova-3&language={sent}&")),
+                "{lang}: {req}"
+            );
+        }
+        // no request is made for an unknown language
+        let (url, reqs) = mock(vec![(200, "", OK.into())]);
+        let e = client(&url)
+            .transcribe(&[0.0; 160], "fr")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("unsupported meeting language"), "{e}");
+        assert!(reqs.try_recv().is_err());
     }
 
     #[test]
