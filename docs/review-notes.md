@@ -132,6 +132,12 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Web: Next up shows up to four faces (name, or email when Google sent no name) with a "+N" count; nothing is drawn for an event with no invitees. The reply status is returned but not shown yet.
 - Tested with the mocked Google endpoints and seeded databases only. Real sync still returns 403 for the maintainer until the Calendar API is enabled on the Google project, so this has not been run against Google or checked by eye in either skin.
 
+## Deepgram streaming client
+- `crates/speech/src/stream.rs`: `DeepgramStream::start(url, key, language)` returns at once; a worker thread connects, sends frames as little-endian bytes and turns `Results` messages into `LiveEvent::Partial` / `Final`. Any failure becomes one `Unavailable` event; later `send_frame` calls return false and never block (bounded backlog of 100 frames, about 10 s, then frames are dropped).
+- Blocking `tungstenite` (already in the lockfile via the browser driver) instead of an async client, because the speech crate is synchronous. New direct dependency: `tungstenite` with rustls and bundled roots for `wss://`, plus `serde_json` to read results.
+- Not verified against the real service: the query parameters (`model=nova-3`, `language`, `encoding=linear16`, `sample_rate=16000`, `interim_results`), the `Results` message shape, the `multi` language value for vi+en, and the `CloseStream` text message are taken from memory of the provider docs. Only a mock server on localhost was tested; the `wss://` path and the real key header were not exercised. Not wired into the server or live view yet.
+- No connect or handshake timeout yet: a black-holed host never emits `Unavailable`; frames just start dropping once the backlog is full, and recording is unaffected. Add a `TcpStream::connect_timeout` plus `client_tls` when the server wires this in. `Unavailable` also has no reason (a rejected key looks like a drop); the fail-fast auth alert needs a reason variant in the config PR. No KeepAlive message, which is fine while frames flow.
+
 ## Speaker labels from segments
 - `Segment.speaker` is the provider's tag (any string); the transcribe job numbers distinct tags `Speaker 1`, `Speaker 2`, ... by first appearance. A retry deletes the meeting's speaker rows and rebuilds them, like segments, so nothing duplicates. A rename a member made before a retry is lost, as the segments it pointed at are replaced too.
 - The `label` job (call recordings) still runs after and replaces speakers by its own names.
