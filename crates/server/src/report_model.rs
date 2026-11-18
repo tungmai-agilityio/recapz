@@ -107,6 +107,7 @@ pub fn router_from_config(cfg: &Llm) -> Result<Option<Router>> {
         Task::Chapters,
         Task::ActionItems,
         Task::AskAnswer,
+        Task::LiveAnswer,
     ] {
         router = router.route(t, route.clone());
     }

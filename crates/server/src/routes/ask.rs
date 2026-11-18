@@ -15,8 +15,75 @@ pub struct AskBody {
     question: String,
 }
 
-fn event(name: &str, data: serde_json::Value) -> String {
+pub(super) fn event(name: &str, data: serde_json::Value) -> String {
     format!("event: {name}\ndata: {data}\n\n")
+}
+
+/// One `llm_usage` row per model call; a failure to record is logged, never shown to the member.
+pub(super) async fn record_usage(
+    app: &App,
+    tenant: String,
+    task: &'static str,
+    calls: Vec<recapz_llm::Routed>,
+) {
+    if let Err(ApiError::Internal(e)) = app
+        .tenant(tenant, move |c| {
+            for k in &calls {
+                c.execute(
+                    "INSERT INTO llm_usage (task, provider, model, input_tokens, output_tokens, cost_micro_usd, at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        task,
+                        k.provider,
+                        k.model,
+                        k.completion.input_tokens as i64,
+                        k.completion.output_tokens as i64,
+                        k.cost_micro_usd as i64,
+                        db::now_ms()
+                    ],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+    {
+        tracing::error!("{task} usage not recorded: {e:#}");
+    }
+}
+
+/// The citation card for one hit; `answered` is false for a passage shown without a generated answer.
+pub(super) fn citation(h: &search::Hit, answered: bool) -> serde_json::Value {
+    serde_json::json!({
+        "meeting_id": h.meeting_id,
+        "document_id": h.document_id,
+        "title": h.title,
+        "start_ms": h.meeting_id.as_ref().map(|_| h.start_ms),
+        "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
+        "answered": answered,
+    })
+}
+
+/// The excerpts a model may see: only hits whose owner allowed it (`sendable`), the rest are
+/// returned as passages to show without a generated answer.
+pub(super) fn split_hits(hits: Vec<search::Hit>) -> (Vec<search::Hit>, Vec<search::Hit>) {
+    hits.into_iter().partition(|h| h.llm_ok)
+}
+
+pub(super) fn excerpts(hits: &[search::Hit]) -> Vec<Excerpt> {
+    hits.iter()
+        .map(|h| Excerpt {
+            source: if h.meeting_id.is_some() {
+                Source::Meeting {
+                    start_ms: h.start_ms,
+                }
+            } else {
+                Source::Document {
+                    title: h.title.clone(),
+                }
+            },
+            text: h.text.clone(),
+        })
+        .collect()
 }
 
 pub async fn ask(
@@ -49,22 +116,8 @@ pub async fn ask(
         .await?;
     // Only text the owner allowed to leave the server is sent to the model; a toggle-off document
     // is shown as a cited passage after the answer. `cited` indexes into `sendable`.
-    let (sendable, passages): (Vec<_>, Vec<_>) = hits.into_iter().partition(|h| h.llm_ok);
-    let excerpts: Vec<Excerpt> = sendable
-        .iter()
-        .map(|h| Excerpt {
-            source: if h.meeting_id.is_some() {
-                Source::Meeting {
-                    start_ms: h.start_ms,
-                }
-            } else {
-                Source::Document {
-                    title: h.title.clone(),
-                }
-            },
-            text: h.text.clone(),
-        })
-        .collect();
+    let (sendable, passages) = split_hits(hits);
+    let excerpts = excerpts(&sendable);
 
     // Everything that can fail with a proper status is done; from here the reply is a stream.
     // A task writes events into a pipe the response reads from. If the reader goes away the model
@@ -88,39 +141,7 @@ pub async fn ask(
         let (res, ()) = tokio::join!(produce, consume);
         let tail = match res {
             Ok(out) => {
-                let calls = out.calls;
-                if let Err(ApiError::Internal(e)) = app
-                    .tenant(tenant, move |c| {
-                        for k in &calls {
-                            c.execute(
-                                "INSERT INTO llm_usage (task, provider, model, input_tokens, output_tokens, cost_micro_usd, at)
-                                 VALUES ('ask_answer', ?1, ?2, ?3, ?4, ?5, ?6)",
-                                params![
-                                    k.provider,
-                                    k.model,
-                                    k.completion.input_tokens as i64,
-                                    k.completion.output_tokens as i64,
-                                    k.cost_micro_usd as i64,
-                                    db::now_ms()
-                                ],
-                            )?;
-                        }
-                        Ok(())
-                    })
-                    .await
-                {
-                    tracing::error!("ask usage not recorded: {e:#}");
-                }
-                let citation = |h: &search::Hit, answered: bool| {
-                    serde_json::json!({
-                        "meeting_id": h.meeting_id,
-                        "document_id": h.document_id,
-                        "title": h.title,
-                        "start_ms": h.meeting_id.as_ref().map(|_| h.start_ms),
-                        "quote": h.text.chars().take(QUOTE_CHARS).collect::<String>(),
-                        "answered": answered,
-                    })
-                };
+                record_usage(&app, tenant, "ask_answer", out.calls).await;
                 let citations: Vec<_> = out
                     .value
                     .cited
