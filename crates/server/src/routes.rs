@@ -44,6 +44,7 @@ mod ask;
 mod connect;
 mod documents;
 mod live;
+mod live_ask;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
     let llm = crate::report_model::router_from_config(&cfg.llm)
@@ -112,6 +113,7 @@ pub fn router_with_llm(
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
         .route("/api/meetings/{id}/live", get(live::live))
+        .route("/api/meetings/{id}/live-ask", post(live_ask::live_ask))
         .route("/api/ask", post(ask::ask))
         .route(
             "/api/documents",
