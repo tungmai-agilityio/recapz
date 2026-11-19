@@ -12,9 +12,18 @@ use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
 fn app(dir: &std::path::Path, dev: bool, stub: Option<Arc<Stub>>) -> Router {
+    app_keyed(dir, dev, stub, true)
+}
+
+fn app_keyed(dir: &std::path::Path, dev: bool, stub: Option<Arc<Stub>>, keyed: bool) -> Router {
     let cfg = Config {
         data_dir: dir.into(),
         dev_login: dev,
+        speech: recapz_server::config::Speech {
+            base_url: "http://127.0.0.1:1".into(),
+            api_key: if keyed { "k".into() } else { String::new() },
+            ..Default::default()
+        },
         ..Config::default()
     };
     let control = db::open_control(dir).unwrap();
@@ -275,4 +284,156 @@ async fn opting_out_deletes_the_simulated_meeting_and_a_real_one_is_never_touche
     let (s, ..) = send(&app, req("DELETE", "/api/dev/live-sim/real1", &boss, "")).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
     assert_eq!(status_of(dir.path(), "real1").as_deref(), Some("recording"));
+}
+
+fn tone(seconds: usize) -> Vec<u8> {
+    let n = seconds * 16_000;
+    let samples: Vec<f32> = (0..n).map(|i| (i as f32 * 0.05).sin() * 0.3).collect();
+    recapz_speech::deepgram::encode_wav(&samples)
+}
+
+fn audio_req(cookie: &str, file: &[u8], name: &str, language: Option<&str>) -> Request<Body> {
+    let b = "XB";
+    let mut body = Vec::new();
+    if let Some(l) = language {
+        body.extend(
+            format!("--{b}\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n{l}\r\n")
+                .bytes(),
+        );
+    }
+    body.extend(format!("--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: audio/wav\r\n\r\n").bytes());
+    body.extend(file);
+    body.extend(format!("\r\n--{b}--\r\n").bytes());
+    Request::post("/api/dev/live-sim/audio")
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={b}"),
+        )
+        .body(Body::from(body))
+        .unwrap()
+}
+
+async fn wait_for(dir: &std::path::Path, id: &str, want: Option<&str>) {
+    for _ in 0..100 {
+        if status_of(dir, id).as_deref() == want {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("status stayed {:?}, wanted {want:?}", status_of(dir, id));
+}
+
+fn transcribe_jobs(dir: &std::path::Path, id: &str) -> i64 {
+    let control = db::open_control(dir).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    db::open_tenant(dir, &tid)
+        .unwrap()
+        .query_row(
+            "SELECT count(*) FROM jobs WHERE kind='transcribe' AND meeting_id=?1",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_replayed_recording_plays_in_real_time_then_is_transcribed_like_a_real_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path(), true, None);
+    let boss = login(&app, "boss@example.com").await;
+    let (s, _, b) = send(&app, audio_req(&boss, &tone(1), "call.wav", Some("en"))).await;
+    assert_eq!(s, StatusCode::CREATED, "{b}");
+    let id = id_of(&b);
+    assert!(
+        matches!(
+            status_of(dir.path(), &id).as_deref(),
+            Some("joining" | "recording")
+        ),
+        "the call is live right after the upload"
+    );
+    wait_for(dir.path(), &id, Some("transcribing")).await;
+    assert_eq!(transcribe_jobs(dir.path(), &id), 1);
+    assert!(
+        hub().subscribe(&id).is_none(),
+        "the live transcript is dropped when the call ends"
+    );
+}
+
+#[tokio::test]
+async fn a_replayed_call_can_be_ended_early_or_opted_out_and_only_by_its_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path(), true, None);
+    let boss = login(&app, "boss@example.com").await;
+    let amy = login(&app, "amy@example.com").await;
+
+    let (_, _, b) = send(&app, audio_req(&boss, &tone(60), "a.wav", None)).await;
+    let ended = id_of(&b);
+    wait_for(dir.path(), &ended, Some("recording")).await;
+    let (s, ..) = send(
+        &app,
+        req("DELETE", &format!("/api/dev/live-sim/{ended}"), &amy, ""),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "another member cannot stop it");
+    assert_eq!(status_of(dir.path(), &ended).as_deref(), Some("recording"));
+    let (s, ..) = send(
+        &app,
+        req("DELETE", &format!("/api/dev/live-sim/{ended}"), &boss, ""),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    wait_for(dir.path(), &ended, Some("transcribing")).await;
+    assert_eq!(transcribe_jobs(dir.path(), &ended), 1);
+
+    let (_, _, b) = send(&app, audio_req(&boss, &tone(60), "b.wav", None)).await;
+    let opted = id_of(&b);
+    wait_for(dir.path(), &opted, Some("recording")).await;
+    let (s, ..) = send(
+        &app,
+        req(
+            "DELETE",
+            &format!("/api/dev/live-sim/{opted}?optout=true"),
+            &boss,
+            "",
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    wait_for(dir.path(), &opted, None).await;
+    assert_eq!(
+        transcribe_jobs(dir.path(), &opted),
+        0,
+        "opt-out leaves nothing to transcribe"
+    );
+}
+
+#[tokio::test]
+async fn a_replay_is_refused_without_dev_login_a_speech_key_or_readable_audio() {
+    let dir = tempfile::tempdir().unwrap();
+    let off = app(dir.path(), false, None);
+    let (s, ..) = send(&off, audio_req("recapz_session=x", &tone(1), "a.wav", None)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let dir = tempfile::tempdir().unwrap();
+    let nokey = app_keyed(dir.path(), true, None, false);
+    let boss = login(&nokey, "boss@example.com").await;
+    let (s, _, b) = send(&nokey, audio_req(&boss, &tone(1), "a.wav", None)).await;
+    assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE, "{b}");
+
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path(), true, None);
+    let boss = login(&app, "boss@example.com").await;
+    let (s, ..) = send(&app, audio_req(&boss, b"not audio at all", "a.wav", None)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, ..) = send(&app, audio_req(&boss, &tone(1), "a.wav", Some("klingon"))).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let n: i64 = db::open_tenant(dir.path(), &tid)
+        .unwrap()
+        .query_row("SELECT count(*) FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "a refused upload creates no meeting");
 }
