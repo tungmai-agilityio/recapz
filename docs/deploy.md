@@ -53,6 +53,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
 
+## Deploy key for CI
+
+CI deploys with its own SSH key, never your personal one. On your machine: `ssh-keygen -t ed25519 -N '' -C recapz-ci-deploy -f ~/recapz-ci-deploy` (this stays on your machine until it goes into a GitHub secret). Copy `scripts/deploy-release.sh`, `scripts/deploy-recv.sh`, `scripts/setup-deploy-user.sh` and `~/recapz-ci-deploy.pub` to the host and run `sudo ./setup-deploy-user.sh recapz-ci-deploy.pub`. That creates the `deploy` user whose key can run only `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin, checked, then installed by `deploy-release.sh`), `rollback` and `status`. No shell, no forwarding. A stolen key can still ship any binary, so keep it only in the GitHub `production` environment and replace it by re-running the script. Check it with `ssh -i ~/recapz-ci-deploy deploy@<host> status`.
+
 ## After a deploy
 
 `scripts/smoke-deploy.sh https://<domain>` checks health, the embedded web app, an asset's cache header, a client route, that the API refuses an unauthenticated call, and that http redirects to https. It needs only `curl`, no login and no provider calls. The Meet call check is separate: `scripts/smoke-join.sh`.
