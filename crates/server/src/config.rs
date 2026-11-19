@@ -192,7 +192,15 @@ impl Config {
         cfg.speech.api_key = std::env::var("RECAPZ_SPEECH_KEY").unwrap_or_default();
         cfg.storage.key_id = std::env::var("RECAPZ_STORAGE_KEY_ID").unwrap_or_default();
         cfg.storage.secret = std::env::var("RECAPZ_STORAGE_SECRET").unwrap_or_default();
+        cfg.llm_key_from_env(std::env::var("RECAPZ_LLM_KEY").ok());
         Ok(cfg)
+    }
+
+    /// `RECAPZ_LLM_KEY` (when set and not blank) wins over `[llm] api_key`, so production keeps the key out of the file.
+    fn llm_key_from_env(&mut self, key: Option<String>) {
+        if let Some(k) = key.filter(|k| !k.trim().is_empty()) {
+            self.llm.api_key = k;
+        }
     }
 }
 
@@ -221,5 +229,16 @@ mod tests {
         assert!(cfg.require_speech_key().is_err());
         cfg.speech.api_key = "k".into();
         assert!(cfg.require_speech_key().is_ok());
+    }
+
+    #[test]
+    fn the_llm_key_env_overrides_the_file_only_when_set() {
+        let mut cfg: Config = toml::from_str("[llm]\napi_key = \"file\"").unwrap();
+        cfg.llm_key_from_env(None);
+        assert_eq!(cfg.llm.api_key, "file");
+        cfg.llm_key_from_env(Some("  ".into()));
+        assert_eq!(cfg.llm.api_key, "file");
+        cfg.llm_key_from_env(Some("env".into()));
+        assert_eq!(cfg.llm.api_key, "env");
     }
 }
