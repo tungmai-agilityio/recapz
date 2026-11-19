@@ -139,8 +139,8 @@ non-owners once the list returns the owner.
 
 ## S9 My documents (page built from the spec, not checked against the prototype: it is not in the repo)
 - [ ] Drop zone: Markdown and TXT, up to 20 MB each, done. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there
-- [ ] Table: name, type, status (Indexed, Indexing, No text found) and the `role=switch` "May be sent to the language model" (off by default, replaced by "n/a" when no text) and Delete with a confirm dialog are done. Size and added date are not shown: `GET /api/documents` returns only id, name, llm_ok and status. Delete uses the shared modal confirm, not an inline one
-- [ ] Aside: what the switch means when off and on is done. The storage meter (of 500 MB) is not shown: no route returns bytes used
+- [ ] Table: name, type, status (Indexed, Indexing, No text found) and the `role=switch` "May be sent to the language model" (off by default, replaced by "n/a" when no text) and Delete with a confirm dialog are done. Size and added date are shown (from `size_bytes` and `created_at` on `GET /api/documents`). Delete uses the shared modal confirm, not an inline one. Checked by eye in a browser on 2026-11-19 at a 693 px window (Daylight light), where the table scrolls sideways and Delete sits behind the scroll; at about 980 px, before the layout change, names wrapped a letter at a time, which is fixed (the aside now drops below the table under 1100 px). No prototype side-by-side, and the wide layout and 390 px were not re-checked
+- [ ] Aside: what the switch means when off and on is done. The storage meter (used of 500 MB, from `GET /api/documents/usage`) is shown above the explainer; checked by eye at 693 px, no prototype side-by-side. The explainer names the speech provider (#263)
 
 ## S7 Members (blocked: members API)
 - [ ] Invite form (email, role) with validation errors, disabled for non-admins
