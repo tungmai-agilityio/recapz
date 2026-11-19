@@ -238,7 +238,7 @@ function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk
     <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
   )
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+    <div className="grid gap-8 @4xl:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="frame space-y-6">
         <p className="max-w-[66ch] leading-7">{r.summary}</p>
         {r.decisions.length > 0 && (

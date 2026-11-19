@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
+import { Columns } from '../ui/Columns'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { LiveCard } from './LiveCard'
@@ -144,8 +145,8 @@ export function Meetings() {
       {sending && <SendNotetaker onClose={() => setSending(false)} />}
       {recording && <RecordDialog onClose={() => setRecording(false)} />}
       {data?.filter((m) => m.status === 'recording').map((m) => <LiveCard key={m.id} m={m} />)}
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
-      <div className="frame flex min-w-0 flex-col gap-7">
+      <Columns>
+      <div className="frame @container flex min-w-0 flex-col gap-7">
       {isLoading && <p className="text-mute">Loading…</p>}
       {error && !(error instanceof Unauthorized) && <p role="alert" className="text-bad">Could not load meetings.</p>}
       {data?.length === 0 && <p className="text-mute">No meetings yet. <Link to="/upload" className="text-primary">Upload a recording</Link> or send the notetaker to a call.</p>}
@@ -154,19 +155,19 @@ export function Meetings() {
           <h2 className="pb-2 text-xs font-semibold tracking-[0.08em] text-mute uppercase">{g.label}</h2>
           <ul>
             {g.items.map((m) => (
-              <li key={m.id} className="grid grid-cols-[64px_minmax(0,1fr)_120px_auto] items-center gap-4 rounded border-t border-hair px-1.5 py-3 hover:bg-hair-2 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
-                <span className="font-mono text-xs text-mute max-[900px]:hidden">{at(meetingTime(m))}</span>
+              <li key={m.id} className="grid grid-cols-[64px_minmax(0,1fr)_120px_auto] items-center gap-4 rounded border-t border-hair px-1.5 py-3 hover:bg-hair-2 @max-xl:grid-cols-[minmax(0,1fr)_auto]">
+                <span className="font-mono text-xs text-mute @max-xl:hidden">{at(meetingTime(m))}</span>
                 <div className="min-w-0">
                   <Link to={`/meetings/${m.id}`} className="block truncate font-semibold tracking-tight hover:text-primary">{m.title}</Link>
-                  <p className="flex flex-wrap gap-x-2.5 text-xs text-mute"><span className="font-mono min-[901px]:hidden">{at(meetingTime(m))}</span>
+                  <p className="flex flex-wrap gap-x-2.5 text-xs text-mute"><span className="font-mono @xl:hidden">{at(meetingTime(m))}</span>
                     {m.duration_ms ? <span>{minutesLabel(m.duration_ms)}</span> : null}<span>{m.platform}</span>
                     {m.action_item_count ? <span>{m.action_item_count} action {m.action_item_count === 1 ? 'item' : 'items'}</span> : null}</p>
                 </div>
-                <span className="max-[900px]:col-span-full max-[900px]:row-start-2 max-[900px]:empty:hidden">
+                <span className="@max-xl:col-span-full @max-xl:row-start-2 @max-xl:empty:hidden">
                   {m.speakers?.length ? <Ribbon segments={m.speakers.map((_, i) => ({ speaker: i, weight: 1 }))} /> : null}
                 </span>
                 <div className="flex shrink-0 items-center gap-3">
-                  {m.speakers?.length ? <span className="flex">{m.speakers.map((p, i) => <span key={p.id} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={i} /></span>)}</span> : null}
+                  {m.speakers?.length ? <span className="flex @max-xs:hidden">{m.speakers.map((p, i) => <span key={p.id} className={i ? '-ml-1.5' : ''}><Face name={p.name} speaker={i} /></span>)}</span> : null}
                   {Object.hasOwn(statusBadge, m.status)
                     ? <Badge tone={statusBadge[m.status].tone}>{statusBadge[m.status].label}</Badge>
                     : <Badge>{m.status}</Badge>}
@@ -179,7 +180,7 @@ export function Meetings() {
       ))}
       </div>
       <NextUp />
-      </div>
+      </Columns>
       {deleting && (
         <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}
           error={del.error ? del.error.message.replace(/^\d+ /, '') : undefined}
