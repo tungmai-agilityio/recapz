@@ -65,6 +65,17 @@ export const putAudioRetention = async (days: number): Promise<{ days: number }>
     method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ days }),
   }))).json()
 
+export interface JoinSettings { join_rule: 'manual' | 'auto'; notetaker_name: string; join_message: string }
+
+export const getJoinSettings = async (): Promise<JoinSettings> =>
+  (await check(await fetch('/api/settings'))).json()
+
+/** Admin only. Replaces all three values; a bad one is a 400 with the reason as text. */
+export const putJoinSettings = async (s: JoinSettings): Promise<JoinSettings> =>
+  (await check(await fetch('/api/settings', {
+    method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify(s),
+  }))).json()
+
 export interface Usage {
   speech_micro_usd: number
   llm_micro_usd: number
