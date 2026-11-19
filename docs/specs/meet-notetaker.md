@@ -1,23 +1,31 @@
 # Google Meet notetaker plan
 
-Status: **open questions answered by the maintainer (2026-11-12/13); plan awaits approval.** Nothing in
-this plan is built. Facts marked *unverified* come from general knowledge and must be checked against
-Google's current docs before the PR that depends on them.
+Status: **maintainer decisions recorded (2026-11-12/13); plan approved. Rows 2 to 15 of the PR table in
+section 10 are merged (#105 to #119); row 16, the live check with the maintainer, is the only open row.**
+Facts marked *unverified* come from general knowledge and stay unverified until that live check settles
+them.
 
 ## What exists today
 
-- `crates/notetaker`: browser-free rules. `Session` (lobby 10 min, alone 2 min, call ended, opt-out),
-  `WavWriter` (16 kHz mono PCM), opt-out detection, speaker matching from active-speaker samples,
-  strict join-link parsing.
-- `crates/core`: `purge_meeting` (deletes `audio/<meeting id>/` then rows), calendar `sync` and the
-  `calendar_events` table, the jobs table and the `transcribe` job used by uploads.
-- `crates/server`: Google sign-in (`openid email profile`, invite-only, `{base_url}/auth/callback`),
-  `POST /api/meetings/join` that inserts a `scheduled` meeting, calendar page parsing with size caps
-  (no HTTP fetch, no calendar scope, no token storage).
-- `scripts/smoke-join.sh`: daily live check, never run.
+- `crates/notetaker`: browser-free rules (`Session` with lobby, alone, call ended, opt-out, denied, removed
+  and max-duration leave reasons, `WavWriter` at 16 kHz mono PCM, opt-out detection, speaker matching from
+  active-speaker samples, strict join-link parsing), the `CallDriver` trait with a scripted fake, the
+  Chromium launcher with process cleanup, in-page audio capture, and the Meet driver that joins, posts the
+  notice, follows the call and leaves.
+- `crates/core`: `purge_meeting`, calendar `sync` and `calendar_events`, encrypted Google refresh token
+  storage, the jobs table with the `transcribe` job and the `label` job that names speakers from call
+  samples.
+- `crates/server`: Google sign-in, Google Calendar connect and disconnect, calendar sync with stored
+  tokens, `POST /api/meetings/join`, the notetaker loop that books due events, claims scheduled meetings
+  and starts calls at boot, and the `notetaker-login` and `notetaker-logout` commands.
+- `web/`: upcoming meetings with an auto-join switch, a notetaker link box, and calendar connect on
+  Recording & privacy.
+- `deploy/`: Chromium, a virtual display and the secret key in the unit file and `docs/deploy.md`.
+- `scripts/smoke-join.sh`: daily live check.
 
-Missing: anything that starts a browser, joins a call, captures audio, stores Google tokens or fetches
-calendars. A `scheduled` meeting stays `scheduled` forever.
+Missing: the live check (row 16). A live call has recorded audio (#130 to #132), but the Meet page labels and
+every fact marked *unverified* still need the maintainer's run. The notetaker sign-in status has no
+endpoint yet.
 
 ## Goals and non-goals
 
@@ -251,21 +259,21 @@ two independent tracks.
 
 | # | PR | Depends on | Done when |
 |---|---|---|---|
-| 1 | `docs: plan the Meet notetaker` (this) | — | Approved by the maintainer |
-| 2 | `feat(notetaker): add denied, removed and max-duration leave reasons` | 1 | `Session` tests for each new reason |
-| 3 | `feat(notetaker): add the call driver trait and a scripted fake` | 2 | Fake replays events; trait carries audio frames and speaker samples |
-| 4 | `feat(server): run the notetaker loop for scheduled meetings` | 3 | Fake-driver tests from section 7.2, including restart recovery and the concurrency cap. Full workspace tests (touches meeting status) |
-| 5 | `feat(core): store encrypted Google refresh tokens` | 1 | Migration, round trip, wrong key fails, hard delete. Full workspace tests |
-| 6 | `feat(server): connect and disconnect Google Calendar` | 5 | Mock OAuth tests: scope granted, scope unticked, revoke on disconnect |
-| 7 | `feat(server): sync calendars with stored tokens` | 6 | Mock calendar tests: sync, refresh, `invalid_grant` disconnects |
-| 8 | `feat(notetaker): launch Chromium and clean up its processes` | 3 | Launch, connect, kill on drop; profile copy deleted |
-| 9 | `feat(notetaker): capture call audio in the page` | 8 | Tone fixture test (section 7.3) |
-| 10 | `feat(notetaker): join a Meet call and post the notice` | 9 | Fixture states for lobby, admit, denied, chat off |
-| 11 | `feat(notetaker): follow the call and leave` | 10 | Fixture states for removed, ended, participant count, chat opt-out, active speaker |
-| 12 | `feat(server): add notetaker login and logout commands` | 8 | Profile created with 0700; logout removes it |
-| 13 | `feat(core): label speakers from call samples` | 4 | `label` job assigns names from `speakers.jsonl`; retries do not duplicate |
-| 14 | `feat(web): connect calendar and notetaker status on Recording & privacy` | 6, 12 | Matches the prototype per `docs/ui-parity.md`, both skins, mobile |
-| 15 | `chore(deploy): add Chromium, a virtual display and the secret key` | 12 | Unit file and `docs/deploy.md` updated |
+| 1 | `docs: plan the Meet notetaker` (#103) | — | Approved by the maintainer |
+| 2 | `feat(notetaker): add denied, removed and max-duration leave reasons` (#105) | 1 | `Session` tests for each new reason |
+| 3 | `feat(notetaker): add the call driver trait and a scripted fake` (#106) | 2 | Fake replays events; trait carries audio frames and speaker samples |
+| 4 | `feat(server): run the notetaker loop for scheduled meetings` (#107) | 3 | Fake-driver tests from section 7.2, including restart recovery and the concurrency cap. Full workspace tests (touches meeting status) |
+| 5 | `feat(core): store encrypted Google refresh tokens` (#108) | 1 | Migration, round trip, wrong key fails, hard delete. Full workspace tests |
+| 6 | `feat(server): connect and disconnect Google Calendar` (#109) | 5 | Mock OAuth tests: scope granted, scope unticked, revoke on disconnect |
+| 7 | `feat(server): sync calendars with stored tokens` (#110) | 6 | Mock calendar tests: sync, refresh, `invalid_grant` disconnects |
+| 8 | `feat(notetaker): launch Chromium and clean up its processes` (#111) | 3 | Launch, connect, kill on drop; profile copy deleted |
+| 9 | `feat(notetaker): capture call audio in the page` (#112) | 8 | Tone fixture test (section 7.3) |
+| 10 | `feat(notetaker): join a Meet call and post the notice` (#113) | 9 | Fixture states for lobby, admit, denied, chat off |
+| 11 | `feat(notetaker): follow the call and leave` (#114) | 10 | Fixture states for removed, ended, participant count, chat opt-out, active speaker |
+| 12 | `feat(server): add notetaker login and logout commands` (#115) | 8 | Profile created with 0700; logout removes it |
+| 13 | `feat(core): label speakers from call samples` (#116) | 4 | `label` job assigns names from `speakers.jsonl`; retries do not duplicate |
+| 14 | `feat(web): connect calendar and notetaker status on Recording & privacy` (#118) | 6, 12 | Matches the prototype per `docs/ui-parity.md`, both skins, mobile |
+| 15 | `chore(deploy): add Chromium, a virtual display and the secret key` (#117) | 12 | Unit file and `docs/deploy.md` updated |
 | 16 | Live check with the maintainer, no PR | 4, 7, 11, 13, 15 | Section 7.6 checklist passes; notes added under Implementation notes below |
 
 New dependencies, each with its reason in its PR: a DevTools protocol client (`chromiumoxide`,
@@ -352,7 +360,7 @@ label, must be confirmed in the live check (row 16).
 - The Google callback now redirects to `/recording?calendar=<outcome>` (it was `/`), so the member lands where the outcome is shown.
 - Notetaker sign-in status is not shown: the server has no endpoint for it. Add one with the settings API, then a status row here.
 - Checked by eye in the in-app browser: Daylight and Ink, mobile width. Dark mode was not checked beyond the shared tokens. Screenshot of this screen and the prototype's are in the thread.
-- The server does not serve the built web app yet (no static or fallback route in `crates/server`), so outside `make dev` the redirect to `/recording?...` has no page to land on, same as the earlier redirect to `/`. Serving the app is a separate gap; not part of this plan.
+- At the time of this PR the server did not serve the built web app, so outside `make dev` the redirect to `/recording?...` had no page to land on. Serving the app has since merged (#281), so the redirect now lands on the page.
 
 ### Starting the notetaker loop (follow-up to PR 4)
 - PR 4 built the claim, run and recovery rules but nothing started them. `notetaker_loop` now does, every 15 s: book calendar events that start within a minute (`book_due`), claim scheduled meetings up to `max_concurrent_calls` (counted across tenants), and start each call. Startup runs `recover` for every tenant and deletes `notetaker-tmp/` (left by a killed server) before the loop begins. The loop is off, with a warning, when no Chromium is found.
