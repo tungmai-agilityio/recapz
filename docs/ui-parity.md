@@ -64,7 +64,7 @@ definition of done for every web PR.
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Speaker colours match the Report (#150).
 - [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
       no opted-out state exists in the list data)
-- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137; no screenshot yet)
+- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137). The time and "Open link" no longer break across lines; checked in Chromium at 1280, 1100 and 390 px, Daylight light only, with screenshots on the fix PR. Left unticked: no side-by-side with the prototype state, which is not in the repo
 - [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
       Open: built without the ribbon (the live stream has no speaker labels): Recording badge, title, platform, time
       since the call was admitted (counts every second), and an "Open live view" link; one card per recording call
