@@ -1,9 +1,14 @@
 name: release-build
-# Builds the Linux x86_64 server binary (web app embedded) for deploy. Run it by hand from the Actions
-# tab (any branch) or push a v* tag. Download the artifact, copy it to the host and run
-# scripts/deploy-release.sh (docs/deploy.md). Nothing is published or deployed from here.
+# Builds the Linux x86_64 server binary (web app embedded). Run it by hand from the Actions tab (any
+# branch) or push a v* tag. The deploy job runs only for a v* tag, or a manual run on main with
+# "deploy" ticked, and only after the reviewer of the `production` environment approves (docs/deploy.md).
 on:
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to production after the build (main only; still needs approval)
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
@@ -38,3 +43,40 @@ jobs:
           name: recapz-linux-x86_64
           path: out/
           retention-days: 14
+  deploy:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (inputs.deploy && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: { group: deploy-production, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with: { name: recapz-linux-x86_64, path: out }
+      - name: Deploy and smoke test
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for v in DEPLOY_KEY DEPLOY_HOST DEPLOY_KNOWN_HOSTS DEPLOY_URL; do [ -n "${!v}" ] || { echo "$v is not set" >&2; exit 1; }; done
+          name=$REF_NAME; [ "$REF_TYPE" = tag ] || name="main-${SHA:0:7}"
+          install -m 600 /dev/null "$RUNNER_TEMP/key"; printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          remote() {
+            ssh -i "$RUNNER_TEMP/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" "deploy@$DEPLOY_HOST" "$@"
+          }
+          (cd out && sha256sum -c recapz.sha256)
+          sum=$(cut -d' ' -f1 out/recapz.sha256)
+          remote "deploy $name $sum" < out/recapz
+          if ! ./scripts/smoke-deploy.sh "$DEPLOY_URL"; then
+            echo "smoke test failed, rolling back" >&2
+            remote rollback </dev/null
+            exit 1
+          fi
