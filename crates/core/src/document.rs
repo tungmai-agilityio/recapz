@@ -41,12 +41,7 @@ pub fn add(
     if std::str::from_utf8(bytes).is_err() {
         bail!("file is not UTF-8 text");
     }
-    let used: i64 = c.query_row(
-        "SELECT COALESCE(SUM(size_bytes),0) FROM documents WHERE member_id=?1",
-        [member_id],
-        |r| r.get(0),
-    )?;
-    if used + bytes.len() as i64 > MAX_MEMBER_BYTES {
+    if used_bytes(c, member_id)? + bytes.len() as i64 > MAX_MEMBER_BYTES {
         bail!("document storage is full (500 MB)");
     }
     let id = new_id();
@@ -95,13 +90,39 @@ pub fn set_llm_ok(c: &Connection, member_id: &str, doc_id: &str, on: bool) -> Re
     done
 }
 
-/// `(id, name, llm_ok)` of the member's documents, newest first. Only the member's own.
-pub fn list(c: &Connection, member_id: &str) -> Result<Vec<(String, String, bool)>> {
+/// Bytes of the member's own documents, counted against `MAX_MEMBER_BYTES`.
+pub fn used_bytes(c: &Connection, member_id: &str) -> Result<i64> {
+    Ok(c.query_row(
+        "SELECT COALESCE(SUM(size_bytes),0) FROM documents WHERE member_id=?1",
+        [member_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// One of the member's documents as listed.
+#[derive(Debug, PartialEq)]
+pub struct Listed {
+    pub id: String,
+    pub name: String,
+    pub llm_ok: bool,
+    pub size_bytes: i64,
+    /// Upload time, milliseconds since the epoch.
+    pub created_at: i64,
+}
+
+/// The member's documents, newest first. Only the member's own.
+pub fn list(c: &Connection, member_id: &str) -> Result<Vec<Listed>> {
     Ok(c.prepare(
-        "SELECT id, name, llm_ok FROM documents WHERE member_id=?1 ORDER BY created_at DESC, id DESC",
+        "SELECT id, name, llm_ok, size_bytes, created_at FROM documents WHERE member_id=?1 ORDER BY created_at DESC, id DESC",
     )?
     .query_map([member_id], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? == 1))
+        Ok(Listed {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            llm_ok: r.get::<_, i64>(2)? == 1,
+            size_bytes: r.get(3)?,
+            created_at: r.get(4)?,
+        })
     })?
     .collect::<Result<_, _>>()?)
 }
@@ -332,10 +353,15 @@ mod tests {
         assert!(!set_llm_ok(&c, "m2", &id, true).unwrap());
         assert_eq!(count(&c, "SELECT llm_ok FROM documents"), 0);
         assert!(list(&c, "m2").unwrap().is_empty());
+        let mine = list(&c, "m1").unwrap();
+        assert_eq!(mine.len(), 1);
         assert_eq!(
-            list(&c, "m1").unwrap(),
-            vec![(id, "n.md".to_string(), false)]
+            (mine[0].id.as_str(), mine[0].name.as_str(), mine[0].llm_ok),
+            (id.as_str(), "n.md", false)
         );
+        assert_eq!(mine[0].size_bytes, BODY.len() as i64);
+        assert_eq!(used_bytes(&c, "m1").unwrap(), BODY.len() as i64);
+        assert_eq!(used_bytes(&c, "m2").unwrap(), 0);
     }
 
     #[test]

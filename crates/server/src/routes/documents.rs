@@ -22,6 +22,30 @@ pub struct DocRow {
     llm_ok: bool,
     /// `indexing`, `indexed` or `no text found`.
     status: &'static str,
+    size_bytes: i64,
+    /// Upload time, milliseconds since the epoch.
+    created_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct Usage {
+    used_bytes: i64,
+    cap_bytes: i64,
+}
+
+/// What the member has stored against the per-member cap; only their own documents count.
+pub async fn usage(State(app): State<App>, jar: CookieJar) -> Res<Json<Usage>> {
+    let u = app.current_user(&jar).await?;
+    let used_bytes = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            document::used_bytes(c, &u.id)
+        })
+        .await?;
+    Ok(Json(Usage {
+        used_bytes,
+        cap_bytes: document::MAX_MEMBER_BYTES,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -76,7 +100,8 @@ pub async fn list(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<DocRow
             ensure_member(c, &u)?;
             document::list(c, &u.id)?
                 .into_iter()
-                .map(|(id, name, llm_ok)| {
+                .map(|d| {
+                    let id = d.id.clone();
                     let queued: i64 = c.query_row(
                         "SELECT COUNT(*) FROM jobs WHERE kind=?1 AND payload=?2 AND state IN ('queued','running')",
                         [document::KIND, &id],
@@ -94,9 +119,11 @@ pub async fn list(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<DocRow
                     };
                     Ok(DocRow {
                         id,
-                        name,
-                        llm_ok,
+                        name: d.name,
+                        llm_ok: d.llm_ok,
                         status,
+                        size_bytes: d.size_bytes,
+                        created_at: d.created_at,
                     })
                 })
                 .collect::<anyhow::Result<Vec<_>>>()

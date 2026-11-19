@@ -255,3 +255,73 @@ async fn documents_need_a_session_and_a_safe_id() {
         StatusCode::NOT_FOUND
     );
 }
+
+fn usage(cookie: &str) -> Request<Body> {
+    req(
+        "GET",
+        "/api/documents/usage",
+        cookie,
+        Body::empty(),
+        "text/plain",
+    )
+}
+
+#[tokio::test]
+async fn documents_list_their_size_and_date_and_usage_counts_only_my_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let boss = login(&app, "boss@example.com").await;
+    let amy = login(&app, "amy@example.com").await;
+    let used = |body: &str| {
+        let v: serde_json::Value = serde_json::from_str(body).unwrap();
+        (
+            v["used_bytes"].as_i64().unwrap(),
+            v["cap_bytes"].as_i64().unwrap(),
+        )
+    };
+    let cap = 500 * 1024 * 1024;
+    assert_eq!(used(&send(&app, usage(&boss)).await.2), (0, cap));
+
+    let before = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let (_, _, a) = send(&app, upload(&boss, "a.md", b"12345")).await;
+    let (_, _, b) = send(&app, upload(&boss, "b.txt", b"1234567890")).await;
+    send(&app, upload(&amy, "amy.md", b"123")).await;
+
+    let rows: serde_json::Value = serde_json::from_str(&send(&app, get(&boss)).await.2).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    let size = |id: &str| {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == id)
+            .unwrap()["size_bytes"]
+            .as_i64()
+            .unwrap()
+    };
+    assert_eq!((size(&id_of(&a)), size(&id_of(&b))), (5, 10));
+    for r in rows.as_array().unwrap() {
+        let at = r["created_at"].as_i64().unwrap();
+        assert!(
+            at >= before && at <= before + 60_000,
+            "created_at {at} is not now"
+        );
+    }
+
+    // Each member's total is their own documents only.
+    assert_eq!(used(&send(&app, usage(&boss)).await.2), (15, cap));
+    assert_eq!(used(&send(&app, usage(&amy)).await.2), (3, cap));
+
+    // The total follows a delete.
+    send(&app, delete(&boss, &id_of(&b))).await;
+    assert_eq!(used(&send(&app, usage(&boss)).await.2), (5, cap));
+    assert_eq!(used(&send(&app, usage(&amy)).await.2), (3, cap));
+
+    // A session is needed, and a document id is still not mistaken for the usage path.
+    assert_eq!(
+        send(&app, usage("recapz_session=nope")).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+}
