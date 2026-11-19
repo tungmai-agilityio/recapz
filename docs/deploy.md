@@ -50,3 +50,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
+
+## After a deploy
+
+`scripts/smoke-deploy.sh https://<domain>` checks health, the embedded web app, an asset's cache header, a client route, that the API refuses an unauthenticated call, and that http redirects to https. It needs only `curl`, no login and no provider calls. The Meet call check is separate: `scripts/smoke-join.sh`.
