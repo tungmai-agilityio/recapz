@@ -319,9 +319,30 @@ async fn documents_list_their_size_and_date_and_usage_counts_only_my_own() {
     assert_eq!(used(&send(&app, usage(&boss)).await.2), (5, cap));
     assert_eq!(used(&send(&app, usage(&amy)).await.2), (3, cap));
 
-    // A session is needed, and a document id is still not mistaken for the usage path.
+    // A session is needed, and the usage path is not mistaken for a document id: PATCH and DELETE
+    // on it are refused, and the listing is untouched.
     assert_eq!(
         send(&app, usage("recapz_session=nope")).await.0,
         StatusCode::UNAUTHORIZED
     );
+    for method in ["PATCH", "DELETE"] {
+        let (s, ..) = send(
+            &app,
+            req(
+                method,
+                "/api/documents/usage",
+                &boss,
+                Body::from(r#"{"llm_ok":true}"#),
+                "application/json",
+            ),
+        )
+        .await;
+        assert_eq!(
+            s,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "{method} on the usage path"
+        );
+    }
+    let rows: serde_json::Value = serde_json::from_str(&send(&app, get(&boss)).await.2).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
 }
