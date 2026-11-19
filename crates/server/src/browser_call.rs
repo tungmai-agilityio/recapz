@@ -72,6 +72,8 @@ pub struct BrowserDriver {
     me: UnboundedSender<Msg>,
     msgs: UnboundedReceiver<Msg>,
     frames: Option<UnboundedReceiver<Vec<i16>>>,
+    /// A stop or reconnect waiting until the frames queued before it are delivered.
+    pending: Option<Msg>,
     admitted: bool,
     quiet: Duration,
     last_frame: Instant,
@@ -94,6 +96,7 @@ impl BrowserDriver {
             me: tx,
             msgs,
             frames: None,
+            pending: None,
             admitted: false,
             quiet,
             last_frame: Instant::now(),
@@ -133,20 +136,30 @@ impl CallDriver for BrowserDriver {
             return Ok(DriverEvent::Call(Event::Admitted));
         }
         loop {
-            tokio::select! {
-                biased;
-                m = self.msgs.recv() => match m {
-                    Some(Msg::Attach(rx)) => self.frames = Some(rx),
-                    Some(Msg::Stop(Stop::End)) | None => {
+            if let Some(m) = self.pending.take() {
+                // Frames and stops travel apart: deliver what the socket sent before this first.
+                if let Some(f) = self.frames.as_mut().and_then(|rx| rx.try_recv().ok()) {
+                    self.pending = Some(m);
+                    self.last_frame = Instant::now();
+                    return Ok(DriverEvent::Audio(f));
+                }
+                match m {
+                    Msg::Attach(rx) => self.frames = Some(rx),
+                    Msg::Stop(Stop::End) => {
                         return Ok(DriverEvent::Call(Event::CallEnded { at_ms: now_ms() }))
                     }
-                    Some(Msg::Stop(Stop::Discard)) => {
+                    Msg::Stop(Stop::Discard) => {
                         return Ok(DriverEvent::Call(Event::Chat {
                             text: "opt out".into(),
                             from_self: false,
                         }))
                     }
-                },
+                }
+                continue;
+            }
+            tokio::select! {
+                biased;
+                m = self.msgs.recv() => self.pending = Some(m.unwrap_or(Msg::Stop(Stop::End))),
                 f = frame(&mut self.frames) => match f {
                     Some(f) => {
                         self.last_frame = Instant::now();
@@ -266,6 +279,25 @@ mod tests {
         newer.send(vec![3]).unwrap();
         assert_eq!(next(&mut d).await, Ok(DriverEvent::Audio(vec![3])));
         assert!(new.send(vec![9]).is_err(), "the replaced socket is cut off");
+    }
+
+    #[tokio::test]
+    async fn frames_sent_before_a_stop_or_a_reconnect_are_all_delivered_first() {
+        let mut d = BrowserDriver::register("b-order");
+        next(&mut d).await.unwrap();
+        let old = attach("b-order").unwrap();
+        old.send(vec![1]).unwrap();
+        old.send(vec![2]).unwrap();
+        let new = attach("b-order").unwrap();
+        new.send(vec![3]).unwrap();
+        assert!(stop("b-order", Stop::End));
+        for want in [1, 2, 3] {
+            assert_eq!(next(&mut d).await, Ok(DriverEvent::Audio(vec![want])));
+        }
+        assert!(matches!(
+            next(&mut d).await,
+            Ok(DriverEvent::Call(Event::CallEnded { .. }))
+        ));
     }
 
     #[tokio::test]

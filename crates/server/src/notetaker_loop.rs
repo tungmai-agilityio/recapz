@@ -81,7 +81,7 @@ pub fn due_calls(
     for (tenant, c, active) in tenants {
         let free = max_concurrent.saturating_sub(active_total + out.len());
         // `claim_scheduled` caps on this tenant's own active calls, browser ones included, so give it
-        // room on top of all of them.
+        // room on top of all of them. If it ever skips browser calls, pass `notetaker + free` instead.
         match claim_scheduled(&c, active + free) {
             Ok(claimed) => out.extend(
                 claimed
