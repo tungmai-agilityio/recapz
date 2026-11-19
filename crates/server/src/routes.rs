@@ -116,6 +116,10 @@ pub fn router_with_llm(
         .route("/api/meetings/{id}/live", get(live::live))
         .route("/api/dev/live-sim", post(dev_live::start))
         .route(
+            "/api/dev/live-sim/audio",
+            post(dev_live::start_audio).layer(DefaultBodyLimit::max(dev_live::AUDIO_BODY_LIMIT)),
+        )
+        .route(
             "/api/dev/live-sim/{id}",
             axum::routing::delete(dev_live::stop),
         )

@@ -61,6 +61,16 @@ curl -s -b cj.txt -X DELETE -H "x-csrf-token: $CSRF" -H "Origin: http://localhos
 
 Add `"fail_after": 2` to the start body to see "Live transcript unavailable" after two lines. The simulated meeting stays `recording` until you stop it, so Ask now keeps working; the transcript is memory only and is gone when you stop it or restart the server. This is not a test of joining Meet, audio capture, the chat notice or real speech latency; that still needs one real call.
 
+### Replay a recording through the real speech provider
+
+To test the live transcript with real speech (Vietnamese quality, latency), upload an audio file (up to 30 minutes, 100 MB) as a fake call. It needs `RECAPZ_SPEECH_KEY`. The audio is streamed in real time to Deepgram for the live view, then sent again in full for the stored transcript after the call ends, so both the streaming and the batch rate are billed. Use only a recording the people in it agreed to.
+
+```sh
+curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:5173" \
+  -F file=@call.wav -F language=vi -F title="Replay" localhost:8080/api/dev/live-sim/audio
+# -> {"id":"<meeting id>"}; open /meetings/<meeting id>/live. Stop it with the same DELETE as above (?optout=true deletes it).
+```
+
 ## Tests
 
 ```sh
