@@ -24,6 +24,8 @@ cmp -s "$d/elf" "$d/got" || { echo "binary not passed through"; fail=1; }
 ok "rollback" "rollback"
 [ "$(cat "$d/calls")" = "--rollback" ] || { echo "rollback args: $(cat "$d/calls")"; fail=1; }
 ln -s /opt/x/recapz "$d/link"; ok "status" "status"
+no "name of the live release" "deploy x $good" "$d/elf"
+ok "other name while x is live" "deploy y $good" "$d/elf"
 no "wrong sha" "deploy v1 $(printf 0%.0s $(seq 64))" "$d/elf"
 no "not an ELF" "deploy v1 $(shasum -a 256 "$d/txt" | cut -d' ' -f1)" "$d/txt"
 no "empty binary" "deploy v1 $good"

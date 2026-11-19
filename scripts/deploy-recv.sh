@@ -24,6 +24,8 @@ esac
 [[ ${name:-} =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || die "bad release name"
 [[ ${sha:-} =~ ^[0-9a-f]{64}$ ]] || die "bad sha256"
 [ -z "${extra:-}" ] || die "bad command"
+cur=$(readlink "$link" 2>/dev/null || true)   # redeploying the live release name would delete it on a failed start
+[ "$(basename -- "$(dirname -- "$cur")")" != "$name" ] || die "release $name is already live; use a new name"
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 head -c $((max + 1)) >"$tmp/recapz"
