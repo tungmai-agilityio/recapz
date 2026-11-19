@@ -120,6 +120,7 @@ pub fn router_with_llm(
             get(documents::list)
                 .merge(post(documents::upload).layer(DefaultBodyLimit::max(documents::BODY_LIMIT))),
         )
+        .route("/api/documents/usage", get(documents::usage))
         .route(
             "/api/documents/{id}",
             patch(documents::set_llm_ok).delete(documents::delete),
