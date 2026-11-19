@@ -137,6 +137,13 @@ non-owners once the list returns the owner.
       (documents have none). The answer arrives in one piece, not token by token. The page has not been run in a
       browser against a real call.
 
+## S10 Browser recording (no prototype state exists: built from `web/src/ui/` primitives and the Upload screen's fields, `docs/specs/browser-recording.md`)
+- [x] Meetings header: "Record from this browser" (primary) beside "Send notetaker". Checked in desktop Chrome at 1280 px, Daylight light, in #294; no prototype side-by-side (none exists)
+- [x] Dialog: title, language (as on Upload), mode (Meeting tab / In-room, `Choice`), the consent box naming the speech provider, the notice to copy for the call chat; Start recording stays disabled until the box is ticked and a title is set. A refused share shows its reason in the dialog. Checked in desktop Chrome at 1280 px, Daylight light, in #294
+- [ ] Browsers without tab audio (no Chromium `userAgentData`, or mobile) see a message linking to Upload instead of the form. Open: jsdom test only, not opened in Safari or Firefox
+- [x] Recorder bar in the live view, only in the tab that is recording: elapsed time, microphone and tab level meters (native `meter`), Stop, Stop and discard (shared `ConfirmDialog`), a warning when the shared tab's audio ends, a reconnecting note, lost-audio note, and a leave-page warning. Checked in desktop Chrome at 1280 px, Daylight light, in #294 (Stop, Stop and discard, meters, elapsed time); the tab-ended, reconnecting and lost-audio notes are jsdom only
+      Not checked: mobile (390 px), the Ink skin and dark mode.
+
 ## S9 My documents (checked against the prototype My documents screen, version 8, 2026-11-19)
 - [x] Drop zone: Markdown and TXT, up to 20 MB each, done, with the 22 px upload icon above the title like the Upload screen. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there. Checked in a browser in #269
 - [x] Table: name, type, size, added, status (Indexed, Indexing, No text found), the `role=switch` "May be sent to the language model" (off by default, "n/a" when no text) and Delete are done. Delete opens the shared modal confirm; the prototype confirms inline in the row (deliberate difference). Checked in a browser at 1280 px (Daylight and Ink, light and dark): the table now fits its card, so Delete is in view with no sideways scroll. At 390 px (same four skins) each row is a two-column card with labelled values (Status, switch and Delete in view, page width 390 px), instead of the prototype's sideways-scrolling table; this is a deliberate difference. Screenshots in the PR (#269; the screenshots are in the project thread, not on the PR)
