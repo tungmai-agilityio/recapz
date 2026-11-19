@@ -22,3 +22,13 @@ test('Ribbon list and live variants differ in height', () => {
   expect(a.className).toContain('h-1.5')
   expect(b.className).toContain('h-5')
 })
+
+test('Ribbon chapter labels stop where the next chapter starts, in time order', () => {
+  const ticks = [{ ms: 12_000, title: 'C' }, { ms: 0, title: 'A' }, { ms: 10_000, title: 'B' }]
+  const { container } = render(<Ribbon variant="scrubber" segments={[]} ticks={ticks} now={0} total={100_000} onSeek={() => {}} />)
+  const labels = [...container.querySelectorAll<HTMLElement>('[role=slider] > span[title]')]
+  expect(labels.length).toBe(3)
+  expect(labels.map((l) => l.title)).toEqual(['A', 'B', 'C'])
+  expect(labels.map((l) => l.style.left)).toEqual(['0%', '10%', '12%'])
+  expect(labels.map((l) => l.style.maxWidth)).toEqual(['min(8rem, 10%)', 'min(8rem, 2%)', 'min(8rem, 88%)'])
+})
