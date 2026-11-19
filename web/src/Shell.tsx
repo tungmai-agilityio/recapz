@@ -104,13 +104,13 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="min-w-0">
         <header className="sticky top-0 z-[6] flex flex-wrap items-center gap-3 border-b border-hair bg-sheet px-7 py-2.5 max-[900px]:static max-[900px]:px-4">
           <div className="min-w-0 truncate text-sm text-mute max-[900px]:hidden">{crumb(pathname)}</div>
-          <Link to="/ask" className="ml-auto flex w-[300px] min-w-0 items-center gap-2 rounded-md border border-hair bg-sheet px-2.5 py-1.5 text-sm text-mute no-underline max-[900px]:order-first max-[900px]:ml-0 max-[900px]:w-auto max-[900px]:basis-full">
-            <span aria-hidden>⌕</span><span>Ask about any meeting…</span>
+          <Link to="/ask" className="ml-auto flex max-w-[300px] min-w-0 flex-1 items-center gap-2 rounded-md border border-hair bg-sheet px-2.5 py-1.5 text-sm text-mute no-underline max-[900px]:order-first max-[900px]:ml-0 max-[900px]:max-w-none max-[900px]:basis-full">
+            <span aria-hidden>⌕</span><span className="min-w-0 truncate">Ask about any meeting…</span>
             <kbd className="ml-auto rounded border border-hair px-1.5 font-mono text-[0.68rem] max-[900px]:hidden">{/Mac/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}</kbd>
           </Link>
           <ThemeSwitch />
         </header>
-        <main className="max-w-[1120px] px-7 pt-7 pb-16 max-[900px]:px-4 max-[900px]:pt-5">{children}</main>
+        <main className="@container max-w-[1120px] px-7 pt-7 pb-16 max-[900px]:px-4 max-[900px]:pt-5">{children}</main>
       </div>
     </div>
   )

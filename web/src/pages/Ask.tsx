@@ -69,7 +69,7 @@ export function Ask() {
           {t.state === 'error' && <p role="alert" className="text-sm text-bad">{t.error}</p>}
           {t.state === 'done' && t.cites.length === 0 && <p className="text-sm text-mute">No matching moments found.</p>}
           {t.cites.length > 0 && (
-            <div className="grid gap-2.5 sm:grid-cols-3">
+            <div className="grid gap-2.5 @xl:grid-cols-3">
               {t.cites.slice(0, 3).map((c, i) => (
                 <Cite
                   key={i}

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { getMeeting, uploadRecording, type MeetingLanguage } from '../api'
 import { Button } from '../ui/Button'
+import { Columns } from '../ui/Columns'
 import { Field, inputClass } from '../ui/Field'
 import { Icon } from '../ui/Icon'
 import { PageHead } from '../ui/PageHead'
@@ -43,8 +44,8 @@ export function Upload() {
     <section className="flex flex-col gap-7">
       <PageHead title="Upload a recording"
         lede={`For in-person meetings or calls the notetaker didn't join. The audio is sent to ${provider} to be transcribed.`} />
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
-        <div className="frame flex flex-col gap-5">
+      <Columns>
+        <div className="frame @container flex flex-col gap-5">
           <label htmlFor="file" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); setFile(e.dataTransfer.files[0] ?? null); send.reset() }}
             className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-inset px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
@@ -58,7 +59,7 @@ export function Upload() {
           </label>
           {bad && <p role="alert" className="text-sm text-bad">{bad}</p>}
           {(send.isPending || id) && (
-            <ol aria-label="Progress" className="grid grid-cols-4 gap-1.5 max-[900px]:grid-cols-1">
+            <ol aria-label="Progress" className="grid grid-cols-4 gap-1.5 @max-md:grid-cols-1">
               {STEPS.map(([s, label], i) => {
                 const state = status === 'failed' ? (i < 1 ? 'done' : '') : status === 'ready' || i < at ? 'done' : i === at ? 'run' : ''
                 return (
@@ -93,7 +94,7 @@ export function Upload() {
             {send.isPending ? 'Uploading…' : 'Process recording'}
           </Button>
         </aside>
-      </div>
+      </Columns>
     </section>
   )
 }

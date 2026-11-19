@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { deleteDocument, getDocuments, getDocumentUsage, setDocumentLlmOk, uploadDocument, type Doc } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
+import { Columns } from '../ui/Columns'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Icon } from '../ui/Icon'
 import { PageHead } from '../ui/PageHead'
@@ -81,7 +82,7 @@ export function Documents() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="My documents" lede="Notes you add here can be searched together with your meetings in Ask. Stored on your server." />
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[1100px]:grid-cols-1 max-[1100px]:gap-7">
+      <Columns>
         <div className="frame flex flex-col gap-4">
           <label htmlFor="docs" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files) }}
@@ -99,7 +100,7 @@ export function Documents() {
             <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
               {docs.data.map((d) => (
                 <Row key={d.id}>
-                  <Cell label="Name" className="min-w-24 font-semibold break-words max-[640px]:col-span-2">{d.name}</Cell>
+                  <Cell label="Name" className="min-w-24 font-semibold break-words @max-2xl:col-span-2">{d.name}</Cell>
                   <Cell label="Type">{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
                   <Cell label="Size" className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
                   <Cell label="Added" className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
@@ -109,7 +110,7 @@ export function Documents() {
                       ? <span className="text-mute">n/a</span>
                       : <Switch label={`May be sent to the language model: ${d.name}`} checked={d.llm_ok} onChange={(on) => toggle.mutate({ id: d.id, on })} />}
                   </Cell>
-                  <Cell className="max-[640px]:col-span-2"><Button variant="danger" onClick={() => { remove.reset(); setDel(d) }}>Delete</Button></Cell>
+                  <Cell className="@max-2xl:col-span-2"><Button variant="danger" onClick={() => { remove.reset(); setDel(d) }}>Delete</Button></Cell>
                 </Row>
               ))}
             </Table>
@@ -122,7 +123,7 @@ export function Documents() {
           <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
           <p>On: the passages that match a question you ask can be sent to the language model provider to write the answer. Audio goes only to {provider}, never to the language model.</p>
         </aside>
-      </div>
+      </Columns>
       {del && (
         <ConfirmDialog title="Delete this document?" confirmLabel="Delete" busy={remove.isPending}
           error={remove.isError ? 'Could not delete. Try again.' : undefined}
