@@ -133,3 +133,45 @@ test('members never ask for usage and see no usage card', async () => {
   expect(calls).not.toContain('/api/usage')
   expect(screen.queryByText('Usage this month')).toBeNull()
 })
+
+function retention(role: string, put?: Response) {
+  const calls: { m: string; u: string; body?: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    calls.push({ m: init?.method ?? 'GET', u, body: init?.body as string | undefined })
+    if (init?.method === 'PUT') return put ?? new Response(JSON.stringify({ days: 180 }))
+    return new Response(JSON.stringify(
+      u === '/api/me' ? { email: 'a@b.c', name: null, role, recording_storage: 'local_disk' }
+        : u === '/api/settings/audio-retention' ? { days: 90 }
+          : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
+            : { connected: false, needs_reconnect: false },
+    ))
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  return calls
+}
+
+test('admin picks a retention period: PUT carries the days and a toast says saved', async () => {
+  const calls = retention('admin')
+  const sel = (await screen.findByLabelText('Delete audio after')) as HTMLSelectElement
+  expect(sel.value).toBe('90')
+  fireEvent.change(sel, { target: { value: '180' } })
+  await waitFor(() => expect(calls.filter((c) => c.m === 'PUT').map((c) => c.body)).toEqual(['{"days":180}']))
+  expect(await screen.findByText('Audio retention saved')).toBeTruthy()
+})
+
+test('a refused retention change shows the server message', async () => {
+  retention('admin', new Response('retention is at most 3650 days', { status: 400 }))
+  fireEvent.change(await screen.findByLabelText('Delete audio after'), { target: { value: '365' } })
+  expect((await screen.findByRole('alert')).textContent).toBe('retention is at most 3650 days')
+})
+
+test('members see the retention as text and no select', async () => {
+  retention('member')
+  expect((await screen.findByText(/deleted after/)).textContent).toMatch(/90 days/)
+  expect(screen.queryByLabelText('Delete audio after')).toBeNull()
+  expect(screen.queryByRole('combobox')).toBeNull()
+})
