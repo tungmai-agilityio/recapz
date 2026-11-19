@@ -128,8 +128,9 @@ non-owners once the list returns the owner.
 
 ## S6 Live meeting (built from the spec in #194, not checked against the prototype: it is not in the repo)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
-      Open: only the title and a "Recording" badge (and "Call ended") are built. Timer, platform and join time are not;
-      Pause and Stop have no backend route, so they are hidden.
+      Open: title, "Recording" badge (and "Call ended"), platform, join time and an elapsed timer are built (#276; the
+      timer stops at the final length when the call ends). jsdom test only: no screenshot, and the prototype has no
+      live state in the repo. Pause and Stop and leave have no backend route, so they are hidden.
 - [ ] Live ribbon, live transcript, speaking now, talk time, noted so far
       Open: the live transcript is built (lines with the time into the call, the partial line in grey, click a line to
       ask about it). The ribbon, speaking now, talk time and noted so far are not: the live stream has no speaker

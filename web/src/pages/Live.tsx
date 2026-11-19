@@ -110,6 +110,17 @@ function Source({ c }: { c: Citation }) {
   return c.meeting_id ? <Link to={`/meetings/${c.meeting_id}?t=${c.start_ms ?? 0}`} className={`${cls} hover:border-ink-2`}>{body}</Link> : <div className={cls}>{body}</div>
 }
 
+/** Time since the notetaker joined: ticks every second, then stays at the final length once the call ends. */
+function Elapsed({ since, endedAt }: { since: number; endedAt: number | null }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (endedAt !== null) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [endedAt])
+  return <time aria-label="Elapsed" className="font-mono">{clock(Math.max(0, (endedAt ?? now) - since))}</time>
+}
+
 /** The live transcript of a call in progress, with Ask now beside it. */
 export function Live() {
   const { id = '' } = useParams()
@@ -122,6 +133,7 @@ function LiveView({ id }: { id: string }) {
   const [lines, setLines] = useState<Line[]>([])
   const [partial, setPartial] = useState('')
   const [state, setState] = useState<'live' | 'unavailable' | 'ended' | 'not-live'>('live')
+  const [endedAt, setEndedAt] = useState<number | null>(null)
   const [picked, setPicked] = useState<Line | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
@@ -131,7 +143,7 @@ function LiveView({ id }: { id: string }) {
       if (e.type === 'final') { setLines((ls) => [...ls, { at_ms: e.at_ms, text: e.text }]); setPartial('') }
       else if (e.type === 'partial') setPartial(e.text)
       else if (e.type === 'unavailable') setState('unavailable')
-      else if (e.type === 'end') setState('ended')
+      else if (e.type === 'end') { setState('ended'); setEndedAt(Date.now()) }
     }
     watchLive(id, on, stop.signal)
       // The stream closing without an `end` event means the connection dropped, not that the call is over.
@@ -157,6 +169,15 @@ function LiveView({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {state === 'ended' ? <Badge>Call ended</Badge> : <Badge tone="signal">Recording</Badge>}
         </div>
+        {meeting.data && (
+          <p className="flex flex-wrap gap-x-2 text-sm text-mute">
+            <span>{meeting.data.platform}</span>
+            {meeting.data.started_at ? <>
+              <span>· Joined <time>{new Date(meeting.data.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></span>
+              <span>· <Elapsed since={meeting.data.started_at} endedAt={endedAt} /></span>
+            </> : null}
+          </p>
+        )}
         <RecorderBar id={id} ended={state === 'ended'} />
         {state === 'unavailable' && <p role="status" className="text-sm text-mute">Live transcript unavailable. Recording goes on and the full transcript follows after the call.</p>}
         {state === 'ended' && <p role="status" className="text-sm text-mute">The call has ended. <Link to={`/meetings/${id}`} className="underline">Open the meeting</Link></p>}
