@@ -63,7 +63,8 @@ CI deploys with its own SSH key, never your personal one. On your machine: `ssh-
 1. **New environment**, name `production`. Tick **Required reviewers**, add yourself, **Save protection rules**. Under **Deployment branches and tags** choose **Selected branches and tags**, add the tag rule `v*` and the branch `main`.
 2. In that environment add the secret `DEPLOY_SSH_KEY`: the full contents of `~/recapz-ci-deploy` (`pbcopy < ~/recapz-ci-deploy`, paste in the box; never in chat or a file in the repo). Then delete the private key from your machine if you do not need it elsewhere.
 3. Add the environment variables `DEPLOY_HOST` (`159.223.198.251`), `DEPLOY_URL` (`https://recapz.tungmai.com`) and `DEPLOY_KNOWN_HOSTS`, the pinned host key. Get it from a machine you trust and compare the fingerprint with the one the host reports over your own login: `ssh-keyscan -t ed25519 159.223.198.251` on your machine; on the host `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`; `ssh-keygen -lf -` on the scanned line must print the same fingerprint. Paste the scanned line (`159.223.198.251 ssh-ed25519 AAAA...`) as the value.
-4. Release: push a tag (`git tag v0.5.0 && git push origin v0.5.0`), open the run, **Review deployments**, tick `production`, **Approve and deploy**. A manual run needs **Run workflow** on `main` with "deploy" ticked.
+4. Before you approve, open the tagged commit and read what it changes, `.github/` and `scripts/` first: anyone who can push a `v*` tag can run a workflow from that commit, and your approval is the only check. Add a tag protection rule for `v*` (Settings → Rules → Rulesets) so only you can create them.
+5. Release: push a tag (`git tag v0.5.0 && git push origin v0.5.0`), open the run, **Review deployments**, tick `production`, **Approve and deploy**. A manual run needs **Run workflow** on `main` with "deploy" ticked.
 
 ## After a deploy
 
