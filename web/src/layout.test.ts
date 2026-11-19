@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 // Page content sits beside the rail and often in a column, so the window width says little about the room it has.
 // Content reacts to its container (`@container` + `@max-*:`); only Shell may use window breakpoints.
-const files = import.meta.glob(['./pages/*.tsx', './ui/*.tsx', '!./**/*.test.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const files = import.meta.glob(['./**/*.tsx', '!./**/*.test.tsx', '!./Shell.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 const viewport = /(?<![@\w-])(?:(?:sm|md|lg|xl|2xl):|(?:max|min)-\[\d+px\]:)/
 
 describe('layout', () => {
