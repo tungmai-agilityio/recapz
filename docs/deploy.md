@@ -8,7 +8,7 @@ sudo install -m 0755 target/release/recapz /usr/local/bin/recapz
 sudo useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
 sudo install -d -m 0750 -o recapz -g recapz /etc/recapz
 sudo install -m 0640 -o recapz -g recapz config.toml /etc/recapz/config.toml   # never commit config.toml
-sudo install -m 0640 -o recapz -g recapz /dev/null /etc/recapz/recapz.env       # then add RECAPZ_SECRET_KEY, RECAPZ_SPEECH_KEY and the storage keys, see below
+sudo install -m 0640 -o recapz -g recapz deploy/recapz.env.example /etc/recapz/recapz.env   # then fill in every key, see below
 sudo install -m 0644 deploy/recapz.service deploy/recapz-xvfb.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
@@ -17,7 +17,7 @@ journalctl -u recapz -f
 - **Cloud:** Hetzner Cloud, Singapore region (decided 2026-11-18): cheapest for this size and closest to a Vietnam team. It is a plain Linux VM, so everything below applies unchanged. Backups are not included by default; copy `/var/backups/recapz` off the host. A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
 - **Target host (hosted speech, `docs/decisions/hosted-speech.md`):** 2 vCPU, 4 GB RAM, 40 GB disk, `max_concurrent_calls = 2`, no GPU. Chromium (about 1 GB per call) drives memory; WAV audio (about 115 MB per hour) drives disk. On 2 GB RAM use `max_concurrent_calls = 1`. The speech and LLM keys go in `/etc/recapz/recapz.env` with `RECAPZ_SECRET_KEY`, never in `config.toml`.
 - `make release` is a plain `cargo build --release`: no GPU or CUDA toolkit is needed to build or run (a C compiler is, for the TLS library).
-- `bind` stays `127.0.0.1:8080`; put a TLS reverse proxy in front. Set `base_url` to the public https URL.
+- `bind` stays `127.0.0.1:8080`; Caddy terminates TLS in front of it: `sudo apt install caddy`, put `deploy/Caddyfile` at `/etc/caddy/Caddyfile` with your domain in place of `recapz.example.com` (its DNS record must already point at the host), `sudo systemctl reload caddy`. Set `base_url` to the public https URL. Allow only ports 22, 80 and 443 in the Hetzner firewall.
 - Set `dev_login = false` in production.
 - Upgrade: install the new binary, `sudo systemctl restart recapz` (migrations run on start and are additive).
 
