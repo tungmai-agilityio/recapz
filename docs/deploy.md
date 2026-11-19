@@ -1,5 +1,7 @@
 # Deploy (systemd)
 
+On a fresh Debian 12 host, `sudo scripts/provision-host.sh` does the packages, user, directories, unit files, firewall and key-only SSH below; then continue from the config and env files. Debian, not Ubuntu: Ubuntu's `chromium` is a snap that breaks under the service's hardening *(unverified here)*.
+
 Single host, one binary. `data_dir` in the config must be `/var/lib/recapz`.
 
 ```sh
