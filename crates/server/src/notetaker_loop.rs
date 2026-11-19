@@ -56,8 +56,9 @@ pub fn startup(data_dir: &Path) -> Result<()> {
 }
 
 /// One pass over every tenant: books due events, then claims scheduled meetings so that at most
-/// `max_concurrent` calls are active across all tenants. A tenant that errors is logged and skipped,
-/// so it neither blocks the others nor loses what they already claimed.
+/// `max_concurrent` notetaker calls are active across all tenants. Browser calls neither count nor
+/// block: the cap protects Chromium memory, which they do not use. A tenant that errors is logged and
+/// skipped, so it neither blocks the others nor loses what they already claimed.
 /// Returns `(tenant, meeting id, join url)` for each call to start.
 pub fn due_calls(
     data_dir: &Path,
@@ -69,9 +70,9 @@ pub fn due_calls(
     let mut active_total = 0usize;
     for tenant in db::tenant_ids(&control)? {
         match open_and_count(data_dir, &tenant, now) {
-            Ok((c, active)) => {
-                active_total += active;
-                tenants.push((tenant, c, active));
+            Ok((c, notetaker, all)) => {
+                active_total += notetaker;
+                tenants.push((tenant, c, all));
             }
             Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
         }
@@ -79,7 +80,8 @@ pub fn due_calls(
     let mut out = Vec::new();
     for (tenant, c, active) in tenants {
         let free = max_concurrent.saturating_sub(active_total + out.len());
-        // `claim_scheduled` caps on this tenant's own active calls, so give it room on top of them.
+        // `claim_scheduled` caps on this tenant's own active calls, browser ones included, so give it
+        // room on top of all of them. If it ever skips browser calls, pass `notetaker + free` instead.
         match claim_scheduled(&c, active + free) {
             Ok(claimed) => out.extend(
                 claimed
@@ -96,15 +98,17 @@ fn open_and_count(
     data_dir: &Path,
     tenant: &str,
     now: i64,
-) -> Result<(rusqlite::Connection, usize)> {
+) -> Result<(rusqlite::Connection, usize, usize)> {
     let c = db::open_tenant(data_dir, tenant)?;
     book_due(&c, now, LEAD_MS)?;
-    let active = c.query_row(
-        "SELECT COUNT(*) FROM meetings WHERE status IN ('joining','recording')",
+    // (notetaker calls, all calls) that are active.
+    let (notetaker, all) = c.query_row(
+        "SELECT COALESCE(SUM(platform != 'browser'), 0), COUNT(*) FROM meetings
+         WHERE status IN ('joining','recording')",
         [],
-        |r| r.get(0),
+        |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    Ok((c, active))
+    Ok((c, notetaker, all))
 }
 
 /// Why a call cannot start at all, as the error shown on the meeting.
@@ -308,6 +312,28 @@ mod tests {
         meeting(&c1, "s2", "scheduled", 4);
         meeting(&c2, "s3", "scheduled", 5);
         assert_eq!(due_calls(dir.path(), 3, 1_000).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn browser_calls_never_block_or_count_toward_notetaker_calls() {
+        let (dir, c) = setup();
+        for (id, status) in [("b1", "recording"), ("b2", "joining")] {
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status, created_at) VALUES (?1, 't', 'browser', ?2, 1)",
+                [id, status],
+            )
+            .unwrap();
+        }
+        meeting(&c, "live", "recording", 2);
+        meeting(&c, "a", "scheduled", 10);
+        meeting(&c, "b", "scheduled", 11);
+        let got = due_calls(dir.path(), 2, 1_000).unwrap();
+        assert_eq!(
+            got.iter().map(|(_, i, _)| i.as_str()).collect::<Vec<_>>(),
+            vec!["a"],
+            "two browser calls are active, yet the one notetaker call leaves room for one more"
+        );
+        assert_eq!(status(&c, "b"), "scheduled");
     }
 
     #[test]
