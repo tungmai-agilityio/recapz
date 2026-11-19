@@ -18,7 +18,10 @@ export function Ribbon({ segments, variant = 'list', ticks, now, total, onSeek, 
     </div>
   )
   if (!onSeek || now === undefined || !total) return strip
-  const pct = (ms: number) => `${Math.min(100, Math.max(0, (ms / total) * 100))}%`
+  const frac = (ms: number) => Math.min(100, Math.max(0, (ms / total) * 100))
+  const pct = (ms: number) => `${frac(ms)}%`
+  // Each chapter label stops where the next chapter starts, so close chapters never overlap.
+  const sorted = [...(ticks ?? [])].sort((a, b) => a.ms - b.ms)
   const click = (e: MouseEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     if (r.width) onSeek(Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * total))
@@ -33,9 +36,10 @@ export function Ribbon({ segments, variant = 'list', ticks, now, total, onSeek, 
     <div role="slider" tabIndex={0} aria-label={label} aria-valuemin={0} aria-valuemax={Math.round(total / 1000)}
       aria-valuenow={Math.round(now / 1000)} onClick={click} onKeyDown={key}
       className="relative cursor-pointer select-none pt-[22px]">
-      {ticks?.map((t) => (
-        <span key={`${t.ms}-${t.title}`} title={t.title} style={{ left: pct(t.ms) }}
-          className="pointer-events-none absolute top-0 hidden h-[50px] max-w-32 truncate whitespace-nowrap border-l border-hair pl-1 font-mono text-[0.64rem] text-mute sm:block">
+      {sorted.map((t, i) => (
+        <span key={`${t.ms}-${t.title}`} title={t.title}
+          style={{ left: pct(t.ms), maxWidth: `min(8rem, ${frac(sorted[i + 1]?.ms ?? total) - frac(t.ms)}%)` }}
+          className="pointer-events-none absolute top-0 hidden h-[50px] truncate whitespace-nowrap border-l border-hair pl-1 font-mono text-[0.64rem] text-mute sm:block">
           {t.title}
         </span>
       ))}
