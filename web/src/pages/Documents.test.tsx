@@ -55,3 +55,10 @@ test('upload rejects a PDF locally and posts a Markdown file', async () => {
   expect((await screen.findByRole('alert')).textContent).toBe('a.pdf: unsupported format. Use Markdown or TXT.')
   await waitFor(() => expect(calls.filter((c) => c === 'POST /api/documents').length).toBe(1))
 })
+
+test('the explainer names the speech provider and no longer says audio never leaves the server', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u === '/api/me' ? { email: 'a@example.com', name: null, role: 'member', speech_provider: 'Deepgram' } : []))))
+  render(<QueryClientProvider client={new QueryClient()}><Documents /></QueryClientProvider>)
+  expect(await screen.findByText(/Audio goes only to Deepgram, never to the language model\./)).toBeTruthy()
+  expect(document.body.textContent).not.toMatch(/never leaves the server/)
+})
