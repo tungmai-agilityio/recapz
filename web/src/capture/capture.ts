@@ -81,6 +81,7 @@ async function wire(mode: CaptureMode, socketUrl: string, mic: MediaStream, tab:
   const changed = () => capture.onChange?.()
   const socket = new FrameSocket(wsUrl(socketUrl), (s: SocketState) => {
     if (capture.state === 'stopped') return
+    if (s === 'closed') return finish(() => {}) // the socket gave up: the server has ended this recording
     capture.state = s === 'reconnecting' ? 'reconnecting' : 'recording'
     changed()
   })

@@ -1,12 +1,15 @@
 /** 60 s of 100 ms frames. */
 export const MAX_BUFFERED = 600
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000]
+/** The server ends a call after 60 s without frames, so a socket down this long has nothing left to reach. */
+const GIVE_UP_MS = 60_000
 
 export type SocketState = 'connecting' | 'open' | 'reconnecting' | 'closed'
 
 /**
  * Sends frames and the `stop` / `discard` commands in order over a WebSocket. While the socket is down it keeps
- * up to 60 s of frames, reconnects with backoff and resends them first.
+ * up to 60 s of frames, reconnects with backoff and resends them first. It gives up (`closed`) once the server can no
+ * longer take the recording: down for over 60 s, or a `stop` / `discard` still undelivered after every backoff step.
  */
 export class FrameSocket {
   state: SocketState = 'connecting'
@@ -15,6 +18,7 @@ export class FrameSocket {
   private ws!: WebSocket
   private queue: (ArrayBuffer | string)[] = []
   private attempt = 0
+  private downSince = Date.now()
   private ending = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private readonly url: string
@@ -65,6 +69,11 @@ export class FrameSocket {
     ws.onclose = () => {
       if (this.state === 'closed') return
       if (this.ending && this.queue.length === 0) return this.set('closed')
+      if (this.state === 'open') this.downSince = Date.now()
+      if (Date.now() - this.downSince > GIVE_UP_MS || (this.ending && this.attempt >= BACKOFF_MS.length)) {
+        this.queue = []
+        return this.set('closed')
+      }
       this.set('reconnecting')
       const delay = BACKOFF_MS[Math.min(this.attempt++, BACKOFF_MS.length - 1)]
       this.timer = setTimeout(() => this.connect(), delay)
