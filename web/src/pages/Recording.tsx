@@ -103,7 +103,7 @@ export function Recording() {
           )}
           {storage.isAdmin && storage.days !== undefined && (
             <div className="text-sm @2xl:col-start-2">
-              <label htmlFor="audio-retention" className="font-medium">Delete audio after</label>
+              <label htmlFor="audio-retention" className="block font-medium">Delete audio after</label>
               <select id="audio-retention" className={`${inputClass} mt-1`} value={storage.days} disabled={keep.isPending}
                 onChange={(e) => keep.mutate(Number(e.target.value))}>
                 {[...new Set([30, 90, 180, 365, storage.days])].sort((a, b) => a - b).filter((d) => d > 0).map((d) => <option key={d} value={d}>{d} days</option>)}
