@@ -1,0 +1,40 @@
+name: release-build
+# Builds the Linux x86_64 server binary (web app embedded) for deploy. Run it by hand from the Actions
+# tab (any branch) or push a v* tag. Download the artifact, copy it to the host and run
+# scripts/deploy-release.sh (docs/deploy.md). Nothing is published or deployed from here.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: lts/* }
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm build
+        working-directory: web
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: release-
+      - run: cargo build --release -p recapz-server
+      - run: |
+          mkdir out
+          cp target/release/recapz out/recapz
+          (cd out && sha256sum recapz > recapz.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recapz-linux-x86_64
+          path: out/
+          retention-days: 14
