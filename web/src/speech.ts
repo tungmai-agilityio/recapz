@@ -12,7 +12,7 @@ export function useUsage() {
 export function useRecordingStorage() {
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
   const days = useQuery({ queryKey: ['audio-retention'], queryFn: getAudioRetention })
-  return { where: me.data?.recording_storage, days: days.data?.days }
+  return { where: me.data?.recording_storage, days: days.data?.days, isAdmin: me.data?.role === 'admin' }
 }
 
 export function useSpeechProvider(): string {

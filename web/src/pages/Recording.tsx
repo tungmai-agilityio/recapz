@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { disconnectCalendar, getCalendar } from '../api'
+import { disconnectCalendar, getCalendar, putAudioRetention } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { inputClass } from '../ui/Field'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { useRecordingStorage, useSpeechProvider, useUsage } from '../speech'
@@ -30,6 +31,10 @@ export function Recording() {
   const [params, setParams] = useSearchParams()
   const outcome = outcomes[params.get('calendar') ?? '']
   const cal = useQuery({ queryKey: ['calendar'], queryFn: getCalendar })
+  const keep = useMutation({
+    mutationFn: putAudioRetention,
+    onSuccess: () => { toast('Audio retention saved'); qc.invalidateQueries({ queryKey: ['audio-retention'] }) },
+  })
   const [asking, setAsking] = useState(false)
   const off = useMutation({
     mutationFn: disconnectCalendar,
@@ -95,6 +100,18 @@ export function Recording() {
               {storage.days === undefined ? '.' : storage.days === 0 ? ' and their audio is kept until someone deletes the meeting.' : <> and their audio is deleted after <b>{storage.days} days</b>.</>}
               {' '}Transcripts and reports stay.
             </p>
+          )}
+          {storage.isAdmin && storage.days !== undefined && (
+            <div className="text-sm @2xl:col-start-2">
+              <label htmlFor="audio-retention" className="block font-medium">Delete audio after</label>
+              <select id="audio-retention" className={`${inputClass} mt-1`} value={storage.days} disabled={keep.isPending}
+                onChange={(e) => keep.mutate(Number(e.target.value))}>
+                {[...new Set([30, 90, 180, 365, storage.days])].sort((a, b) => a - b).filter((d) => d > 0).map((d) => <option key={d} value={d}>{d} days</option>)}
+                <option value={0}>Keep until the meeting is deleted</option>
+              </select>
+              <p className="mt-1 text-mute">Audio older than this is deleted at the next hourly sweep. Transcripts and reports stay.</p>
+              {keep.isError && <p role="alert" className="mt-1 text-bad">{keep.error.message.replace(/^\d+ /, '')}</p>}
+            </div>
           )}
         </div>
       </div>

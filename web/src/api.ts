@@ -59,6 +59,12 @@ export const getMe = async (): Promise<Me> => (await check(await fetch('/api/me'
 export const getAudioRetention = async (): Promise<{ days: number }> =>
   (await check(await fetch('/api/settings/audio-retention'))).json()
 
+/** Admin only; the server refuses more than 3650 days. */
+export const putAudioRetention = async (days: number): Promise<{ days: number }> =>
+  (await check(await fetch('/api/settings/audio-retention', {
+    method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ days }),
+  }))).json()
+
 export interface Usage {
   speech_micro_usd: number
   llm_micro_usd: number
