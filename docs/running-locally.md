@@ -43,6 +43,24 @@ curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:8080" -F
 
 Then look at `GET /api/meetings`, `/api/meetings/{id}/transcript` and `/report`. Ask is `POST /api/ask` with `{"question": "..."}`; it answers with citations.
 
+## Simulate a live call (no real meeting)
+
+With `dev_login = true` the server can play a fake call into the live view, so Ask now can be tried without joining a meeting. It uses no browser, audio or speech provider; the live view, search, your documents and the language model (`[llm]` in `config.toml`) are the real code. Upload a document first (My documents, toggle "May be sent to the language model" on) so Ask now has something to answer from.
+
+```sh
+curl -s -c cj.txt -H 'content-type: application/json' -d '{"email":"you@example.com"}' localhost:8080/auth/dev-login
+CSRF=$(awk '$6=="recapz_csrf"{print $7}' cj.txt)
+# Start: the built-in sample, or your own lines; one line every interval_ms (200 to 10000, default 2000).
+curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:5173" -H 'content-type: application/json' \
+  -d '{"title":"Client call","lines":["What is the hourly rate?","And the payment terms?"],"interval_ms":3000}' \
+  localhost:8080/api/dev/live-sim
+# -> {"id":"<meeting id>"}. Open http://localhost:5173/meetings/<meeting id>/live (the rail and the Meetings page also show it within 15 s).
+# Stop (the meeting becomes ready); add ?optout=true to behave like a chat opt-out (the meeting is deleted).
+curl -s -b cj.txt -X DELETE -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:5173" "localhost:8080/api/dev/live-sim/<meeting id>"
+```
+
+Add `"fail_after": 2` to the start body to see "Live transcript unavailable" after two lines. The simulated meeting stays `recording` until you stop it, so Ask now keeps working; the transcript is memory only and is gone when you stop it or restart the server. This is not a test of joining Meet, audio capture, the chat notice or real speech latency; that still needs one real call.
+
 ## Tests
 
 ```sh
