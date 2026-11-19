@@ -19,7 +19,7 @@ journalctl -u recapz -f
 - `make release` is a plain `cargo build --release`: no GPU or CUDA toolkit is needed to build or run (a C compiler is, for the TLS library).
 - `bind` stays `127.0.0.1:8080`; put a TLS reverse proxy in front. Set `base_url` to the public https URL.
 - Set `dev_login = false` in production.
-- Upgrade: install the new binary, `sudo systemctl restart recapz` (migrations run on start and are additive).
+- Upgrade: build `recapz` off the host (a 4 GB host is too small for a release build; build in CI or on a larger machine for the same Linux and CPU), `scp` it over, then `sudo scripts/deploy-release.sh ./recapz v0.4.0`. It installs the release under `/opt/recapz/releases/`, points `/usr/local/bin/recapz` at it, restarts the service and waits for `/api/health`; if the new release is not healthy it switches back and removes it. `sudo scripts/deploy-release.sh --rollback` goes back to the previous release by hand. Migrations are additive, so the older binary runs on the newer data. The first install is the same command (create `/opt/recapz/releases` first and skip the `install` of the binary in the setup block above).
 
 ## Meeting notetaker (Google Meet)
 
