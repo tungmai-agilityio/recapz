@@ -1,3 +1,4 @@
+pub mod browser_call;
 pub mod calendar_sync;
 pub mod cli;
 pub mod config;
