@@ -16,6 +16,7 @@ recapz-speech = { path = "../speech" }
 rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls", "fail-on-err"] }
 axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 time = { version = "0.3", features = ["parsing", "formatting"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
