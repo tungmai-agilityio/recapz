@@ -183,3 +183,18 @@ test('a failed audio setup closes the context and releases the microphone', asyn
   expect(mic.tracks[0].stopped).toBe(true)
   expect(sockets).toHaveLength(0)
 })
+
+test('a socket that gives up stops the capture and releases the devices', async () => {
+  vi.useFakeTimers()
+  const mic = new FakeStream([new FakeTrack('audio')])
+  user.mockResolvedValue(mic)
+  const c = await startCapture('room', 'ws://x/rec')
+  const ws = sockets[0] as unknown as { onclose: () => void }
+  vi.advanceTimersByTime(61_000)
+  ws.onclose()
+  expect(c.state).toBe('stopped')
+  expect(mic.tracks[0].stopped).toBe(true)
+  expect(ctxClosed).toBe(true)
+  expect(sockets).toHaveLength(1)
+  vi.useRealTimers()
+})
