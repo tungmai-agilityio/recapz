@@ -15,6 +15,8 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Ask | Question box over all accessible meetings, answers cite exact moments |
 | Live view | Running transcript and talk time during a call |
 | Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/specs/live-ask.md`) |
+| Browser recording | A member records a call from their own browser: the meeting tab's audio plus their microphone ("Meeting tab"), or the microphone only ("In-room"), streamed live to the server (`docs/specs/browser-recording.md`) |
+| Recorder bar | In the live view of the tab that is recording: elapsed time, input levels, Stop, Stop and discard |
 | Upload | Process an audio or video file the notetaker did not record |
 | Members | Google sign-in; admins invite by email, remove people, change roles |
 | Recording & privacy | Join rules, notetaker name/message, retention, purge one participant |
@@ -23,6 +25,12 @@ Out of scope for v1: catch-up, talk stats, inbox digest, follow-ups, connections
 
 Opt-out is required: anyone typing "opt out" in call chat makes the notetaker leave and the recording,
 transcript and report for that meeting are deleted.
+
+Browser recording has no bot in the call, so no chat notice and no "opt out" phrase. Before every browser
+recording the member ticks "I have told everyone in this meeting that it is recorded and sent to <speech
+provider>"; recording cannot start until it is ticked, and the dialog offers a notice naming the speech provider
+to copy into the call chat. The recorder can stop and discard at any time, which hard-deletes the meeting, its
+audio and any live text, as the chat opt-out does.
 
 ## Architecture
 
@@ -72,13 +80,15 @@ by an admin, and not while it is joining, recording or processing.
 ## Data sent to providers
 
 - Audio goes only to the configured speech provider (Deepgram first): the live stream during a call and the
-  recorded file after it. Nothing else is sent to it.
+  recorded file after it. Nothing else is sent to it. A browser recording streams the member's microphone and
+  shared tab audio to the Recapz server only; the server sends it on to the speech provider as for any call.
 - Transcript text, the text of a question a member asks, and text of documents the uploader marked "May be sent
   to the language model" go only to the configured LLM and embedding providers (OpenAI by default). Documents with
   the toggle off (the default) are never sent.
 - Provider accounts must use no-training and no-retention settings. Deployment-wide keys live in the environment
   file, never in `config.toml`, logs or the database.
-- The Recording & privacy screen and the notetaker's join message in call chat name the speech provider.
+- The Recording & privacy screen, the notetaker's join message in call chat, and the browser recording consent
+  box and copied notice name the speech provider.
 - Deletes are hard deletes on our side. Providers keep nothing beyond transient processing under those settings,
   so Recapz makes no provider-side delete calls.
 - If a provider is unavailable, audio stays on disk and jobs retry; there is no automatic second provider.

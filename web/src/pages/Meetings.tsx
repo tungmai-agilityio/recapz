@@ -8,6 +8,7 @@ import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { LiveCard } from './LiveCard'
 import { NextUp } from './NextUp'
+import { RecordDialog } from './Record'
 import { useSpeechProvider } from '../speech'
 import { Face } from '../ui/Face'
 import { Ribbon } from '../ui/Ribbon'
@@ -108,6 +109,7 @@ export function Meetings() {
   const provider = useSpeechProvider()
   const toast = useToast()
   const [sending, setSending] = useState(false)
+  const [recording, setRecording] = useState(false)
   const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null)
   const del = useMutation({
     mutationFn: deleteMeeting,
@@ -136,9 +138,11 @@ export function Meetings() {
         lede={data ? counts(data, provider) : undefined}
         actions={<>
           <Link to="/upload" className="inline-flex items-center gap-2 rounded-md border border-hair bg-sheet px-3 py-1.5 text-sm font-medium hover:border-ink-2">Upload</Link>
-          <Button variant="primary" onClick={() => setSending(true)}>Send notetaker</Button>
+          <Button onClick={() => setSending(true)}>Send notetaker</Button>
+          <Button variant="primary" onClick={() => setRecording(true)}>Record from this browser</Button>
         </>} />
       {sending && <SendNotetaker onClose={() => setSending(false)} />}
+      {recording && <RecordDialog onClose={() => setRecording(false)} />}
       {data?.filter((m) => m.status === 'recording').map((m) => <LiveCard key={m.id} m={m} />)}
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
       <div className="frame flex min-w-0 flex-col gap-7">

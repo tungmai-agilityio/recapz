@@ -7,6 +7,7 @@ import { clock } from '../clock'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
+import { RecorderBar } from './Record'
 
 interface Line { at_ms: number; text: string }
 interface Card { id: number; context: string; ms: number; answer: string; cites: Citation[]; error: string }
@@ -156,6 +157,7 @@ function LiveView({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {state === 'ended' ? <Badge>Call ended</Badge> : <Badge tone="signal">Recording</Badge>}
         </div>
+        <RecorderBar id={id} ended={state === 'ended'} />
         {state === 'unavailable' && <p role="status" className="text-sm text-mute">Live transcript unavailable. Recording goes on and the full transcript follows after the call.</p>}
         {state === 'ended' && <p role="status" className="text-sm text-mute">The call has ended. <Link to={`/meetings/${id}`} className="underline">Open the meeting</Link></p>}
         <div className="frame flex max-h-[60vh] min-h-40 flex-col gap-1.5 overflow-y-auto" aria-label="Live transcript">
