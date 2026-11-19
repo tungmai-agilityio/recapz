@@ -15,7 +15,7 @@ recapz-notetaker = { path = "../notetaker" }
 recapz-speech = { path = "../speech" }
 rust-embed = { version = "8", features = ["mime-guess"] }
 rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls", "fail-on-err"] }
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -36,3 +36,5 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
 async-trait = "0.1"
+tokio-tungstenite = "0.29"
+futures-util = "0.3"
