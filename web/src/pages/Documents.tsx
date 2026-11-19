@@ -82,7 +82,7 @@ export function Documents() {
     <section className="flex flex-col gap-7">
       <PageHead title="My documents" lede="Notes you add here can be searched together with your meetings in Ask. Stored on your server." />
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[1100px]:grid-cols-1 max-[1100px]:gap-7">
-        <div className="frame flex flex-col gap-5">
+        <div className="frame flex flex-col gap-4">
           <label htmlFor="docs" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files) }}
             className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-inset px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
@@ -99,7 +99,7 @@ export function Documents() {
             <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
               {docs.data.map((d) => (
                 <Row key={d.id}>
-                  <Cell label="Name" className="min-w-24 font-medium break-words max-[640px]:col-span-2">{d.name}</Cell>
+                  <Cell label="Name" className="min-w-24 font-semibold break-words max-[640px]:col-span-2">{d.name}</Cell>
                   <Cell label="Type">{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
                   <Cell label="Size" className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
                   <Cell label="Added" className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
