@@ -56,6 +56,7 @@ Restore: stop the service, copy a stamp directory's contents over `/var/lib/reca
 ## Deploy key for CI
 
 CI deploys with its own SSH key, never your personal one. On your machine: `ssh-keygen -t ed25519 -N '' -C recapz-ci-deploy -f ~/recapz-ci-deploy` (this stays on your machine until it goes into a GitHub secret). Copy `scripts/deploy-release.sh`, `scripts/deploy-recv.sh`, `scripts/setup-deploy-user.sh` and `~/recapz-ci-deploy.pub` to the host and run `sudo ./setup-deploy-user.sh recapz-ci-deploy.pub`. That creates the `deploy` user whose key can run only `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin, checked, then installed by `deploy-release.sh`), `rollback` and `status`. No shell, no forwarding. A stolen key can still ship any binary, so keep it only in the GitHub `production` environment and replace it by re-running the script. Check it with `ssh -i ~/recapz-ci-deploy deploy@<host> status`.
+
 ## Deploy from CI
 
 `release-build` deploys through the `deploy` job after you approve it. It runs for a `v*` tag, or for a manual run on `main` with "deploy" ticked; never on a plain merge. The job sends the binary and its sha256 to the `deploy` user (see "Deploy key for CI"), then runs `scripts/smoke-deploy.sh` against the live URL and rolls back if it fails. `deploy-release.sh` also rolls back by itself if the service is not healthy. One-time setup (GitHub, repo **Settings → Environments**):
