@@ -466,8 +466,9 @@ mod browser_tests {
     #[tokio::test]
     async fn the_end_states_are_reported_as_what_they_are() {
         let _one_at_a_time = crate::test_support::exclusive().await;
-        let cases: [(&str, Duration, Result<Joined, DriverError>); 8] = [
+        let cases: [(&str, Duration, Result<Joined, DriverError>); 9] = [
             ("denied", Duration::from_secs(30), Ok(Joined::Denied)),
+            ("cannot_join", Duration::from_secs(30), Ok(Joined::Denied)),
             (
                 "lobby_stuck",
                 Duration::from_secs(2),
