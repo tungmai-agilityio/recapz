@@ -57,6 +57,16 @@ Restore: stop the service, copy a stamp directory's contents over `/var/lib/reca
 
 CI deploys with its own SSH key, never your personal one. On your machine: `ssh-keygen -t ed25519 -N '' -C recapz-ci-deploy -f ~/recapz-ci-deploy` (this stays on your machine until it goes into a GitHub secret). Copy `scripts/deploy-release.sh`, `scripts/deploy-recv.sh`, `scripts/setup-deploy-user.sh` and `~/recapz-ci-deploy.pub` to the host and run `sudo ./setup-deploy-user.sh recapz-ci-deploy.pub`. That creates the `deploy` user whose key can run only `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin, checked, then installed by `deploy-release.sh`), `rollback` and `status`. No shell, no forwarding. A stolen key can still ship any binary, so keep it only in the GitHub `production` environment and replace it by re-running the script. Check it with `ssh -i ~/recapz-ci-deploy deploy@<host> status`.
 
+## Deploy from CI
+
+`release-build` deploys through the `deploy` job after you approve it. It runs for a `v*` tag, or for a manual run on `main` with "deploy" ticked; never on a plain merge. The job sends the binary and its sha256 to the `deploy` user (see "Deploy key for CI"), then runs `scripts/smoke-deploy.sh` against the live URL and rolls back if it fails. `deploy-release.sh` also rolls back by itself if the service is not healthy. One-time setup (GitHub, repo **Settings → Environments**):
+
+1. **New environment**, name `production`. Tick **Required reviewers**, add yourself, **Save protection rules**. Under **Deployment branches and tags** choose **Selected branches and tags**, add the tag rule `v*` and the branch `main`.
+2. In that environment add the secret `DEPLOY_SSH_KEY`: the full contents of `~/recapz-ci-deploy` (`pbcopy < ~/recapz-ci-deploy`, paste in the box; never in chat or a file in the repo). Then delete the private key from your machine if you do not need it elsewhere.
+3. Add the environment variables `DEPLOY_HOST` (`159.223.198.251`), `DEPLOY_URL` (`https://recapz.tungmai.com`) and `DEPLOY_KNOWN_HOSTS`, the pinned host key. Get it from a machine you trust and compare the fingerprint with the one the host reports over your own login: `ssh-keyscan -t ed25519 159.223.198.251` on your machine; on the host `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`; `ssh-keygen -lf -` on the scanned line must print the same fingerprint. Paste the scanned line (`159.223.198.251 ssh-ed25519 AAAA...`) as the value.
+4. Before you approve, open the tagged commit and read what it changes, `.github/` and `scripts/` first: anyone who can push a `v*` tag can run a workflow from that commit, and your approval is the only check. Add a tag protection rule for `v*` (Settings → Rules → Rulesets) so only you can create them.
+5. Release: push a tag (`git tag v0.5.0 && git push origin v0.5.0`), open the run, **Review deployments**, tick `production`, **Approve and deploy**. A manual run needs **Run workflow** on `main` with "deploy" ticked.
+
 ## After a deploy
 
 `scripts/smoke-deploy.sh https://<domain>` checks health, the embedded web app, an asset's cache header, a client route, that the API refuses an unauthenticated call, and that http redirects to https. It needs only `curl`, no login and no provider calls. The Meet call check is separate: `scripts/smoke-join.sh`.
