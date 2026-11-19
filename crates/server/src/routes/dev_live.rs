@@ -3,6 +3,7 @@
 //! browser, audio or speech provider is involved; everything after the live transcript (the live
 //! view, Ask now, search, the language model) is the real code. Refused unless `dev_login` is on.
 use super::*;
+use crate::dev_call::{self, Stop as CallStop};
 use crate::live::{hub, Msg};
 use axum::extract::Query;
 use std::time::{Duration, Instant};
@@ -11,6 +12,10 @@ use std::time::{Duration, Instant};
 const MARKER: &str = "dev-simulator";
 const MAX_LINES: usize = 200;
 const MAX_LINE_CHARS: usize = 500;
+/// An uploaded recording to replay: at most this many bytes and this many minutes of audio.
+const MAX_AUDIO_BYTES: usize = 100 * 1024 * 1024;
+const MAX_AUDIO_MINUTES: usize = 30;
+pub const AUDIO_BODY_LIMIT: usize = MAX_AUDIO_BYTES + 64 * 1024;
 
 /// Played when the request brings no script; the topics match plain sample documents about rates and terms.
 const SAMPLE: [&str; 6] = [
@@ -123,12 +128,17 @@ pub async fn stop(
             ensure_member(c, &u)?;
             let owned: Option<String> = c
                 .query_row(
-                    "SELECT id FROM meetings WHERE id=?1 AND owner_id=?2 AND join_url=?3 AND status='recording'",
+                    "SELECT id FROM meetings WHERE id=?1 AND owner_id=?2 AND join_url=?3 AND status IN ('joining','recording')",
                     params![mid, u.id, MARKER],
                     |r| r.get(0),
                 )
                 .optional()?;
             let Some(mid) = owned else { return Ok(false) };
+            // A replayed recording ends itself the way a real call does, on its own thread.
+            let how = if q.optout { CallStop::OptOut } else { CallStop::End };
+            if dev_call::stop(&mid, how) {
+                return Ok(true);
+            }
             // The same order as a real call: the live transcript goes first, then the meeting.
             hub().clear(&mid);
             if q.optout {
@@ -153,4 +163,97 @@ pub async fn stop(
     } else {
         Err(ApiError::NotFound)
     }
+}
+
+/// Replays an uploaded recording as a fake call: `file` (any audio the upload screen accepts),
+/// optional `title` and `language` (`vi`, `en` or `multi`). The audio goes to the speech provider
+/// twice, as in a real call: streamed live, then in full after the call. Use only recordings the
+/// people in them agreed to.
+pub async fn start_audio(
+    State(app): State<App>,
+    jar: CookieJar,
+    mut mp: Multipart,
+) -> Res<(StatusCode, Json<Created>)> {
+    enabled(&app)?;
+    let u = app.current_user(&jar).await?;
+    let (mut file, mut title, mut language) = (None, None, None);
+    while let Some(f) = mp
+        .next_field()
+        .await
+        .map_err(|_| ApiError::BadRequest("bad multipart body or file over 100 MB"))?
+    {
+        match f.name() {
+            Some("file") => {
+                let name = f.file_name().unwrap_or("call.wav").to_owned();
+                let bytes = f
+                    .bytes()
+                    .await
+                    .map_err(|_| ApiError::BadRequest("bad multipart body or file over 100 MB"))?;
+                file = Some((name, bytes));
+            }
+            Some("title") => title = f.text().await.ok(),
+            Some("language") => language = f.text().await.ok(),
+            _ => {}
+        }
+    }
+    let (name, bytes) = file.ok_or(ApiError::BadRequest("missing file field"))?;
+    let language = meeting_language(language.as_deref())?;
+    if app.cfg.speech.api_key.trim().is_empty() {
+        return Err(ApiError::Unavailable(
+            "the simulated call needs RECAPZ_SPEECH_KEY",
+        ));
+    }
+    // The decoder picks the format from the extension, so keep a short, plain one.
+    let ext: String = name
+        .rsplit('.')
+        .next()
+        .filter(|e| (1..=5).contains(&e.len()) && e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or("wav")
+        .to_lowercase();
+    let tmp_dir = app.cfg.data_dir.join("notetaker-tmp");
+    let tmp = tmp_dir.join(format!("dev-{}.{ext}", db::new_id()));
+    let samples = tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&tmp_dir)?;
+        std::fs::write(&tmp, &bytes)?;
+        let decoded = recapz_speech::decode::decode_to_16k_mono(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+        decoded
+    })
+    .await?
+    .map_err(|_| ApiError::BadRequest("could not read that audio file"))?;
+    if samples.is_empty() || samples.len() > MAX_AUDIO_MINUTES * 60 * 16_000 {
+        return Err(ApiError::BadRequest(
+            "the audio must be 1 second to 30 minutes",
+        ));
+    }
+    let title = title
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| "Simulated recording".into());
+    let id = db::new_id();
+    let (mid, uid, tenant) = (id.clone(), u.id.clone(), u.tenant_id.clone());
+    app.tenant(tenant.clone(), move |c| {
+        ensure_member(c, &u)?;
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, join_url, status, owner_id, language, created_at)
+             VALUES (?1, ?2, 'meet', ?3, 'joining', ?4, ?5, ?6)",
+            params![mid, title, MARKER, uid, language, db::now_ms()],
+        )?;
+        Ok(())
+    })
+    .await?;
+    let live = crate::notetaker::Live {
+        base_url: app.cfg.speech.listen_url(),
+        api_key: app.cfg.speech.api_key.clone(),
+    };
+    let max_call_ms = i64::from(app.cfg.max_call_minutes.max(1)) * 60_000;
+    dev_call::spawn(
+        app.cfg.data_dir.clone(),
+        tenant,
+        id.clone(),
+        samples,
+        live,
+        max_call_ms,
+    )
+    .map_err(|e| ApiError::Internal(e.into()))?;
+    Ok((StatusCode::CREATED, Json(Created { id })))
 }

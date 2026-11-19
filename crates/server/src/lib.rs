@@ -1,6 +1,7 @@
 pub mod calendar_sync;
 pub mod cli;
 pub mod config;
+pub mod dev_call;
 pub mod embedder;
 pub mod google_calendar;
 pub mod live;
