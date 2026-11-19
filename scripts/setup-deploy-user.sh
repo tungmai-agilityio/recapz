@@ -17,7 +17,7 @@ printf 'restrict,command="sudo /usr/local/sbin/recapz-deploy-recv" %s\n' "$(cat 
 chown deploy:deploy /home/deploy/.ssh/authorized_keys; chmod 0600 /home/deploy/.ssh/authorized_keys
 
 tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
-printf 'Defaults:deploy env_keep += "SSH_ORIGINAL_COMMAND"\ndeploy ALL=(root) NOPASSWD: /usr/local/sbin/recapz-deploy-recv\n' >"$tmp"
+printf 'Defaults:deploy env_keep += "SSH_ORIGINAL_COMMAND"\ndeploy ALL=(root) NOPASSWD: /usr/local/sbin/recapz-deploy-recv ""\n' >"$tmp"
 visudo -cf "$tmp" >/dev/null
 install -m 0440 "$tmp" /etc/sudoers.d/recapz-deploy
 echo "deploy user ready. Check from your machine: ssh -i <private key> deploy@<host> status"
