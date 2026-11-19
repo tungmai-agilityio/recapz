@@ -72,10 +72,10 @@ Recapz cannot use it except by uploading a file afterwards, which loses the live
 
 | # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|
-| 1 | feat(server): drive a call from browser audio | server, notetaker | none | `crates/server/src/browser_call.rs`, `crates/server/src/lib.rs`, `crates/server/src/notetaker_loop.rs` | small | `cargo test -p recapz-server` (touches meeting access: full workspace) |
-| 2 | feat(server): accept browser recordings over a socket | server, auth | 1 | `crates/server/src/routes.rs`, `crates/server/src/routes/record.rs`, `crates/server/Cargo.toml`, `crates/server/tests/record.rs` | medium | `cargo test --workspace` (auth, meeting access) |
-| 3 | feat(web): capture tab and microphone audio | web | none | `web/src/capture/` | medium | `pnpm -C web test`, lint |
-| 4 | feat(web): record a meeting from this browser | web | 2, 3 | `web/src/pages/Meetings.tsx`, `web/src/pages/Record*.tsx`, `web/src/pages/Live.tsx`, `web/src/api.ts`, `docs/spec.md`, `docs/ui-parity.md` | medium | `pnpm -C web test`, lint, browser flow |
+| 1 (#291) | feat(server): drive a call from browser audio | server, notetaker | none | `crates/server/src/browser_call.rs`, `crates/server/src/lib.rs`, `crates/server/src/notetaker_loop.rs` | small | `cargo test -p recapz-server` (touches meeting access: full workspace) |
+| 2 (#293) | feat(server): accept browser recordings over a socket | server, auth | 1 | `crates/server/src/routes.rs`, `crates/server/src/routes/record.rs`, `crates/server/Cargo.toml`, `crates/server/tests/record.rs` | medium | `cargo test --workspace` (auth, meeting access) |
+| 3 (#292) | feat(web): capture tab and microphone audio | web | none | `web/src/capture/` | medium | `pnpm -C web test`, lint |
+| 4 (#294) | feat(web): record a meeting from this browser | web | 2, 3 | `web/src/pages/Meetings.tsx`, `web/src/pages/Record*.tsx`, `web/src/pages/Live.tsx`, `web/src/api.ts`, `docs/spec.md`, `docs/ui-parity.md` | medium | `pnpm -C web test`, lint, browser flow |
 
 1. `BrowserDriver`: admitted at once, posts no chat notice, takes frames and stop requests from a per-meeting
    registry; "stop" ends the call, "discard" acts as the opt-out; reconnecting swaps the frame sender; 60 s
