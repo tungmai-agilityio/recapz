@@ -23,8 +23,8 @@ pub struct MeetConfig {
     pub launch: Launch,
     /// The chat message that tells the call it is being recorded and how to opt out.
     pub notice: String,
-    /// When set, a failing page step saves a screenshot and the page's buttons here (a private
-    /// folder for this call), so a changed page can be diagnosed.
+    /// When set, a failing page step or a refused join saves a screenshot and the page's buttons
+    /// here (a private folder for this call), so a changed page or the refusal can be diagnosed.
     pub debug_dir: Option<std::path::PathBuf>,
 }
 
@@ -57,6 +57,14 @@ pub struct MeetDriver {
     pending: VecDeque<DriverEvent>,
 }
 
+/// Saves what the page shows into `dir` when one is set. A wedged browser must not delay the
+/// failure being reported.
+async fn save_page(meet: &MeetPage, dir: Option<&std::path::Path>) {
+    if let Some(dir) = dir {
+        let _ = tokio::time::timeout(Duration::from_secs(10), meet.snapshot(dir)).await;
+    }
+}
+
 fn unix_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -82,7 +90,11 @@ impl MeetDriver {
                 JoinStep::Waiting => self
                     .pending
                     .push_back(DriverEvent::Call(Event::Tick { at_ms })),
-                JoinStep::Denied => self.pending.push_back(DriverEvent::Call(Event::Denied)),
+                JoinStep::Denied => {
+                    // Meet says why on the page (a person declined, or the account may not join).
+                    save_page(&run.meet, self.cfg.debug_dir.as_deref()).await;
+                    self.pending.push_back(DriverEvent::Call(Event::Denied));
+                }
                 JoinStep::Admitted => {
                     // Everything in the log now is ours (the notice) or older: only later messages count.
                     let seen = run.meet.observe().await?.messages.len();
@@ -207,13 +219,8 @@ impl CallDriver for MeetDriver {
             }
             if run.last_poll.elapsed() >= POLL {
                 if let Err(e) = self.poll().await {
-                    if let (DriverError::UiChanged(_), Some(dir), Some(run)) =
-                        (&e, &self.cfg.debug_dir, &self.run)
-                    {
-                        // A wedged browser must not delay the failure being reported.
-                        let _ =
-                            tokio::time::timeout(Duration::from_secs(10), run.meet.snapshot(dir))
-                                .await;
+                    if let (DriverError::UiChanged(_), Some(run)) = (&e, &self.run) {
+                        save_page(&run.meet, self.cfg.debug_dir.as_deref()).await;
                     }
                     return Err(e);
                 }
@@ -462,6 +469,34 @@ mod browser_tests {
             .collect();
         assert_eq!(names, vec!["Enter"], "the buttons the page really has");
         assert!(page["text"].as_str().unwrap().contains("Enter"));
+        let png = std::fs::read(dump.join("page.png")).unwrap();
+        assert_eq!(&png[1..4], b"PNG", "a real screenshot");
+        d.leave().await;
+        let _ = std::fs::remove_dir_all(&dump);
+    }
+
+    #[tokio::test]
+    async fn a_refused_join_saves_what_the_page_said_when_asked_to() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((mut d, url, work)) = driver("cannot_join") else {
+            return;
+        };
+        let dump = work.with_extension("dump");
+        let _ = std::fs::remove_dir_all(&dump);
+        d.cfg.debug_dir = Some(dump.clone());
+        let (seen, err) = collect(&mut d, &url, |e| matches!(call(e), Some(Event::Denied))).await;
+        assert_eq!(err, None);
+        assert!(matches!(call(seen.last().unwrap()), Some(Event::Denied)));
+        let page: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dump.join("page.json")).unwrap())
+                .unwrap();
+        assert!(
+            page["text"]
+                .as_str()
+                .unwrap()
+                .contains("You can't join this video call"),
+            "{page}"
+        );
         let png = std::fs::read(dump.join("page.png")).unwrap();
         assert_eq!(&png[1..4], b"PNG", "a real screenshot");
         d.leave().await;
