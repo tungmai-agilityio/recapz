@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { PageHead } from '../ui/PageHead'
 import { Switch } from '../ui/Switch'
 import { Cell, Row, Table } from '../ui/Table'
+import { useSpeechProvider } from '../speech'
 
 /** What the server accepts (crates/core document.rs): Markdown and TXT, 20 MB each. */
 const EXTENSIONS = ['md', 'markdown', 'txt']
@@ -24,6 +25,7 @@ const label = { indexing: 'Indexing', indexed: 'Indexed', 'no text found': 'No t
 
 export function Documents() {
   const qc = useQueryClient()
+  const provider = useSpeechProvider()
   const [over, setOver] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const [del, setDel] = useState<Doc | null>(null)
@@ -87,7 +89,7 @@ export function Documents() {
         <aside className="frame flex flex-col gap-3 text-sm text-ink-2">
           <b className="text-ink">May be sent to the language model</b>
           <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
-          <p>On: the passages that match a question you ask can be sent to the language model provider to write the answer. Audio never leaves the server.</p>
+          <p>On: the passages that match a question you ask can be sent to the language model provider to write the answer. Audio goes only to {provider}, never to the language model.</p>
         </aside>
       </div>
       {del && (
