@@ -5,11 +5,12 @@ import { getMe, getMeetings, logout, Unauthorized } from './api'
 import { ThemeSwitch } from './ThemeSwitch'
 import { Badge } from './ui/Badge'
 import { Face } from './ui/Face'
+import { Icon, type IconName } from './ui/Icon'
 import { Menu, MenuItem } from './ui/Menu'
 
-const groups: { label: string; items: { to: string; label: string; end?: boolean }[] }[] = [
-  { label: 'Work', items: [{ to: '/', label: 'Meetings', end: true }, { to: '/upload', label: 'Upload' }, { to: '/ask', label: 'Ask' }, { to: '/documents', label: 'My documents' }] },
-  { label: 'Workspace', items: [{ to: '/recording', label: 'Recording & privacy' }] },
+const groups: { label: string; items: { to: string; label: string; icon: IconName; end?: boolean }[] }[] = [
+  { label: 'Work', items: [{ to: '/', label: 'Meetings', icon: 'meetings', end: true }, { to: '/upload', label: 'Upload', icon: 'upload' }, { to: '/ask', label: 'Ask', icon: 'ask' }, { to: '/documents', label: 'My documents', icon: 'documents' }] },
+  { label: 'Workspace', items: [{ to: '/recording', label: 'Recording & privacy', icon: 'recording' }] },
 ]
 
 function crumb(path: string) {
@@ -66,13 +67,13 @@ export function Shell({ children }: { children: ReactNode }) {
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
-        {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting' }))] as typeof g.items : g.items })).map((g) => (
-          <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
+        {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting', icon: 'live' as const }))] as typeof g.items : g.items })).map((g) => (
+          <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row max-[900px]:flex-wrap">
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.end}
-                className={({ isActive }) => `relative flex items-center rounded-md px-2.5 py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
-                {i.label}<span aria-hidden title="In v1" data-testid="v1-dot" className="ml-auto inline-block h-1.5 w-1.5 rounded-full bg-current opacity-60 max-[900px]:hidden" />
+                className={({ isActive }) => `relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
+                <Icon name={i.icon} />{i.label}<span aria-hidden title="In v1" data-testid="v1-dot" className="ml-auto inline-block h-1.5 w-1.5 rounded-full bg-current opacity-60 max-[900px]:hidden" />
               </NavLink>
             ))}
           </div>

@@ -137,10 +137,11 @@ non-owners once the list returns the owner.
       (documents have none). The answer arrives in one piece, not token by token. The page has not been run in a
       browser against a real call.
 
-## S9 My documents (page built from the spec, not checked against the prototype: it is not in the repo)
-- [ ] Drop zone: Markdown and TXT, up to 20 MB each, done. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there
-- [ ] Table: name, type, status (Indexed, Indexing, No text found) and the `role=switch` "May be sent to the language model" (off by default, replaced by "n/a" when no text) and Delete with a confirm dialog are done. Size and added date are shown (from `size_bytes` and `created_at` on `GET /api/documents`). Delete uses the shared modal confirm, not an inline one. Checked by eye in a browser on 2026-11-19 at a 693 px window (Daylight light), where the table scrolls sideways and Delete sits behind the scroll; at about 980 px, before the layout change, names wrapped a letter at a time, which is fixed (the aside now drops below the table under 1100 px). No prototype side-by-side, and the wide layout and 390 px were not re-checked
-- [ ] Aside: what the switch means when off and on is done. The storage meter (used of 500 MB, from `GET /api/documents/usage`) is shown above the explainer; checked by eye at 693 px, no prototype side-by-side. The explainer names the speech provider (#263)
+## S9 My documents (checked against the prototype My documents screen, version 8, 2026-11-19)
+- [ ] Drop zone: Markdown and TXT, up to 20 MB each, done, with the 22 px upload icon above the title like the Upload screen. PDF is not accepted: the server only stores Markdown and TXT (`crates/server/src/routes/documents.rs`), so a PDF row waits for PDF support there
+- [ ] Table: name, type, size, added, status (Indexed, Indexing, No text found), the `role=switch` "May be sent to the language model" (off by default, "n/a" when no text) and Delete are done. Delete opens the shared modal confirm; the prototype confirms inline in the row (deliberate difference). Checked in a browser at 1280 px (Daylight and Ink, light and dark): the table now fits its card, so Delete is in view with no sideways scroll. At 390 px (same four skins) each row is a two-column card with labelled values (Status, switch and Delete in view, page width 390 px), instead of the prototype's sideways-scrolling table; this is a deliberate difference. Screenshots in the PR
+- [ ] Aside: storage meter (used of 500 MB) above the explainer with the prototype's spacing; the bar has a minimum width so a few KB still shows. The explainer names the speech provider (#263)
+- [ ] Rail: icon beside every item (Meetings, Upload, Ask, My documents, Live meeting, Recording & privacy), also in the mobile row; groups Work and Workspace. The prototype's Insights group is not shown: none of its screens exist in the app. Breadcrumb "Work / My documents" matches
 
 ## S7 Members (blocked: members API)
 - [ ] Invite form (email, role) with validation errors, disabled for non-admins

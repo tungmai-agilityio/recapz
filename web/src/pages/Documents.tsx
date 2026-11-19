@@ -4,6 +4,7 @@ import { deleteDocument, getDocuments, getDocumentUsage, setDocumentLlmOk, uploa
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Icon } from '../ui/Icon'
 import { PageHead } from '../ui/PageHead'
 import { Switch } from '../ui/Switch'
 import { Cell, Row, Table } from '../ui/Table'
@@ -36,11 +37,11 @@ const label = { indexing: 'Indexing', indexed: 'Indexed', 'no text found': 'No t
 function Meter({ used, cap }: { used: number; cap: number }) {
   const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0
   return (
-    <div className="flex flex-col gap-1.5 border-b border-hair pb-3">
+    <div className="flex flex-col gap-1.5 border-b border-hair pb-4">
       <b className="text-ink">Storage</b>
       <div role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={used} aria-valuetext={`${bytesLabel(used)} of ${bytesLabel(cap)} used`}
         className="h-1.5 overflow-hidden rounded-full bg-hair-2">
-        <div className="h-full rounded-full bg-ink-2" style={{ width: `${pct.toFixed(1)}%` }} />
+        <div className="h-full min-w-1 rounded-full bg-ink-2" style={{ width: `${pct.toFixed(1)}%` }} />
       </div>
       <span className="text-xs text-mute">{bytesLabel(used)} of {bytesLabel(cap)} used</span>
     </div>
@@ -81,10 +82,11 @@ export function Documents() {
     <section className="flex flex-col gap-7">
       <PageHead title="My documents" lede="Notes you add here can be searched together with your meetings in Ask. Stored on your server." />
       <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[1100px]:grid-cols-1 max-[1100px]:gap-7">
-        <div className="frame flex flex-col gap-5">
+        <div className="frame flex flex-col gap-4">
           <label htmlFor="docs" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files) }}
             className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-inset px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
+            <Icon name="upload" size={22} />
             <b>{add.isPending ? 'Uploading…' : 'Drop files or choose some'}</b>
             <span className="text-[.82rem] text-mute">MD · TXT · up to 20 MB each</span>
             <input id="docs" type="file" multiple className="max-w-full text-[.8rem]" accept={EXTENSIONS.map((e) => `.${e}`).join(',')}
@@ -97,24 +99,24 @@ export function Documents() {
             <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
               {docs.data.map((d) => (
                 <Row key={d.id}>
-                  <Cell className="min-w-40 font-medium break-words">{d.name}</Cell>
-                  <Cell>{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
-                  <Cell className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
-                  <Cell className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
-                  <Cell><Badge tone={tone[d.status]}>{label[d.status]}</Badge></Cell>
-                  <Cell>
+                  <Cell label="Name" className="min-w-24 font-semibold break-words max-[640px]:col-span-2">{d.name}</Cell>
+                  <Cell label="Type">{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
+                  <Cell label="Size" className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
+                  <Cell label="Added" className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
+                  <Cell label="Status"><Badge tone={tone[d.status]}>{label[d.status]}</Badge></Cell>
+                  <Cell label="Send to language model">
                     {d.status === 'no text found'
                       ? <span className="text-mute">n/a</span>
                       : <Switch label={`May be sent to the language model: ${d.name}`} checked={d.llm_ok} onChange={(on) => toggle.mutate({ id: d.id, on })} />}
                   </Cell>
-                  <Cell><Button variant="danger" onClick={() => { remove.reset(); setDel(d) }}>Delete</Button></Cell>
+                  <Cell className="max-[640px]:col-span-2"><Button variant="danger" onClick={() => { remove.reset(); setDel(d) }}>Delete</Button></Cell>
                 </Row>
               ))}
             </Table>
           )}
           {toggle.isError && <p role="alert" className="text-sm text-bad">Could not change that setting.</p>}
         </div>
-        <aside className="frame flex flex-col gap-3 text-sm text-ink-2">
+        <aside className="frame flex flex-col gap-4 text-sm text-ink-2">
           {usage.data && <Meter used={usage.data.used_bytes} cap={usage.data.cap_bytes} />}
           <b className="text-ink">May be sent to the language model</b>
           <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
