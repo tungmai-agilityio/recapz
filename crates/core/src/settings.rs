@@ -50,6 +50,62 @@ pub fn set_join_rule(c: &Connection, rule: &str) -> Result<()> {
     Ok(())
 }
 
+const NOTETAKER_NAME: &str = "notetaker_name";
+const JOIN_MESSAGE: &str = "join_message";
+pub const DEFAULT_NOTETAKER_NAME: &str = "Recapz notetaker";
+/// Same text the notetaker posts today; the words "opt out" must stay, members are told to type them.
+pub const DEFAULT_JOIN_MESSAGE: &str =
+    "Recapz notetaker is recording this call and transcribing it live; \
+the audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording.";
+
+fn text(c: &Connection, key: &str, default: &str) -> Result<String> {
+    let v: Option<String> = c
+        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    Ok(v.unwrap_or_else(|| default.to_owned()))
+}
+
+pub fn notetaker_name(c: &Connection) -> Result<String> {
+    text(c, NOTETAKER_NAME, DEFAULT_NOTETAKER_NAME)
+}
+
+pub fn join_message(c: &Connection) -> Result<String> {
+    text(c, JOIN_MESSAGE, DEFAULT_JOIN_MESSAGE)
+}
+
+/// Checks all three values, then saves them together. The outer error is storage, the inner one is
+/// the message for a bad value; nothing is saved when a value is bad.
+pub fn set_join_settings(
+    c: &Connection,
+    rule: &str,
+    name: &str,
+    message: &str,
+) -> Result<std::result::Result<(), &'static str>> {
+    if !["manual", "auto"].contains(&rule) {
+        return Ok(Err("join rule must be manual or auto"));
+    }
+    if !(1..=60).contains(&name.chars().count()) {
+        return Ok(Err("notetaker name must be 1 to 60 characters"));
+    }
+    if message.chars().count() > 500 {
+        return Ok(Err("join message must be at most 500 characters"));
+    }
+    if !message.to_lowercase().contains("opt out") {
+        return Ok(Err("join message must contain the words \"opt out\""));
+    }
+    set_join_rule(c, rule)?;
+    for (k, v) in [(NOTETAKER_NAME, name), (JOIN_MESSAGE, message)] {
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![k, v],
+        )?;
+    }
+    Ok(Ok(()))
+}
+
 const AUDIO_RETENTION_DAYS: &str = "audio_retention_days";
 pub const DEFAULT_AUDIO_RETENTION_DAYS: u32 = 90;
 
@@ -113,6 +169,25 @@ mod tests {
             (JoinRule::Auto.as_str(), JoinRule::Manual.as_str()),
             ("auto", "manual")
         );
+    }
+
+    #[test]
+    fn join_text_defaults_round_trips_and_a_bad_value_saves_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        assert_eq!(notetaker_name(&c).unwrap(), "Recapz notetaker");
+        assert_eq!(join_message(&c).unwrap(), DEFAULT_JOIN_MESSAGE);
+        assert_eq!(
+            set_join_settings(&c, "auto", "Bot", "Say opt out to leave").unwrap(),
+            Ok(())
+        );
+        assert_eq!(notetaker_name(&c).unwrap(), "Bot");
+        assert_eq!(join_message(&c).unwrap(), "Say opt out to leave");
+        assert_eq!(join_rule(&c).unwrap(), JoinRule::Auto);
+        let bad = set_join_settings(&c, "manual", "Bot2", "no way out").unwrap();
+        assert_eq!(bad, Err("join message must contain the words \"opt out\""));
+        assert_eq!(notetaker_name(&c).unwrap(), "Bot");
+        assert_eq!(join_rule(&c).unwrap(), JoinRule::Auto);
     }
 
     #[test]

@@ -93,6 +93,7 @@ pub fn router_with_llm(
             "/api/calendar",
             get(connect::status).delete(connect::disconnect),
         )
+        .route("/api/settings", get(get_settings).put(put_settings))
         .route(
             "/api/settings/audio-retention",
             get(get_audio_retention).put(put_audio_retention),
@@ -516,6 +517,53 @@ async fn put_audio_retention(
     })
     .await??;
     Ok(Json(AudioRetention { days: body.days }))
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct JoinSettings {
+    join_rule: String,
+    notetaker_name: String,
+    join_message: String,
+}
+
+async fn get_settings(State(app): State<App>, jar: CookieJar) -> Res<Json<JoinSettings>> {
+    let u = app.current_user(&jar).await?;
+    let out = app
+        .tenant(u.tenant_id.clone(), |c| {
+            use recapz_core::settings as s;
+            Ok(JoinSettings {
+                join_rule: s::join_rule(c)?.as_str().to_owned(),
+                notetaker_name: s::notetaker_name(c)?,
+                join_message: s::join_message(c)?,
+            })
+        })
+        .await?;
+    Ok(Json(out))
+}
+
+/// Admin only. Replaces all three values; a bad one changes nothing.
+async fn put_settings(
+    State(app): State<App>,
+    jar: CookieJar,
+    Json(b): Json<JoinSettings>,
+) -> Res<Json<JoinSettings>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can change settings"));
+    }
+    let (rule, name, msg) = (
+        b.join_rule.clone(),
+        b.notetaker_name.clone(),
+        b.join_message.clone(),
+    );
+    app.tenant(u.tenant_id.clone(), move |c| {
+        Ok(
+            recapz_core::settings::set_join_settings(c, &rule, &name, &msg)
+                .map(|r| r.map_err(ApiError::BadRequest)),
+        )
+    })
+    .await???;
+    Ok(Json(b))
 }
 
 #[derive(Serialize)]
