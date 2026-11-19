@@ -133,3 +133,23 @@ test('with two calls recording the rail lists each by title', async () => {
   expect([a.getAttribute('href'), b.getAttribute('href')]).toEqual(['/meetings/m1/live', '/meetings/m2/live'])
   expect(within(screen.getByRole('navigation', { name: 'Screens' })).queryByRole('link', { name: /Done/ })).toBeNull()
 })
+
+test('shows platform, join time and a timer that stops when the call ends', async () => {
+  const start = 1_700_000_000_000
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], now: start + 5000 })
+  try {
+    meeting.started_at = start
+    const { send, close } = mount()
+    const bar = await screen.findByLabelText('Elapsed')
+    expect(bar.textContent).toBe('0:05')
+    expect(screen.getByText('meet')).toBeTruthy()
+    expect(screen.getByText(/Joined/).textContent).toContain(new Date(start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    await act(async () => { vi.setSystemTime(start + 65000); vi.advanceTimersByTime(1000) })
+    expect(screen.getByLabelText('Elapsed').textContent).toBe('1:06')
+    await send('end', {})
+    await close()
+    expect(await screen.findByText('Call ended')).toBeTruthy()
+    await act(async () => { vi.setSystemTime(start + 600000); vi.advanceTimersByTime(5000) })
+    expect(screen.getByLabelText('Elapsed').textContent).toBe('1:06')
+  } finally { meeting.started_at = 1; vi.useRealTimers() }
+})
