@@ -30,6 +30,8 @@ const prejoin = () => {
 const joined = () => {
   if (s === 'vanishes') { app.innerHTML = '<p>Loading</p>'; return; }
   if (s === 'denied') { app.innerHTML = '<p>Someone in the call denied your request to join</p>'; return; }
+  // What Meet shows when the signed-in account may not join this meeting (seen live, 2026-11-19).
+  if (s === 'cannot_join') { app.innerHTML = '<h1>You can\'t join this video call</h1><button>Return to home screen</button>'; return; }
   if (s === 'lobby_stuck') { app.innerHTML = '<p>Asking to be let in…</p>'; return; }
   if (s === 'lobby_admit') { app.innerHTML = '<p>Asking to be let in…</p>'; setTimeout(incall, 1200); return; }
   // The live English lobby words (also with the leave and chat buttons showing).
