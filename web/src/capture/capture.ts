@@ -51,15 +51,23 @@ export async function startCapture(mode: CaptureMode, socketUrl: string): Promis
 
 async function wire(mode: CaptureMode, socketUrl: string, mic: MediaStream, tab: MediaStream | undefined, release: () => void) {
   const ctx = new AudioContext()
-  await ctx.audioWorklet.addModule(workletUrl)
-  const node = new AudioWorkletNode(ctx, 'recapz-pcm', {
-    numberOfInputs: 2,
-    numberOfOutputs: 0,
-    channelCount: 1,
-    channelCountMode: 'explicit',
-  })
-  ctx.createMediaStreamSource(mic).connect(node, 0, 0)
-  if (tab) ctx.createMediaStreamSource(new MediaStream(tab.getAudioTracks())).connect(node, 0, 1)
+  let node: AudioWorkletNode
+  try {
+    await ctx.audioWorklet.addModule(workletUrl)
+    node = new AudioWorkletNode(ctx, 'recapz-pcm', {
+      numberOfInputs: 2,
+      numberOfOutputs: 0,
+      channelCount: 1,
+      channelCountMode: 'explicit',
+    })
+    ctx.createMediaStreamSource(mic).connect(node, 0, 0)
+    if (tab) ctx.createMediaStreamSource(new MediaStream(tab.getAudioTracks())).connect(node, 0, 1)
+    // Created after awaited prompts, so it may start suspended.
+    await ctx.resume()
+  } catch (e) {
+    void ctx.close()
+    throw e
+  }
 
   const capture: Capture = {
     mode,

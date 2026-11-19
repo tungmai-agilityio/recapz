@@ -41,16 +41,19 @@ let sockets: { url: string; sent: unknown[]; readyState: number; onopen?: () => 
 let ctxClosed: boolean
 let display: ReturnType<typeof vi.fn>
 let user: ReturnType<typeof vi.fn>
+let addModule: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   links = []
   sockets = []
   ctxClosed = false
+  addModule = vi.fn(async () => {})
   vi.stubGlobal('MediaStream', FakeStream)
   vi.stubGlobal(
     'AudioContext',
     class {
-      audioWorklet = { addModule: async () => {} }
+      audioWorklet = { addModule: addModule }
+      async resume() {}
       createMediaStreamSource(from: FakeStream) {
         return { connect: (_n: unknown, _o: number, input: number) => links.push({ from, input }) }
       }
@@ -169,4 +172,14 @@ test('discard sends discard', async () => {
   const c = await startCapture('room', 'ws://x/rec')
   c.discard()
   expect(sockets[0].sent).toEqual(['discard'])
+})
+
+test('a failed audio setup closes the context and releases the microphone', async () => {
+  const mic = new FakeStream([new FakeTrack('audio')])
+  user.mockResolvedValue(mic)
+  addModule.mockRejectedValue(new Error('no worklet'))
+  await expect(startCapture('room', 'ws://x/rec')).rejects.toThrow('no worklet')
+  expect(ctxClosed).toBe(true)
+  expect(mic.tracks[0].stopped).toBe(true)
+  expect(sockets).toHaveLength(0)
 })
