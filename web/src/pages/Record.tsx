@@ -42,8 +42,9 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   const supported = canRecordTab()
   const notice = `This meeting is recorded with Recapz. The audio is sent to ${provider} to be transcribed.`
 
+  // While starting, closing would leave start() running on an unmounted dialog.
   const close = useRef(onClose)
-  useEffect(() => { close.current = onClose })
+  useEffect(() => { close.current = busy ? () => {} : onClose })
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     document.addEventListener('keydown', esc)
@@ -107,7 +108,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
           </>
         )}
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
           {supported && (
             <Button variant="primary" type="submit" disabled={!told || !title.trim() || busy}>{busy ? 'Starting…' : 'Start recording'}</Button>
           )}
