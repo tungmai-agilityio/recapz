@@ -102,3 +102,10 @@ test('the meter is refreshed after a delete', async () => {
   fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
   await waitFor(() => expect(calls.filter((c) => c === 'GET /api/documents/usage').length).toBe(2))
 })
+
+test('each cell carries its column label so narrow screens can stack the row', async () => {
+  run(rows)
+  const table = await screen.findByRole('table', { name: 'Documents' })
+  const cells = [...within(table).getAllByRole('row')[1].querySelectorAll('td')]
+  expect(cells.map((c) => c.dataset.label)).toEqual(['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', undefined])
+})
