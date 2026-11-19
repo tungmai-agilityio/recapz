@@ -175,3 +175,68 @@ test('members see the retention as text and no select', async () => {
   expect(screen.queryByLabelText('Delete audio after')).toBeNull()
   expect(screen.queryByRole('combobox')).toBeNull()
 })
+
+const joined = { join_rule: 'manual', notetaker_name: 'Recapz notetaker', join_message: 'Hi from {name}. Type opt out to leave. Audio goes to {provider}.' }
+
+function joinSettings(role: string, get: () => Response, put?: Response) {
+  const calls: { m: string; u: string; body?: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    calls.push({ m: init?.method ?? 'GET', u, body: init?.body as string | undefined })
+    if (u === '/api/settings') return init?.method === 'PUT' ? (put ?? new Response('{}')) : get()
+    return new Response(JSON.stringify(
+      u === '/api/me' ? { email: 'a@b.c', name: null, role, speech_provider: 'Deepgram' }
+        : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
+          : { connected: false, needs_reconnect: false },
+    ))
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  return calls
+}
+const ok = () => new Response(JSON.stringify(joined))
+
+test('admin edits the join settings: PUT carries all three, the preview follows, a toast says saved', async () => {
+  const sent = { ...joined, join_rule: 'auto', notetaker_name: 'Scribe' }
+  const calls = joinSettings('admin', ok, new Response(JSON.stringify(sent)))
+  const name = await screen.findByLabelText('Notetaker name')
+  expect(screen.getByLabelText('Message preview').textContent).toBe('Hi from Recapz notetaker. Type opt out to leave. Audio goes to Deepgram.')
+  fireEvent.click(screen.getByLabelText(/Automatic/))
+  fireEvent.change(name, { target: { value: 'Scribe' } })
+  expect(screen.getByLabelText('Message preview').textContent).toMatch(/^Hi from Scribe\./)
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(calls.filter((c) => c.m === 'PUT').map((c) => c.body)).toEqual([JSON.stringify(sent)]))
+  expect(await screen.findByText('Join settings saved')).toBeTruthy()
+})
+
+test('the preview adds the provider name and opt out wording when the message lacks them', async () => {
+  joinSettings('admin', () => new Response(JSON.stringify({ ...joined, join_message: 'Recording.' })))
+  await screen.findByLabelText('Join message')
+  expect(screen.getByLabelText('Message preview').textContent).toBe("Recording. Audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording.")
+})
+
+test('members see the join settings as text, with no inputs and no Save', async () => {
+  joinSettings('member', ok)
+  expect(await screen.findByText('Joining and the chat notice')).toBeTruthy()
+  expect(await screen.findByText('Manual: The notetaker joins only meetings a member switched on.')).toBeTruthy()
+  expect(screen.queryByLabelText('Notetaker name')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+})
+
+test('a refused save shows the server message next to the field', async () => {
+  joinSettings('admin', ok, new Response('notetaker name must be 1 to 60 characters', { status: 400 }))
+  fireEvent.change(await screen.findByLabelText('Notetaker name'), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  const msg = await screen.findByRole('alert')
+  expect(msg.textContent).toBe('notetaker name must be 1 to 60 characters')
+  expect(msg.previousElementSibling?.id).toBe('notetaker-name')
+})
+
+test('join settings show loading, then an error when they cannot load', async () => {
+  joinSettings('admin', () => new Response('x', { status: 500 }))
+  expect(screen.getByText('Loading join settings...')).toBeTruthy()
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not load the join settings.')
+  expect(screen.queryByLabelText('Notetaker name')).toBeNull()
+})
