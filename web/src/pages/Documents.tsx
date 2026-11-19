@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { deleteDocument, getDocuments, setDocumentLlmOk, uploadDocument, type Doc } from '../api'
+import { deleteDocument, getDocuments, getDocumentUsage, setDocumentLlmOk, uploadDocument, type Doc } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -20,8 +20,32 @@ function problem(f: File): string | null {
   return null
 }
 
+/** 1.5 MB, 320 KB, 12 B. */
+function bytesLabel(n: number) {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${Number((n / (1024 * 1024)).toFixed(1))} MB`
+}
+
+const addedOn = (ms: number) => new Date(ms).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+
 const tone = { indexing: 'signal', indexed: 'good', 'no text found': 'neutral' } as const
 const label = { indexing: 'Indexing', indexed: 'Indexed', 'no text found': 'No text found' } as const
+
+/** Storage used against the per-member cap. */
+function Meter({ used, cap }: { used: number; cap: number }) {
+  const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-hair pb-3">
+      <b className="text-ink">Storage</b>
+      <div role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={used}
+        className="h-1.5 overflow-hidden rounded-full bg-hair-2">
+        <div className="h-full rounded-full bg-signal" style={{ width: `${pct.toFixed(1)}%` }} />
+      </div>
+      <span className="text-xs text-mute">{bytesLabel(used)} of {bytesLabel(cap)} used</span>
+    </div>
+  )
+}
 
 export function Documents() {
   const qc = useQueryClient()
@@ -30,10 +54,12 @@ export function Documents() {
   const [errors, setErrors] = useState<string[]>([])
   const [del, setDel] = useState<Doc | null>(null)
   const docs = useQuery({
-    queryKey: ['documents'],
+    queryKey: ['documents', 'list'],
     queryFn: getDocuments,
     refetchInterval: (q) => (q.state.data?.some((d) => d.status === 'indexing') ? 2000 : false),
   })
+  const usage = useQuery({ queryKey: ['documents', 'usage'], queryFn: getDocumentUsage })
+  // Refreshes the list and the storage meter together (the usage key sits under the list's).
   const refresh = () => qc.invalidateQueries({ queryKey: ['documents'] })
   const add = useMutation({
     mutationFn: async (files: File[]) => {
@@ -54,7 +80,7 @@ export function Documents() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="My documents" lede="Notes you add here can be searched together with your meetings in Ask. Stored on your server." />
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[900px]:grid-cols-1 max-[900px]:gap-7">
+      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-9 max-[1100px]:grid-cols-1 max-[1100px]:gap-7">
         <div className="frame flex flex-col gap-5">
           <label htmlFor="docs" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files) }}
@@ -68,11 +94,13 @@ export function Documents() {
           {docs.isError && <p role="alert" className="text-sm text-bad">Could not load your documents.</p>}
           {docs.data?.length === 0 && <p className="text-sm text-mute">No documents yet.</p>}
           {!!docs.data?.length && (
-            <Table label="Documents" head={['Name', 'Type', 'Status', 'Send to language model', '']}>
+            <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
               {docs.data.map((d) => (
                 <Row key={d.id}>
-                  <Cell className="font-medium break-all">{d.name}</Cell>
+                  <Cell className="min-w-40 font-medium break-words">{d.name}</Cell>
                   <Cell>{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
+                  <Cell className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
+                  <Cell className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
                   <Cell><Badge tone={tone[d.status]}>{label[d.status]}</Badge></Cell>
                   <Cell>
                     {d.status === 'no text found'
@@ -87,6 +115,7 @@ export function Documents() {
           {toggle.isError && <p role="alert" className="text-sm text-bad">Could not change that setting.</p>}
         </div>
         <aside className="frame flex flex-col gap-3 text-sm text-ink-2">
+          {usage.data && <Meter used={usage.data.used_bytes} cap={usage.data.cap_bytes} />}
           <b className="text-ink">May be sent to the language model</b>
           <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
           <p>On: the passages that match a question you ask can be sent to the language model provider to write the answer. Audio goes only to {provider}, never to the language model.</p>
