@@ -28,6 +28,8 @@ Open http://localhost:5173. On the sign-in screen the dev server shows a "Dev lo
 
 ## Try it with a sample recording
 
+With `make local` running, `make sample` does all of this: it speaks the sample below, converts it and uploads it as you (`bootstrap_admin_email`). The manual steps:
+
 ```sh
 say -o sample.aiff "Hi Sam, we launch on March fourteenth. Sam owns the payment testing."
 ffmpeg -i sample.aiff -ar 16000 -ac 1 sample.wav
@@ -47,6 +49,8 @@ Then look at `GET /api/meetings`, `/api/meetings/{id}/transcript` and `/report`.
 
 With `dev_login = true` the server can play a fake call into the live view, so Ask now can be tried without joining a meeting. It uses no browser, audio or speech provider; the live view, search, your documents and the language model (`[llm]` in `config.toml`) are the real code. Upload a document first (My documents, toggle "May be sent to the language model" on) so Ask now has something to answer from.
 
+Short forms: `make live-sim` starts the built-in sample and prints the meeting id; `make live-stop ID=<meeting id>` ends it (`OPTOUT=1` deletes it). By hand:
+
 ```sh
 curl -s -c cj.txt -H 'content-type: application/json' -d '{"email":"you@example.com"}' localhost:8080/auth/dev-login
 CSRF=$(awk '$6=="recapz_csrf"{print $7}' cj.txt)
@@ -63,7 +67,7 @@ Add `"fail_after": 2` to the start body to see "Live transcript unavailable" aft
 
 ### Replay a recording through the real speech provider
 
-To test the live transcript with real speech (Vietnamese quality, latency), upload an audio file (up to 30 minutes, 100 MB) as a fake call. It needs `RECAPZ_SPEECH_KEY`. The audio is streamed in real time to Deepgram for the live view, then sent again in full for the stored transcript after the call ends, so both the streaming and the batch rate are billed. Use only a recording the people in it agreed to.
+To test the live transcript with real speech (Vietnamese quality, latency), upload an audio file (up to 30 minutes, 100 MB) as a fake call. It needs `RECAPZ_SPEECH_KEY`. The audio is streamed in real time to Deepgram for the live view, then sent again in full for the stored transcript after the call ends, so both the streaming and the batch rate are billed. Use only a recording the people in it agreed to. Short form: `make replay FILE=call.wav SPEECH_LANG=vi`.
 
 ```sh
 curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:5173" \
@@ -72,6 +76,8 @@ curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:5173" \
 ```
 
 ## Tests
+
+Before pushing, `make pr-check` checks the branch name, the commit subjects and the PR title (`TITLE=...`, default the last commit subject), then prints the size against the 800-line guide.
 
 ```sh
 cargo test --workspace   # Rust
