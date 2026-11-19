@@ -1,4 +1,4 @@
-.PHONY: dev local hooks test test-browser lint release
+.PHONY: dev local hooks notetaker-login notetaker-logout test test-browser lint release
 
 dev:
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -6,6 +6,10 @@ dev:
 local:
 	@test -f config.toml || { echo "copy config.example.toml to config.toml first (see docs/running-locally.md)"; exit 1; }
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
+
+# Sign the notetaker's Google account in (opens a browser window), or delete that sign-in.
+notetaker-login notetaker-logout:
+	cargo run -p recapz-server -- $@
 
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:
