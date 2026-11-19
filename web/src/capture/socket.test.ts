@@ -125,3 +125,44 @@ test('discard drops buffered frames and sends only discard', () => {
   expect(last().sent).toEqual(['discard'])
   expect(last().closed).toBe(true)
 })
+
+test('gives up once down for over 60 s, since the server has ended the call by then', () => {
+  const states: string[] = []
+  const s = new FrameSocket('ws://x/rec', (st) => states.push(st))
+  last().open()
+  last().drop()
+  s.send(frame(1))
+  let n = 1
+  const wait = (ms: number) => {
+    for (let t = 0; t < ms; t += 500) {
+      vi.advanceTimersByTime(500)
+      if (FakeSocket.all.length > n) {
+        n = FakeSocket.all.length
+        last().drop()
+      }
+    }
+  }
+  wait(59_000)
+  expect(s.state).toBe('reconnecting')
+  wait(11_000)
+  expect(s.state).toBe('closed')
+  expect(states[states.length - 1]).toBe('closed')
+  const tries = FakeSocket.all.length
+  vi.advanceTimersByTime(600_000)
+  expect(FakeSocket.all).toHaveLength(tries)
+})
+
+test('a stop that cannot be delivered gives up after the backoff steps', () => {
+  const s = new FrameSocket('ws://x/rec')
+  last().open()
+  last().drop()
+  s.stop()
+  for (let i = 0; i < 6; i++) {
+    vi.advanceTimersByTime(8000)
+    last().drop()
+  }
+  expect(s.state).toBe('closed')
+  expect(FakeSocket.all).toHaveLength(6)
+  vi.advanceTimersByTime(600_000)
+  expect(FakeSocket.all).toHaveLength(6)
+})
