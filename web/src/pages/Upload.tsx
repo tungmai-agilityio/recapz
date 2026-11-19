@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { getMeeting, uploadRecording, type MeetingLanguage } from '../api'
 import { Button } from '../ui/Button'
 import { Field, inputClass } from '../ui/Field'
+import { Icon } from '../ui/Icon'
 import { PageHead } from '../ui/PageHead'
 import { useSpeechProvider } from '../speech'
 
@@ -47,6 +48,7 @@ export function Upload() {
           <label htmlFor="file" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); setFile(e.dataTransfer.files[0] ?? null); send.reset() }}
             className={`flex cursor-pointer flex-col items-center gap-2 rounded-[10px] border-[1.5px] border-dashed bg-inset px-5 py-9 text-center hover:border-ink-2 ${over ? 'border-ink-2' : 'border-hair'}`}>
+            <Icon name="upload" size={22} />
             <b>{file ? file.name : 'Drop a file or choose one'}</b>
             <span className="text-[.82rem] text-mute">
               {EXTENSIONS.map((e) => e.toUpperCase()).join(' · ')} · up to 2 GB
