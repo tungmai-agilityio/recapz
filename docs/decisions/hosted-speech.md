@@ -1,6 +1,6 @@
 # Hosted speech and language providers
 
-Status: **decided (2026-11-18), not implemented.** Supersedes the earlier plan where local whisper was the default
+Status: **decided (2026-11-18), implemented (PRs 4 to 10 merged).** Real-key checks still to run are listed under "Not yet run". Supersedes the earlier plan where local whisper was the default
 and a hosted provider was an opt-in. Provider facts were read from provider docs on 2026-11-12; items marked
 *unverified* must be checked before a real meeting is sent.
 
@@ -54,14 +54,17 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 | 1 | `docs(spec): replace the audio rule with provider disclosure` | Merged with maintainer approval |
 | 2 | `docs(decisions): record the hosted provider decision` (this file) | Merged |
 | 3 | `docs(live-ask): use the streaming transcript` and `docs(deploy): size a CPU-only host` | Merged |
-| 4 | `feat(core): store speaker labels from segments` | Rows match segments; retried job does not duplicate; full workspace tests |
-| 5 | `feat(speech): add the Deepgram batch transcriber` | Mock-server tests for parsing, speaker mapping, retry on 429, no retry on 401, no key or text in errors |
-| 6 | `feat(server): add speech provider config and disclosure` | Missing key fails at start; `/api/me` reports the provider |
-| 7 | `feat(web): name the speech provider on upload and privacy` | jsdom test; matches the prototype per `docs/ui-parity.md` |
-| 8a | `feat(core): keep recordings in object storage` | Upload after transcript, ranged playback, hard delete of objects on delete, opt-out and purge; mock S3 tests; one new dependency with its reason |
-| 8 | `feat(core): record usage and enforce the monthly cap` | Usage rows per meeting; cap pauses new jobs; admin sees estimated cost |
-| 9 | `feat(speech): add the Deepgram streaming transcriber` | Mock WebSocket test; failure never stops recording (Live Ask ticket #191 uses it) |
-| 10 | `refactor(speech): remove whisper and CUDA` | Build, Makefile, config, `docs/running-locally.md` and README no longer mention it |
+| 4 | #227 `feat(core): store speaker labels from segments` | Rows match segments; retried job does not duplicate; full workspace tests |
+| 5 | #237 `feat(speech): add the Deepgram batch transcriber` | Mock-server tests for parsing, speaker mapping, retry on 429, no retry on 401, no key or text in errors |
+| 6 | #238 `feat(server): add speech provider config and disclosure` | Missing key fails at start; `/api/me` reports the provider |
+| 7 | #241 `feat(web): name the speech provider on upload and privacy` | jsdom test; matches the prototype per `docs/ui-parity.md` |
+| 8a | #243 `feat(core): keep recordings in object storage` | Upload after transcript, ranged playback, hard delete of objects on delete, opt-out and purge; mock S3 tests; one new dependency with its reason |
+| 8 | #248 `feat(core): record usage and enforce the monthly cap` | Usage rows per meeting; cap pauses new jobs; admin sees estimated cost |
+| 9 | #228 `feat(speech): add the Deepgram streaming client` | Mock WebSocket test; failure never stops recording (Live Ask ticket #191 uses it) |
+| 10 | #251 `refactor(speech): remove whisper and CUDA` | Build, Makefile, config, `docs/running-locally.md` and README no longer mention it |
+| follow-up | #250 `feat(core): choose a speech language per meeting` (issue #245) | Merged |
+| follow-up | #261 `fix(speech): build the Deepgram client off the async thread` | Merged |
+| follow-up | #268 `fix(server): install the TLS crypto provider at start` | Merged; live streaming works on main |
 | 11 | Manual check, no PR | A 2 hour file and a live call on a real key confirm limits, Vietnamese quality and the 6 s Live Ask bar |
 
 ## Open questions
@@ -73,7 +76,7 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 
 ## Real-key check (PR 11, maintainer-run)
 
-Nothing here has been run. Every provider test in the repo uses a mock server, so the points below are still unverified against Deepgram and the object store. Run them once with a real key, write the results under "Results" and tick the ticket (#226). Use only consented recordings; commit none.
+A first 4-sample run was done on 2026-11-19 (see Results). The rows under "Not yet run" are still unverified against Deepgram and the object store. Run them with a real key, write the results under "Results" and tick the ticket (#226). Use only consented recordings; commit none.
 
 Setup: `RECAPZ_SPEECH_KEY` (and the storage variables) in the environment, never in `config.toml`. Read the usage card on Recording & privacy before and after to compare the estimate with the provider's invoice.
 
@@ -91,4 +94,21 @@ Setup: `RECAPZ_SPEECH_KEY` (and the storage variables) in the environment, never
 
 ### Results
 
-(empty until the check is run)
+First run, 2026-11-19, on four samples: public read-aloud and meeting-corpus audio, **not** consented team recordings. Real key, batch pass.
+
+- Vietnamese word errors about 4.9 percent with language `vi`.
+- `multi` about 7.6 percent on the same Vietnamese file, so `vi` reads better for Vietnamese-only audio.
+- `multi` with `diarize_model=latest` was accepted (HTTP 200).
+- English file with 4 speakers: 3 labels returned.
+- Vietnamese file with 2 voices: 1 label returned.
+- Usage card showed 53,950 micro-USD for about 7 minutes of audio.
+
+### Not yet run
+
+- [ ] Live latency, 10 tries with the Live Ask button
+- [ ] 2 hour file
+- [ ] Object storage playback (seek) and delete
+- [ ] `mip_opt_out` seen in the provider dashboard
+- [ ] Cost against the invoice
+- [ ] 5 to 10 consented Vietnamese recordings
+- [ ] Mixed-language recordings (3 or more, `multi` against `vi`)
