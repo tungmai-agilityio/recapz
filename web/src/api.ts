@@ -110,6 +110,12 @@ export async function uploadRecording(file: File, title?: string, language: Meet
 
 export const uploadFile = (file: File) => uploadRecording(file)
 
+/** Starts a browser recording: the server creates the meeting already recording and waits for its socket. */
+export const startRecording = async (title: string, language: MeetingLanguage, mode: 'tab' | 'room'): Promise<{ id: string }> =>
+  (await check(await fetch('/api/recordings', {
+    method: 'POST', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ title, language, mode }),
+  }))).json()
+
 /** Local development only: the server accepts it when `dev_login = true`. */
 export async function devLogin(email: string) {
   await check(
