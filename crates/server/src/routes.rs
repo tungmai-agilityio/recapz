@@ -139,6 +139,7 @@ pub fn router_with_llm(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
         )
+        .fallback(crate::web::serve)
         .layer(axum::middleware::from_fn_with_state(
             app.clone(),
             csrf_guard,

@@ -11,6 +11,7 @@ pub mod report_model;
 pub mod routes;
 pub mod runner;
 pub mod storage;
+pub mod web;
 
 /// Select the TLS crypto provider once per process. The dependency tree enables both `ring` and
 /// `aws-lc-rs`, so rustls cannot choose and panics on the first secure connection (the speech
