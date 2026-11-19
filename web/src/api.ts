@@ -213,7 +213,12 @@ export const setAutoJoin = async (id: string, auto_join: boolean) => {
   }))
 }
 
-export interface Doc { id: string; name: string; llm_ok: boolean; status: 'indexing' | 'indexed' | 'no text found' }
+export interface Doc { id: string; name: string; llm_ok: boolean; status: 'indexing' | 'indexed' | 'no text found'; size_bytes: number; /** Upload time, ms since the epoch. */ created_at: number }
+
+/** What the member has stored against the per-member cap. */
+export interface DocumentUsage { used_bytes: number; cap_bytes: number }
+
+export const getDocumentUsage = async (): Promise<DocumentUsage> => (await check(await fetch('/api/documents/usage'))).json()
 
 export const getDocuments = async (): Promise<Doc[]> => (await check(await fetch('/api/documents'))).json()
 
