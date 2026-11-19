@@ -39,7 +39,7 @@ export function Ribbon({ segments, variant = 'list', ticks, now, total, onSeek, 
       {sorted.map((t, i) => (
         <span key={`${t.ms}-${t.title}`} title={t.title}
           style={{ left: pct(t.ms), maxWidth: `min(8rem, ${frac(sorted[i + 1]?.ms ?? total) - frac(t.ms)}%)` }}
-          className="pointer-events-none absolute top-0 hidden h-[50px] truncate whitespace-nowrap border-l border-hair pl-1 font-mono text-[0.64rem] text-mute sm:block">
+          className="pointer-events-none absolute top-0 hidden h-[50px] truncate whitespace-nowrap border-l border-hair pl-1 font-mono text-[0.64rem] text-mute @xl:block">
           {t.title}
         </span>
       ))}

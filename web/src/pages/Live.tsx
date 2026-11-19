@@ -151,7 +151,7 @@ function LiveView({ id }: { id: string }) {
       </section>
     )
   return (
-    <section className="grid items-start gap-5 min-[1000px]:grid-cols-[minmax(0,1fr)_340px]">
+    <section className="grid items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

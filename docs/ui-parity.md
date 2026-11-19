@@ -31,8 +31,14 @@ definition of done for every web PR.
       Ribbon (list, scrubber, live), Switch, Tabs, Choice group, Field, Table, Toast, Menu, PageHead
       Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.
 - [ ] Amber (`signal`) only on the playhead, recording state and focus ring
-- [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` that stack at 900 px, rail becomes a top strip
-      Rail, columns and the 900 px stacking were checked by eye on 2026-11-17; the 1120 px page maximum was not exercised (content is narrower than that at 1280 px), so the row stays open.
+- [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` (`ui/Columns`) that stack when the page area is
+      under 56rem, rail becomes a top strip under 900 px
+      Only the Shell (rail, top bar) reacts to the window. Everything inside `<main>` reacts to its container: `<main>`
+      is `@container`, and a column or card whose rows need to change shape is its own `@container`; use `@max-*:` and
+      `@*:` variants, never `sm:`/`md:`/`lg:` or `max-[Npx]:`. `src/layout.test.ts` fails on a window breakpoint outside
+      Shell. Check a screen at 1000 px as well as 1280 and 390: that is where the rail plus a side column leaves the
+      least room. Columns and stacking were checked at 920, 1000, 1280 and 390 px on 2026-11-19; the 1120 px page
+      maximum was not exercised, so the row stays open.
 - [x] Reduced motion honoured (recording dot, pipeline fill)
       Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet (#135).
 - [ ] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus

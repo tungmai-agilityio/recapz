@@ -52,7 +52,7 @@ export function Recording() {
         </p>
       )}
       <div className="mt-6 rounded-lg border border-hair bg-sheet">
-        <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+        <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Calendar</h2>
             <p className="mt-1 text-sm text-mute">Recapz reads your Google Calendar to find meetings with a video link. It never changes your calendar.</p>
@@ -83,14 +83,14 @@ export function Recording() {
         </div>
       </div>
       <div className="mt-4 rounded-lg border border-hair bg-sheet">
-        <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+        <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Where audio goes</h2>
             <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
           </div>
           <p className="text-sm">Audio is sent to <b>{provider}</b> for transcription, live during a call and again from the recorded file afterwards. Nothing else is sent to it.</p>
           {storage.where && (
-            <p className="text-sm md:col-start-2">
+            <p className="text-sm @2xl:col-start-2">
               Finished recordings are kept {storage.where === 'object_storage' ? 'in private object storage' : 'on this server\'s disk'}
               {storage.days === undefined ? '.' : storage.days === 0 ? ' and their audio is kept until someone deletes the meeting.' : <> and their audio is deleted after <b>{storage.days} days</b>.</>}
               {' '}Transcripts and reports stay.
@@ -100,7 +100,7 @@ export function Recording() {
       </div>
       {usage && (
         <div className="mt-4 rounded-lg border border-hair bg-sheet">
-          <div className="grid gap-x-8 gap-y-3 p-5 md:grid-cols-[minmax(0,264px)_1fr]">
+          <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
             <div>
               <h2 className="font-semibold">Usage this month</h2>
               <p className="mt-1 text-sm text-mute">Estimated from list prices, not an invoice. Only admins see this.</p>

@@ -33,12 +33,12 @@ export function NextUp() {
     body = (
       <ul>
         {today.slice(0, SHOWN).map((e) => (
-          <li key={e.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-t border-hair px-1.5 py-3 max-[900px]:grid-cols-[minmax(0,1fr)_auto]">
-            <span className="font-mono text-xs whitespace-nowrap text-mute max-[900px]:hidden">{at(e.starts_at)}</span>
+          <li key={e.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-t border-hair px-1.5 py-3 @max-3xs:grid-cols-[minmax(0,1fr)_auto]">
+            <span className="font-mono text-xs whitespace-nowrap text-mute @max-3xs:hidden">{at(e.starts_at)}</span>
             <div className="min-w-0">
               <p className="truncate font-semibold tracking-tight">{e.title}</p>
               <p className="flex flex-wrap gap-x-2.5 text-xs whitespace-nowrap text-mute">
-                <span className="font-mono min-[901px]:hidden">{at(e.starts_at)}</span>
+                <span className="font-mono @3xs:hidden">{at(e.starts_at)}</span>
                 <span>{e.platform ?? 'No platform'}</span>
                 {e.join_url?.startsWith('https://') && <a href={e.join_url} target="_blank" rel="noreferrer" className="text-primary">Open link</a>}
               </p>
@@ -61,7 +61,7 @@ export function NextUp() {
       </ul>
     )
   return (
-    <aside className="frame flex flex-col">
+    <aside className="frame @container flex flex-col">
       <div className="flex items-center justify-between pb-2">
         <h2 className="text-xs font-semibold tracking-[0.08em] text-mute uppercase">Next up today</h2>
         <Link to="/recording" className="text-xs font-medium text-primary">Join rules</Link>
