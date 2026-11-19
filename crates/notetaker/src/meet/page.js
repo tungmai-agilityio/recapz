@@ -19,7 +19,7 @@
     chatLog: { role: 'list', name: /^chat messages$/i },
     signIn: { role: 'link', name: /^sign in$/i },
     lobbyText: /asking to be let in|waiting for (the host|someone) to let you in|someone will let you in soon|please wait until a meeting host brings you into the call|đợi cho đến khi người tổ chức cuộc họp đưa bạn vào cuộc gọi/i,
-    deniedText: /denied your request|you can.?t join this call/i,
+    deniedText: /denied your request|you can.?t join this (video )?call/i,
     rejoin: { role: 'button', name: /^rejoin$/i },
     participantCount: /^(\d+) participants?$/i,
     speaking: /^(.+), speaking$/i,
