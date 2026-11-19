@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { disconnectCalendar, getCalendar, putAudioRetention } from '../api'
+import { disconnectCalendar, getCalendar, getJoinSettings, putAudioRetention, putJoinSettings, type JoinSettings } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -22,6 +22,74 @@ const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
   error: { tone: 'bad', text: 'Google Calendar could not be connected. Try again.' },
 }
 
+const rules = [
+  { id: 'manual', label: 'Manual', hint: 'The notetaker joins only meetings a member switched on.' },
+  { id: 'auto', label: 'Automatic', hint: 'New meetings with a video link start switched on. A member can still switch one off.' },
+] as const
+
+/** Mirrors the server's notice: the provider name and the "opt out" wording are added when missing. */
+function preview(message: string, name: string, provider: string) {
+  let n = message.replaceAll('{name}', name).replaceAll('{provider}', provider)
+  if (!n.includes(provider)) n += ` Audio is sent to ${provider}.`
+  if (!n.toLowerCase().includes('opt out')) n += " Type 'opt out' to make it leave and delete the recording."
+  return n
+}
+
+function JoinForm({ saved, admin, provider }: { saved: JoinSettings; admin: boolean; provider: string }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [v, setV] = useState(saved)
+  const save = useMutation({
+    mutationFn: putJoinSettings,
+    onSuccess: (s) => { toast('Join settings saved'); qc.setQueryData(['join-settings'], s) },
+  })
+  const err = save.isError ? save.error.message.replace(/^\d+ /, '') : ''
+  const field = (re: RegExp) => (re.test(err) ? err : '')
+  const known = /notetaker name|join message|join rule/
+  const set = (k: keyof JoinSettings) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value } as JoinSettings)
+  return (
+    <div className="mt-4 rounded-lg border border-hair bg-sheet">
+      <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+        <div>
+          <h2 className="font-semibold">Joining and the chat notice</h2>
+          <p className="mt-1 text-sm text-mute">When the notetaker joins, what it is called, and what it tells the call.</p>
+        </div>
+        {!admin ? (
+          <dl className="text-sm">
+            <dt className="font-medium">Join rule</dt><dd>{rules.find((r) => r.id === saved.join_rule)?.label}: {rules.find((r) => r.id === saved.join_rule)?.hint}</dd>
+            <dt className="mt-2 font-medium">Notetaker name</dt><dd>{saved.notetaker_name}</dd>
+            <dt className="mt-2 font-medium">Join message</dt><dd>{preview(saved.join_message, saved.notetaker_name, provider)}</dd>
+          </dl>
+        ) : (
+          <form className="text-sm" onSubmit={(e) => { e.preventDefault(); save.mutate(v) }}>
+            <fieldset>
+              <legend className="font-medium">Join rule</legend>
+              {rules.map((r) => (
+                <label key={r.id} className="mt-1 flex items-start gap-2">
+                  <input type="radio" name="join-rule" className="mt-1" checked={v.join_rule === r.id} onChange={() => setV({ ...v, join_rule: r.id })} />
+                  <span><b>{r.label}</b><span className="block text-mute">{r.hint}</span></span>
+                </label>
+              ))}
+              {field(/join rule/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
+            </fieldset>
+            <label htmlFor="notetaker-name" className="mt-4 block font-medium">Notetaker name</label>
+            <input id="notetaker-name" className={`${inputClass} mt-1`} value={v.notetaker_name} onChange={set('notetaker_name')} />
+            {field(/notetaker name/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
+            <label htmlFor="join-message" className="mt-4 block font-medium">Join message</label>
+            <textarea id="join-message" rows={3} className={`${inputClass} mt-1`} value={v.join_message} onChange={set('join_message')} />
+            <p className="mt-1 text-mute">{'{name}'} and {'{provider}'} are filled in. The provider name and the "opt out" wording are always kept.</p>
+            {field(/join message/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
+            <p className="mt-2 font-medium">Preview</p>
+            <p aria-label="Message preview" className="mt-1 rounded-md bg-hair-2 px-3 py-2">{preview(v.join_message, v.notetaker_name, provider)}</p>
+            {err && !known.test(err) && <p role="alert" className="mt-2 text-bad">{err}</p>}
+            <div className="mt-4"><Button type="submit" variant="primary" disabled={save.isPending}>Save</Button></div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function Recording() {
   const provider = useSpeechProvider()
   const storage = useRecordingStorage()
@@ -35,6 +103,7 @@ export function Recording() {
     mutationFn: putAudioRetention,
     onSuccess: () => { toast('Audio retention saved'); qc.invalidateQueries({ queryKey: ['audio-retention'] }) },
   })
+  const join = useQuery({ queryKey: ['join-settings'], queryFn: getJoinSettings })
   const [asking, setAsking] = useState(false)
   const off = useMutation({
     mutationFn: disconnectCalendar,
@@ -87,6 +156,9 @@ export function Recording() {
           </div>
         </div>
       </div>
+      {join.isError && <p role="alert" className="mt-4 text-sm text-bad">Could not load the join settings.</p>}
+      {join.isPending && <p className="mt-4 text-sm text-mute">Loading join settings...</p>}
+      {join.data?.join_rule && <JoinForm key={JSON.stringify(join.data)} saved={join.data} admin={storage.isAdmin} provider={provider} />}
       <div className="mt-4 rounded-lg border border-hair bg-sheet">
         <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
