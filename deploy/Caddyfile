@@ -1,7 +1,7 @@
 # Caddy terminates TLS (automatic Let's Encrypt) and proxies to the app on 127.0.0.1:8080.
-# Replace recapz.example.com with the real domain; its DNS A record must point at this host
+# The host is recapz.tungmai.com; its DNS A record must point at this host
 # before Caddy starts, or certificate issuance fails.
-recapz.example.com {
+recapz.tungmai.com {
 	encode zstd gzip
 	# recordings are streamed with range requests and uploads can be large: no buffering, long timeouts
 	reverse_proxy 127.0.0.1:8080 {
