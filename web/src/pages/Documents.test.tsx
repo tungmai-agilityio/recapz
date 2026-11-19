@@ -85,6 +85,8 @@ test('the storage meter shows the bytes used against the cap, and is absent when
   const meter = await screen.findByRole('meter', { name: 'Storage used' })
   expect(meter.getAttribute('aria-valuenow')).toBe(String(usage.used_bytes))
   expect(meter.getAttribute('aria-valuemax')).toBe(String(usage.cap_bytes))
+  expect(meter.getAttribute('aria-valuetext')).toBe('3.5 MB of 500 MB used')
+  expect((meter.firstElementChild as HTMLElement).className).not.toContain('signal') // amber is for recording state and focus
   expect((meter.firstElementChild as HTMLElement).style.width).toBe('0.7%')
   expect(screen.getByText('3.5 MB of 500 MB used')).toBeTruthy()
   cleanup()

@@ -38,9 +38,9 @@ function Meter({ used, cap }: { used: number; cap: number }) {
   return (
     <div className="flex flex-col gap-1.5 border-b border-hair pb-3">
       <b className="text-ink">Storage</b>
-      <div role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={used}
+      <div role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={used} aria-valuetext={`${bytesLabel(used)} of ${bytesLabel(cap)} used`}
         className="h-1.5 overflow-hidden rounded-full bg-hair-2">
-        <div className="h-full rounded-full bg-signal" style={{ width: `${pct.toFixed(1)}%` }} />
+        <div className="h-full rounded-full bg-ink-2" style={{ width: `${pct.toFixed(1)}%` }} />
       </div>
       <span className="text-xs text-mute">{bytesLabel(used)} of {bytesLabel(cap)} used</span>
     </div>
