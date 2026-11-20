@@ -53,19 +53,122 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
 
-## Deploy key for CI
-
-CI deploys with its own SSH key, never your personal one. On your machine: `ssh-keygen -t ed25519 -N '' -C recapz-ci-deploy -f ~/recapz-ci-deploy` (this stays on your machine until it goes into a GitHub secret). Copy `scripts/deploy-release.sh`, `scripts/deploy-recv.sh`, `scripts/setup-deploy-user.sh` and `~/recapz-ci-deploy.pub` to the host and run `sudo ./setup-deploy-user.sh recapz-ci-deploy.pub`. That creates the `deploy` user whose key can run only `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin, checked, then installed by `deploy-release.sh`), `rollback` and `status`. No shell, no forwarding. A stolen key can still ship any binary, so keep it only in the GitHub `production` environment and replace it by re-running the script. Check it with `ssh -i ~/recapz-ci-deploy deploy@<host> status`.
-
 ## Deploy from CI
 
-`release-build` deploys through the `deploy` job after you approve it. It runs for a `v*` tag, or for a manual run on `main` with "deploy" ticked; never on a plain merge. The job sends the binary and its sha256 to the `deploy` user (see "Deploy key for CI"), then runs `scripts/smoke-deploy.sh` against the live URL and rolls back if it fails. `deploy-release.sh` also rolls back by itself if the service is not healthy. One-time setup (GitHub, repo **Settings → Environments**):
+`release-build` builds the binary and then, after you approve, deploys it. The `deploy` job runs for a `v*` tag, or for a manual run on `main` with `deploy=true`; never on a plain merge. It sends the binary and its sha256 to a restricted `deploy` user on the host, runs `scripts/smoke-deploy.sh` against the live URL and rolls back if that fails (`deploy-release.sh` also rolls back by itself when the service does not become healthy). The CI key can only run `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin), `rollback` and `status`; no shell, no forwarding. It can still ship any binary, so keep it only in the GitHub `production` environment.
 
-1. **New environment**, name `production`. Tick **Required reviewers**, add yourself, **Save protection rules**. Under **Deployment branches and tags** choose **Selected branches and tags**, add the tag rule `v*` and the branch `main`.
-2. In that environment add the secret `DEPLOY_SSH_KEY`: the full contents of `~/recapz-ci-deploy` (`pbcopy < ~/recapz-ci-deploy`, paste in the box; never in chat or a file in the repo). Then delete the private key from your machine if you do not need it elsewhere.
-3. Add the environment variables `DEPLOY_HOST` (`159.223.198.251`), `DEPLOY_URL` (`https://recapz.tungmai.com`) and `DEPLOY_KNOWN_HOSTS`, the pinned host key. Get it from a machine you trust and compare the fingerprint with the one the host reports over your own login: `ssh-keyscan -t ed25519 159.223.198.251` on your machine; on the host `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`; `ssh-keygen -lf -` on the scanned line must print the same fingerprint. Paste the scanned line (`159.223.198.251 ssh-ed25519 AAAA...`) as the value.
-4. Before you approve, open the tagged commit and read what it changes, `.github/` and `scripts/` first: anyone who can push a `v*` tag can run a workflow from that commit, and your approval is the only check. Add a tag protection rule for `v*` (Settings → Rules → Rulesets) so only you can create them.
-5. Release: push a tag (`git tag v0.5.0 && git push origin v0.5.0`), open the run, **Review deployments**, tick `production`, **Approve and deploy**. A manual run needs **Run workflow** on `main` with "deploy" ticked.
+### 1. One-time host setup
+
+On your machine, in the repo root (`HOST` is the droplet; use your own `-i`/alias if you do not log in as root with this key):
+
+```bash
+HOST=159.223.198.251
+KEY=~/.ssh/recapz_do
+```
+
+Create the CI key (no passphrase, used only by GitHub):
+
+```bash
+ssh-keygen -t ed25519 -N '' -C recapz-ci-deploy -f ~/recapz-ci-deploy
+```
+
+Copy the scripts and the public key to the host:
+
+```bash
+scp -i $KEY scripts/deploy-release.sh scripts/deploy-recv.sh scripts/setup-deploy-user.sh ~/recapz-ci-deploy.pub root@$HOST:/root/
+```
+
+Install the `deploy` user (also installs both scripts under `/usr/local/sbin`, adds the `restrict` key and a sudoers entry for that one command; re-run it to replace the key):
+
+```bash
+ssh -i $KEY root@$HOST 'cd /root && ./setup-deploy-user.sh recapz-ci-deploy.pub'
+```
+
+Check it. This must print the release now in use, for example `/opt/recapz/releases/<name>/recapz`; any other command is refused:
+
+```bash
+ssh -i ~/recapz-ci-deploy deploy@$HOST status
+```
+
+### 2. One-time GitHub setup
+
+Needs the `gh` CLI logged in as an admin of the repo; run from the repo root. Everything here can also be done in the web UI (repo **Settings → Environments**).
+
+Create the `production` environment with you as required reviewer. Replace `<your-numeric-id>` with the output of `gh api user -q .id`, and limit deployments to `main` and `v*` tags:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api -X PUT repos/$REPO/environments/production --input - <<EOF
+{"reviewers":[{"type":"User","id":<your-numeric-id>}],
+ "deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+EOF
+gh api -X POST repos/$REPO/environments/production/deployment-branch-policies -f name=main -f type=branch
+gh api -X POST repos/$REPO/environments/production/deployment-branch-policies -f name='v*' -f type=tag
+```
+
+Store the private key as the environment secret (read from the file, never printed or pasted into chat):
+
+```bash
+gh secret set DEPLOY_SSH_KEY --env production < ~/recapz-ci-deploy
+```
+
+Set the host, the URL and the pinned host key. First compare the fingerprints: the first command (on your machine) and the second (on the host) must print the same one, then store the scanned line:
+
+```bash
+ssh-keyscan -t ed25519 $HOST 2>/dev/null | ssh-keygen -lf -
+ssh -i $KEY root@$HOST 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
+gh variable set DEPLOY_HOST --env production --body $HOST
+gh variable set DEPLOY_URL --env production --body https://recapz.tungmai.com
+gh variable set DEPLOY_KNOWN_HOSTS --env production --body "$(ssh-keyscan -t ed25519 $HOST 2>/dev/null)"
+```
+
+Check what is set (values of secrets are never shown):
+
+```bash
+gh secret list --env production
+gh variable list --env production
+```
+
+Optional: stop others from creating release tags. In the web UI: **Settings → Rules → Rulesets → New tag ruleset**, target pattern `v*`, restrict creations. Once the key is in GitHub you can delete it from your machine: `rm ~/recapz-ci-deploy`.
+
+### 3. Release
+
+Tag `main` and push the tag:
+
+```bash
+git switch main && git pull --ff-only
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Before approving, read what the tagged commit changes; anyone who can push a `v*` tag can run a workflow from that commit, and your approval is the only check. Look at `.github/` and `scripts/` first:
+
+```bash
+git diff --stat <previous-tag-or-live-release>..v0.1.0 -- .github scripts
+```
+
+Then find the run, wait for the build, and approve in the web UI (the run page → **Review deployments** → tick `production` → **Approve and deploy**):
+
+```bash
+gh run list --workflow release-build.yml --limit 3
+gh run watch <run-id>
+```
+
+A deploy without a tag (from `main`, still needs the same approval):
+
+```bash
+gh workflow run release-build.yml --ref main -f deploy=true
+```
+
+Check the result and, if needed, roll back by hand:
+
+```bash
+./scripts/smoke-deploy.sh https://recapz.tungmai.com
+ssh -i ~/recapz-ci-deploy deploy@$HOST status
+ssh -i ~/recapz-ci-deploy deploy@$HOST rollback
+```
+
+If the job fails: `DEPLOY_KEY is not set` (or another variable) means step 2 is incomplete; `Host key verification failed` means `DEPLOY_KNOWN_HOSTS` does not match the host; `Permission denied (publickey)` means the key in the secret is not the one installed in step 1; `refused: release ... is already live` means the tag name was already deployed, so use a new tag; `smoke test failed, rolling back` shows the failing check in the log and the previous release is back.
 
 ## After a deploy
 
