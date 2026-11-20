@@ -27,29 +27,45 @@ definition of done for every web PR.
   list and aside, the report summary column, sidebar and transcript, the Ask conversation and the Upload columns.
   Recording & privacy already had its own card. Per-section cards inside a column (as in the prototype `.sec`) are not
   split yet. No rows ticked.
-- [ ] Primitives in `web/src/ui/`: Button (default, primary, ghost, danger), Badge (good, signal, bad), Face, Faces,
+- [x] Primitives in `web/src/ui/`: Button (default, primary, ghost, danger), Badge (good, signal, bad), Face, Faces,
       Ribbon (list, scrubber, live), Switch, Tabs, Choice group, Field, Table, Toast, Menu, PageHead
-      Open: everything exists (Ribbon added in this branch) except Table; ribbon is not used by a page yet.
+      All thirteen exist (Table is used by Documents, Faces by Next up, Ribbon by the Report) and show on the
+      Meetings, Report, Upload and Documents screens checked by eye on 2026-11-20 (#332, #327, #328, #331);
+      `ui.test.tsx` and `display.test.tsx` cover them.
 - [ ] Amber (`signal`) only on the playhead, recording state and focus ring
-- [ ] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` (`ui/Columns`) that stack when the page area is
+      Checked in code and in a browser on 2026-11-20 (#332): the playhead, the Recording badge and the 2 px focus ring
+      are amber (`rgb(227, 154, 45)`). Not ticked: amber is also the stage badge for Uploaded, Joining, Labelling
+      speakers, Indexing, Transcribing and Writing report (`meeting-days.ts`, Documents), the wash behind the
+      current transcript line (Report) and the selected line in the live view, and the amber bar of the logo glyph in the rail.
+      The prototype uses an amber badge for "Transcribing" too, so the rule may need to say so.
+- [x] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` (`ui/Columns`) that stack when the page area is
       under 56rem, rail becomes a top strip under 900 px
       Only the Shell (rail, top bar) reacts to the window. Everything inside `<main>` reacts to its container: `<main>`
       is `@container`, and a column or card whose rows need to change shape is its own `@container`; use `@max-*:` and
       `@*:` variants, never `sm:`/`md:`/`lg:` or `max-[Npx]:`. `src/layout.test.ts` fails on a window breakpoint outside
       Shell. Check a screen at 1000 px as well as 1280 and 390: that is where the rail plus a side column leaves the
-      least room. Columns and stacking were checked at 920, 1000, 1280 and 390 px on 2026-11-19; the 1120 px page
-      maximum was not exercised, so the row stays open.
+      least room. Columns and stacking were checked at 920, 1000, 1280 and 390 px on 2026-11-19, and on 2026-11-20
+      (#332) `<main>` measured exactly 1120 px in a 1920 px window.
 - [x] Reduced motion honoured (recording dot, pipeline fill)
       Global rule in index.css, seen in the built CSS only; the recording dot and pipeline fill do not exist yet (#135).
-- [ ] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus
+- [x] Keyboard: visible focus, Cmd/Ctrl+K opens Ask, Space plays or pauses a report, Esc closes menus
+      Checked in a real browser on 2026-11-20 (#332): Tab shows a 2 px amber outline, Meta+K and Control+K both go to
+      `/ask`, Esc closes the Account menu, Space toggles playback (#327). Esc on other menus uses the same `Menu`.
 
 ## S1 Shell
 - [ ] Rail: glyph and wordmark; groups Work (Meetings, Meeting report, Ask, Live meeting, Upload) and Workspace
       (Members, Recording & privacy); v1 dot; active item has `aria-current="page"` and an amber marker (Ink) or
       blue marker (Daylight)
+      Checked by eye on 2026-11-20 (#332) at 1280 and 390 px, Daylight and Ink: the blue marker (Daylight) and amber
+      marker (Ink) show on the active item, groups and v1 dots match. Not ticked: the rail has no "Meeting report"
+      item (the prototype lists one) and has "My documents", which the prototype's Work group also lists; Live meeting
+      was not seen because no call was recording; `aria-current="page"` is on both the wordmark link and Meetings.
       Open: Members stays out of the rail until its screen exists. Live meeting appears only while a call is being recorded, one item per recording call, named by its title when there are several (the rail asks `GET /api/meetings` every 15 s); v1 dots and the glyph are in.
 - [ ] Account button opens a menu: name, email, role badge, Manage members, Recording & privacy, Sign out
       (`role=menu`); Esc and outside click close it
+      Checked in a real browser on 2026-11-20 (#332): the menu shows the email, an Admin badge, Recording & privacy and
+      Sign out; Esc and a click outside close it. Not ticked: no separate name line, no Manage members (Members is
+      not built), and the email breaks mid-word ("maidangtung95@g / mail.com") in the 208 px menu.
 - [x] Top bar: breadcrumb, "Ask about any meeting…" box with the ⌘K hint, skin switch (group label "Theme"),
       mode switch (group label "Light or dark mode"; Light, Dark, Auto)
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Group labels are covered by tests (#135).
