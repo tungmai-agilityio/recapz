@@ -14,6 +14,10 @@ export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
 apt-get install -y chromium xvfb sqlite3 rsync curl ca-certificates gnupg ufw debian-keyring debian-archive-keyring apt-transport-https
+# Chromium's browser sign-in (DICE) fails to get a token in Debian's build and then signs the notetaker's
+# Google account out on every start; turning browser sign-in off keeps the plain web sign-in.
+install -d -m 0755 /etc/chromium/policies/managed
+echo '{"BrowserSignin": 0}' > /etc/chromium/policies/managed/recapz.json
 
 if ! command -v caddy >/dev/null; then # the official Caddy apt repository
   curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
