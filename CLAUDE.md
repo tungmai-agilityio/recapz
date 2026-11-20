@@ -24,6 +24,7 @@ One Rust binary (axum) serves an embedded React + Vite + TypeScript + Tailwind a
 - New dependencies require a one-line PR justification.
 - Prompt changes require `cargo run -p eval` and a prompt version bump.
 - Frontend: follow the approved prototype (including mobile and both skins), reuse `web/src/ui`, and use design tokens, never hex colors.
+- Notetaker host: run Chromium on `notetaker-profile/` only as `recapz` (a root-owned file breaks every call's profile copy: "dropped before enough audio"), and keep the `BrowserSignin: 0` policy (without it Chromium signs the Google account out on every start).
 - Use Recapz terminology consistently: notetaker, meeting report, transcript, speaker ribbon, Ask, live view, upload, members, recording & privacy.
 
 ## Testing & Verification
