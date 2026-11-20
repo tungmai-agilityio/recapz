@@ -62,7 +62,7 @@ Restore: stop the service, copy a stamp directory's contents over `/var/lib/reca
 On your machine, in the repo root (`HOST` is the droplet; use your own `-i`/alias if you do not log in as root with this key):
 
 ```bash
-HOST=159.223.198.251
+HOST=recapz.tungmai.com
 KEY=~/.ssh/recapz_do
 ```
 
