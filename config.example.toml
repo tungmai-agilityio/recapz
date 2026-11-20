@@ -16,13 +16,13 @@ max_call_minutes = 240       # hard cap on one call
 # base_url = "https://api.deepgram.com"   # override only for tests
 price_per_minute_micro_usd = 7800   # estimate per audio minute: batch about $0.0058 + speaker labels about $0.0020 (list prices, can change; check yours)
 
-# Private S3-compatible bucket (for example Hetzner Object Storage) for finished recordings. After a
+# Private S3-compatible bucket (any S3-compatible provider) for finished recordings. After a
 # successful transcript the recording is uploaded and the local copy removed; playback streams from the
 # bucket through the server. Leave `bucket` empty to keep recordings on local disk.
 # The access key is never read from this file: set RECAPZ_STORAGE_KEY_ID and RECAPZ_STORAGE_SECRET in the environment.
 [storage]
-endpoint = ""            # e.g. "https://fsn1.your-objectstorage.com"
-region = ""              # e.g. "fsn1"
+endpoint = ""            # e.g. "https://s3.example.com"
+region = ""              # e.g. "region-1"
 bucket = ""              # must be private
 
 [google]
