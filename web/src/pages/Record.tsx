@@ -5,7 +5,6 @@ import { startRecording, type MeetingLanguage } from '../api'
 import { CaptureError, startCapture, type Capture, type CaptureMode } from '../capture/capture'
 import { FrameSocket } from '../capture/socket'
 import { clock } from '../clock'
-import { useSpeechProvider } from '../speech'
 import { Button } from '../ui/Button'
 import { Choice } from '../ui/Choice'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -29,7 +28,6 @@ const MODES = [
 ]
 
 export function RecordDialog({ onClose }: { onClose: () => void }) {
-  const provider = useSpeechProvider()
   const toast = useToast()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -40,7 +38,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const supported = canRecordTab()
-  const notice = `This meeting is recorded with Recapz. The audio is sent to ${provider} to be transcribed.`
+  const notice = `This meeting is recorded with Recapz. The audio is transcribed to write the meeting report.`
 
   // While starting, closing would leave start() running on an unmounted dialog.
   const close = useRef(onClose)
@@ -96,7 +94,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
             <Choice label="What to record" options={MODES} value={mode} onChange={(v) => setMode(v as CaptureMode)} />
             <label className="grid grid-cols-[18px_1fr] gap-2.5 text-sm">
               <input type="checkbox" checked={told} onChange={(e) => setTold(e.target.checked)} className="mt-1 accent-primary" />
-              <span>I have told everyone in this meeting that it is recorded and sent to {provider}.</span>
+              <span>I have told everyone in this meeting that it is recorded.</span>
             </label>
             <div className="flex flex-col gap-1.5 rounded-lg border border-hair bg-inset p-3 text-sm">
               <span className="text-ink-2">{notice}</span>

@@ -12,7 +12,7 @@ vi.mock('../capture/socket', () => ({ FrameSocket: vi.fn(function (this: { disca
 const discard = vi.fn()
 
 const meeting = { id: 'm1', title: 'Client call', platform: 'browser', status: 'recording', language: 'vi', started_at: 1, ended_at: null, created_at: 1, error: null, speakers: [] }
-const NOTICE = 'This meeting is recorded with Recapz. The audio is sent to Deepgram to be transcribed.'
+const NOTICE = 'This meeting is recorded with Recapz. The audio is transcribed to write the meeting report.'
 
 function fakeCapture(): Capture {
   return { mode: 'tab', state: 'recording', levels: { mic: 0.5, tab: 0.25 }, tabEnded: false, dropped: 0, stop: vi.fn(), discard: vi.fn() }
@@ -25,7 +25,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: vi.fn() }, configurable: true })
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => {}) }, configurable: true })
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/me') return new Response(JSON.stringify({ email: 'a@b.c', name: 'Ana', role: 'member', speech_provider: 'Deepgram' }))
+    if (url === '/api/me') return new Response(JSON.stringify({ email: 'a@b.c', name: 'Ana', role: 'member' }))
     if (url === '/api/meetings') return new Response(JSON.stringify([]))
     if (url === '/api/recordings') { posts.push(JSON.parse(init!.body as string)); return new Response(JSON.stringify({ id: 'm1' }), { status: 201 }) }
     if (url === '/api/meetings/m1') return new Response(JSON.stringify(meeting))
@@ -61,12 +61,12 @@ async function startTab(capture = fakeCapture()) {
   return capture
 }
 
-test('start waits for the consent box, and the copied notice names the speech provider', async () => {
+test('start waits for the consent box, and the copied notice names no provider', async () => {
   const d = await openDialog()
   fireEvent.change(within(d).getByLabelText('Title'), { target: { value: 'Client call' } })
   const start = within(d).getByRole('button', { name: 'Start recording' }) as HTMLButtonElement
   expect(start.disabled).toBe(true)
-  expect(await within(d).findByText('I have told everyone in this meeting that it is recorded and sent to Deepgram.')).toBeTruthy()
+  expect(await within(d).findByText('I have told everyone in this meeting that it is recorded.')).toBeTruthy()
   fireEvent.click(within(d).getByRole('checkbox'))
   expect(start.disabled).toBe(false)
   fireEvent.click(within(d).getByRole('button', { name: 'Copy for the call chat' }))

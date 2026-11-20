@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { inputClass } from '../ui/Field'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
-import { useRecordingStorage, useSpeechProvider, useUsage } from '../speech'
+import { useRecordingStorage, useUsage } from '../speech'
 
 /** Micro-USD (1,000,000 = $1) as dollars; sub-cent amounts keep four decimals. */
 const usd = (micro: number) => `$${(micro / 1e6).toFixed(micro !== 0 && micro < 10_000 ? 4 : 2)}`
@@ -27,15 +27,14 @@ const rules = [
   { id: 'auto', label: 'Automatic', hint: 'New meetings with a video link start switched on. A member can still switch one off.' },
 ] as const
 
-/** Mirrors the server's notice: the provider name and the "opt out" wording are added when missing. */
-function preview(message: string, name: string, provider: string) {
-  let n = message.replaceAll('{name}', name).replaceAll('{provider}', provider)
-  if (!n.includes(provider)) n += ` Audio is sent to ${provider}.`
+/** Mirrors the server's notice: the "opt out" wording is added when missing. */
+function preview(message: string, name: string) {
+  let n = message.replaceAll('{name}', name)
   if (!n.toLowerCase().includes('opt out')) n += " Type 'opt out' to make it leave and delete the recording."
   return n
 }
 
-function JoinForm({ saved, admin, provider }: { saved: JoinSettings; admin: boolean; provider: string }) {
+function JoinForm({ saved, admin }: { saved: JoinSettings; admin: boolean }) {
   const qc = useQueryClient()
   const toast = useToast()
   const [v, setV] = useState(saved)
@@ -58,7 +57,7 @@ function JoinForm({ saved, admin, provider }: { saved: JoinSettings; admin: bool
           <dl className="text-sm">
             <dt className="font-medium">Join rule</dt><dd>{rules.find((r) => r.id === saved.join_rule)?.label}: {rules.find((r) => r.id === saved.join_rule)?.hint}</dd>
             <dt className="mt-2 font-medium">Notetaker name</dt><dd>{saved.notetaker_name}</dd>
-            <dt className="mt-2 font-medium">Join message</dt><dd>{preview(saved.join_message, saved.notetaker_name, provider)}</dd>
+            <dt className="mt-2 font-medium">Join message</dt><dd>{preview(saved.join_message, saved.notetaker_name)}</dd>
           </dl>
         ) : (
           <form className="text-sm" onSubmit={(e) => { e.preventDefault(); save.mutate(v) }}>
@@ -77,10 +76,10 @@ function JoinForm({ saved, admin, provider }: { saved: JoinSettings; admin: bool
             {field(/notetaker name/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
             <label htmlFor="join-message" className="mt-4 block font-medium">Join message</label>
             <textarea id="join-message" rows={3} className={`${inputClass} mt-1`} value={v.join_message} onChange={set('join_message')} />
-            <p className="mt-1 text-mute">{'{name}'} and {'{provider}'} are filled in. The provider name and the "opt out" wording are always kept.</p>
+            <p className="mt-1 text-mute">{'{name}'} is filled in. The "opt out" wording is always kept.</p>
             {field(/join message/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
             <p className="mt-2 font-medium">Preview</p>
-            <p aria-label="Message preview" className="mt-1 rounded-md bg-hair-2 px-3 py-2">{preview(v.join_message, v.notetaker_name, provider)}</p>
+            <p aria-label="Message preview" className="mt-1 rounded-md bg-hair-2 px-3 py-2">{preview(v.join_message, v.notetaker_name)}</p>
             {err && !known.test(err) && <p role="alert" className="mt-2 text-bad">{err}</p>}
             <div className="mt-4"><Button type="submit" variant="primary" disabled={save.isPending}>Save</Button></div>
           </form>
@@ -91,7 +90,6 @@ function JoinForm({ saved, admin, provider }: { saved: JoinSettings; admin: bool
 }
 
 export function Recording() {
-  const provider = useSpeechProvider()
   const storage = useRecordingStorage()
   const usage = useUsage().data
   const qc = useQueryClient()
@@ -158,14 +156,13 @@ export function Recording() {
       </div>
       {join.isError && <p role="alert" className="mt-4 text-sm text-bad">Could not load the join settings.</p>}
       {join.isPending && <p className="mt-4 text-sm text-mute">Loading join settings...</p>}
-      {join.data?.join_rule && <JoinForm key={JSON.stringify(join.data)} saved={join.data} admin={storage.isAdmin} provider={provider} />}
+      {join.data?.join_rule && <JoinForm key={JSON.stringify(join.data)} saved={join.data} admin={storage.isAdmin} />}
       <div className="mt-4 rounded-lg border border-hair bg-sheet">
         <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Where audio goes</h2>
             <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
           </div>
-          <p className="text-sm">Audio is sent to <b>{provider}</b> for transcription, live during a call and again from the recorded file afterwards. Nothing else is sent to it.</p>
           {storage.where && (
             <p className="text-sm @2xl:col-start-2">
               Finished recordings are kept {storage.where === 'object_storage' ? 'in private object storage' : 'on this server\'s disk'}
