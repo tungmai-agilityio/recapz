@@ -195,7 +195,7 @@ assumes.
 | Join denied | Denied page state | `failed`, new `LeaveReason::Denied` |
 | Removed by a participant | Removed page state while admitted | Keep audio, transcribe; new `LeaveReason::Removed` |
 | Call ended | `CallEnded` | Transcribe |
-| Alone 2 min | `Session` | Transcribe |
+| Alone 30 s | `Session` | Transcribe |
 | Opt-out in chat | `Session` | `purge_meeting`, `opted_out` |
 | Chat notice not posted | Driver | Leave before capture starts, `failed`, "Chat is off, so the notetaker could not announce itself" |
 | Page not recognised | Selector step fails | `failed`, `meet_ui_changed: <step>`; no screenshot (it would hold faces and names) |

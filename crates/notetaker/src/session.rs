@@ -3,7 +3,8 @@
 use crate::optout::is_opt_out;
 
 pub const LOBBY_TIMEOUT_MS: i64 = 10 * 60 * 1000;
-pub const ALONE_TIMEOUT_MS: i64 = 2 * 60 * 1000;
+/// How long the notetaker stays once nobody else is in the call (someone may rejoin).
+pub const ALONE_TIMEOUT_MS: i64 = 30 * 1000;
 /// Default hard cap on a call (`max_call_minutes`, 240).
 pub const MAX_CALL_MS: i64 = 240 * 60 * 1000;
 
@@ -203,7 +204,8 @@ mod tests {
     }
 
     #[test]
-    fn leaves_after_two_minutes_alone_and_company_resets_the_clock() {
+    fn leaves_after_thirty_seconds_alone_and_company_resets_the_clock() {
+        assert_eq!(ALONE_TIMEOUT_MS, 30_000);
         let mut s = Session::new(0);
         s.on_event(Event::Admitted);
         assert_eq!(
