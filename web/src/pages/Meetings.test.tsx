@@ -212,15 +212,16 @@ test('shows duration, action items, ribbon and faces from the list data, and hid
   expect(bare.textContent).not.toMatch(/min|action item/)
   expect(bare.querySelector('[data-variant]')).toBeNull()
   expect(within(bare).queryAllByRole('img')).toEqual([])
-  expect(screen.getByText('3 meetings this month · 48 min recorded · audio is processed by the speech provider')).toBeTruthy()
+  expect(screen.getByText('3 meetings this month · 48 min recorded')).toBeTruthy()
   expect(document.body.textContent).not.toMatch(/stays on your server/)
 })
 
-test('the month line names the speech provider from /api/me', async () => {
+test('the month line names no speech provider', async () => {
   const rows = [{ id: '1', title: 'Weekly sync', platform: 'meet', status: 'ready', started_at: Date.now(), created_at: 1 }]
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/me' ? { email: 'a@example.com', name: null, role: 'member', speech_provider: 'Deepgram' } : rows))))
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/me' ? { email: 'a@example.com', name: null, role: 'member' } : rows))))
   show()
-  expect(await screen.findByText(/audio is processed by Deepgram/)).toBeTruthy()
+  expect(await screen.findByText(/^1 meetings? this month/)).toBeTruthy()
+  expect(document.body.textContent).not.toMatch(/processed by|Deepgram/)
 })
 
 test('a call being recorded gets a card with its elapsed time that keeps counting and a link to its live view', async () => {

@@ -60,10 +60,11 @@ test('upload rejects a PDF locally and posts a Markdown file', async () => {
   await waitFor(() => expect(calls.filter((c) => c === 'POST /api/documents').length).toBe(1))
 })
 
-test('the explainer names the speech provider and no longer says audio never leaves the server', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u === '/api/me' ? { email: 'a@example.com', name: null, role: 'member', speech_provider: 'Deepgram' } : []))))
+test('the explainer names no provider and no longer says audio never leaves the server', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u === '/api/me' ? { email: 'a@example.com', name: null, role: 'member' } : []))))
   render(<QueryClientProvider client={new QueryClient()}><Documents /></QueryClientProvider>)
-  expect(await screen.findByText(/Audio goes only to Deepgram, never to the language model\./)).toBeTruthy()
+  expect(await screen.findByText('On: the passages that match a question you ask can be sent to the language model to write the answer.')).toBeTruthy()
+  expect(document.body.textContent).not.toMatch(/provider|Deepgram/)
   expect(document.body.textContent).not.toMatch(/never leaves the server/)
 })
 

@@ -77,15 +77,15 @@ test('an unknown outcome shows nothing, and Dismiss removes a shown one', async 
   expect(screen.queryByText('Google Calendar is connected.')).toBeNull()
 })
 
-test('names the speech provider from /api/me', async () => {
-  show('/recording', { email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram', connected: false, needs_reconnect: false })
-  expect(await screen.findByText('Deepgram')).toBeTruthy()
-  expect(screen.getByText(/is sent to/).textContent).toMatch(/Audio is sent to Deepgram for transcription/)
+test('names no speech provider', async () => {
+  show('/recording', { email: 'a@b.c', name: null, role: 'admin', connected: false, needs_reconnect: false })
+  expect(await screen.findByText('Where audio goes')).toBeTruthy()
+  expect(document.body.textContent).not.toMatch(/is sent to|Deepgram/)
 })
 
 test('names where recordings are kept and the retention period', async () => {
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(
-    u === '/api/me' ? { email: 'a@b.c', name: null, role: 'admin', speech_provider: 'Deepgram', recording_storage: 'object_storage' }
+    u === '/api/me' ? { email: 'a@b.c', name: null, role: 'admin', recording_storage: 'object_storage' }
       : u === '/api/settings/audio-retention' ? { days: 90 } : { connected: false, needs_reconnect: false },
   ))))
   render(
@@ -103,7 +103,7 @@ function showAs(role: string, usage: object) {
   vi.stubGlobal('fetch', vi.fn(async (u: string) => {
     calls.push(u)
     return new Response(JSON.stringify(
-      u === '/api/me' ? { email: 'a@b.c', name: null, role, speech_provider: 'Deepgram' }
+      u === '/api/me' ? { email: 'a@b.c', name: null, role }
         : u === '/api/usage' ? usage : { connected: false, needs_reconnect: false },
     ))
   }))
@@ -176,7 +176,7 @@ test('members see the retention as text and no select', async () => {
   expect(screen.queryByRole('combobox')).toBeNull()
 })
 
-const joined = { join_rule: 'manual', notetaker_name: 'Recapz notetaker', join_message: 'Hi from {name}. Type opt out to leave. Audio goes to {provider}.' }
+const joined = { join_rule: 'manual', notetaker_name: 'Recapz notetaker', join_message: 'Hi from {name}. Type opt out to leave.' }
 
 function joinSettings(role: string, get: () => Response, put?: Response) {
   const calls: { m: string; u: string; body?: string }[] = []
@@ -184,7 +184,7 @@ function joinSettings(role: string, get: () => Response, put?: Response) {
     calls.push({ m: init?.method ?? 'GET', u, body: init?.body as string | undefined })
     if (u === '/api/settings') return init?.method === 'PUT' ? (put ?? new Response('{}')) : get()
     return new Response(JSON.stringify(
-      u === '/api/me' ? { email: 'a@b.c', name: null, role, speech_provider: 'Deepgram' }
+      u === '/api/me' ? { email: 'a@b.c', name: null, role }
         : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
           : { connected: false, needs_reconnect: false },
     ))
@@ -202,7 +202,7 @@ test('admin edits the join settings: PUT carries all three, the preview follows,
   const sent = { ...joined, join_rule: 'auto', notetaker_name: 'Scribe' }
   const calls = joinSettings('admin', ok, new Response(JSON.stringify(sent)))
   const name = await screen.findByLabelText('Notetaker name')
-  expect(screen.getByLabelText('Message preview').textContent).toBe('Hi from Recapz notetaker. Type opt out to leave. Audio goes to Deepgram.')
+  expect(screen.getByLabelText('Message preview').textContent).toBe('Hi from Recapz notetaker. Type opt out to leave.')
   fireEvent.click(screen.getByLabelText(/Automatic/))
   fireEvent.change(name, { target: { value: 'Scribe' } })
   expect(screen.getByLabelText('Message preview').textContent).toMatch(/^Hi from Scribe\./)
@@ -211,10 +211,10 @@ test('admin edits the join settings: PUT carries all three, the preview follows,
   expect(await screen.findByText('Join settings saved')).toBeTruthy()
 })
 
-test('the preview adds the provider name and opt out wording when the message lacks them', async () => {
+test('the preview adds the opt out wording when the message lacks it', async () => {
   joinSettings('admin', () => new Response(JSON.stringify({ ...joined, join_message: 'Recording.' })))
   await screen.findByLabelText('Join message')
-  expect(screen.getByLabelText('Message preview').textContent).toBe("Recording. Audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording.")
+  expect(screen.getByLabelText('Message preview').textContent).toBe("Recording. Type 'opt out' to make it leave and delete the recording.")
 })
 
 test('members see the join settings as text, with no inputs and no Save', async () => {
