@@ -48,7 +48,7 @@ make notetaker-logout    # delete the saved sign-in
 ```
 
 ## Contributing
-Read `CONTRIBUTING.md` (branch, commit and PR rules) and `CLAUDE.md` (clean-room rules). Never commit
+Read `CONTRIBUTING.md` (branch, commit and PR rules) and `CLAUDE.md` (engineering contract). Never commit
 `config.toml`, keys, recordings or real meeting data.
 
 ## License
