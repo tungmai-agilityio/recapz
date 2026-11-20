@@ -41,7 +41,7 @@ fn req(method: &str, cookie: &str, body: &str) -> Request<Body> {
         .unwrap()
 }
 
-const DEFAULT: &str = r#"{"join_rule":"manual","notetaker_name":"Recapz notetaker","join_message":"Recapz notetaker is recording this call and transcribing it live; the audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording."}"#;
+const DEFAULT: &str = r#"{"join_rule":"manual","notetaker_name":"Recapz notetaker","join_message":"Recapz notetaker is recording this call and transcribing it live. Type 'opt out' to make it leave and delete the recording."}"#;
 
 #[tokio::test]
 async fn settings_have_defaults_admin_updates_member_refused_and_bad_input_rejected() {

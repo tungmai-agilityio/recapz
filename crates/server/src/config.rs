@@ -64,7 +64,7 @@ pub struct Speech {
 }
 
 impl Speech {
-    /// Shown to members and in `/api/me`: where call audio is sent.
+    /// Named in the server-side startup error when the speech key is missing.
     pub const PROVIDER: &'static str = "Deepgram";
 
     /// The streaming endpoint on the same host as `base_url` (`https` becomes `wss`).
