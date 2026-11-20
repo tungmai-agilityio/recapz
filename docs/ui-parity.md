@@ -60,27 +60,42 @@ definition of done for every web PR.
 
 ## S2 Meetings
 - [x] Header "Meetings" with a counts line, Upload link, Send notetaker button (built: counts line shows meetings this month and
-      hours recorded from `duration_ms`, hours omitted when no meeting has a duration; no screenshot yet)
-      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
-- [ ] Send notetaker dialog: paste a meeting link; bad link shows an error (modal dialog, server message shown) (built in #137; no screenshot yet)
+      hours recorded from `duration_ms`, hours omitted when no meeting has a duration)
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px) and again on 2026-11-20 (#331) against the
+      prototype, Daylight light, Ink dark. The prototype adds "all audio stays on your server" to the counts line and
+      has no "Record from this browser" button; the app has both buttons the prototype lacks and omits that clause.
+- [x] Send notetaker dialog: paste a meeting link; bad link shows an error (modal dialog, server message shown) (built in #137)
+      Checked in a real browser on 2026-11-20 (#331): the dialog opens over the list, a text that is not a URL is
+      stopped by the browser's own check, and `https://example.com/not-a-call` shows the server's "not a Meet or Zoom
+      link" inside the dialog. The prototype has no dialog (its button only shows a toast), so there is no state to
+      compare.
 - [x] Days grouped (Today, Yesterday, weekday and date); row: time, title, duration, platform, action-item count,
       ribbon, faces; ribbon moves under the title on mobile (built: duration, platform, action-item count (hidden at 0), equal-weight
       speaker ribbon and faces from `speakers` (hidden when empty); no screenshot yet. The ribbon is one segment per
       speaker, not a timeline, because the list API has no speaking times)
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Speaker colours match the Report (#150).
+      Rechecked on 2026-11-20 (#331): grouping, time, title, duration, platform and the stacked rows at 390 px match;
+      the test meetings have no speakers or action items, so the ribbon, faces and count were not seen. The prototype
+      shows 24-hour times and "Monday 9 Nov"; the app shows "04:22 PM" and "Tuesday, November 17", and a Delete
+      button on every row that the prototype does not have. At 390 px the app puts the time under the title.
 - [ ] Processing row shows a stage badge; failed row an error badge; opted-out row (stage and failed badges done;
       no opted-out state exists in the list data)
-- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137). The time and "Open link" no longer break across lines; checked in Chromium at 1280, 1100 and 390 px, Daylight light only, with screenshots on the fix PR. Left unticked: no side-by-side with the prototype state, which is not in the repo
+      Failed badge checked by eye on 2026-11-20 (#331) at 1280 and 390 px, Daylight light and Ink dark (an upload
+      with an invalid speech key). Not ticked: the processing badge was not captured (the job failed within seconds),
+      the prototype's "Transcribing · 64%" has no percent in the app, and there is no opted-out state.
+- [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137). The time and "Open link" no longer break across lines; checked in Chromium at 1280, 1100 and 390 px, Daylight light only, with screenshots on the fix PR. Left unticked: on 2026-11-20 (#331) no calendar was connected, so the card showed only its empty text ("Nothing else today. Connect Google Calendar on Recording & privacy.") at 1280 and 390 px; rows and switches were not seen against the prototype's
 - [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
       Open: built without the ribbon (the live stream has no speaker labels): Recording badge, title, platform, time
       since the call was admitted (counts every second), and an "Open live view" link; one card per recording call
-      above the list. Checked in jsdom only, no screenshot and no prototype side-by-side. Rows with status `recording`
+      above the list. Checked in jsdom only: no call was recording on 2026-11-20 (#331), so the card was not seen. The prototype shows its ribbon and "Open live view" in the aside; the app puts the card above the list. Rows with status `recording`
       also keep their Recording badge, and the rail links to the live view.
-- [ ] Empty, loading and error states (built in #137; no screenshot yet)
+- [ ] Empty, loading and error states (built in #137)
+      Not ticked: on 2026-11-20 (#331) only a blank page while loading was seen; the list had meetings and the server
+      was up, so the empty and error states were not shown.
 
 `GET /api/meetings` now returns `duration_ms`, `action_item_count` and `speakers` (max 5); the web rows are built and ticked after the screenshot pass.
 
-No screenshot attached and not checked by eye: no browser tool was available. A per-row Delete with confirm is
+A per-row Delete with confirm is
 done, shown on every row because the list API has no owner info (a refusal appears in the dialog). Hide it for
 non-owners once the list returns the owner.
 
