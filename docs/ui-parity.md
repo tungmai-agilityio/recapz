@@ -89,27 +89,40 @@ non-owners once the list returns the owner.
       (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
       the date, duration and faces are built: faces show the people who spoke, from the transcript). Rename is also in that menu, with an inline title
       editor; the prototype header has neither, so the row stays unticked until the maintainer confirms the
-      design, and no screenshot is attached yet (not checked by eye))
-- [ ] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
+      design. Checked by eye on 2026-11-20 (#327) at 1280 and 390 px: title, date, duration and platform match.
+      Not checked: faces (the test meeting has no speakers), and the prototype's Share, Regenerate and Delete
+      icons, which the app replaces with the "Meeting actions" menu.)
+- [x] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
       clicking the ribbon seeks; Space toggles
-      (built: play/pause, ribbon scrubber with chapter ticks and playhead, times, click and arrow-key seek, Space;
-      left unticked only because no screenshot at 1280 and 390 px was taken, so not checked by eye)
+      Checked in a real browser on 2026-11-20 (#327) against a 5:00 recording at 1280 and 390 px: Play and Pause
+      switch the button and move the time; a click at the middle of the ribbon seeks to 2:30; Left and Right move
+      5 s; Space toggles with the focus off the controls. Home and End do nothing. The ribbon was grey here because
+      that meeting has no speaker data, so speaker colours on the ribbon are not checked.
 - [x] Tabs Summary and Transcript (`role=tablist`)
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
 - [ ] Summary: prose, Decisions, Open questions with timestamp link, Action items "n/m done" with checkbox, owner
       face, due date, strike-through when done
       (built except owner face: the report API has no owner. Done state is shown read-only: no endpoint saves it)
+      Checked by eye on 2026-11-20 (#327): prose, Decisions and Open questions show real data at 1280 and 390 px.
+      Not ticked: the prototype uses small uppercase muted section labels, a blue square bullet with a hairline
+      between Decisions, and an amber dot with a mono timestamp link on Open questions; the app uses larger
+      sentence-case headings and plain disc bullets, and the sample report has no action items or timestamp link.
 - [ ] Sidebar: Chapters (click seeks and opens the transcript), Talk time bars, Details (language, sharing,
       deletion date)
       (Chapters, Details language and Talk time done: bars and percent from real segment durations, sorted, hidden
       when no segment has a speaker, shown in the Summary tab with the report; sharing and deletion date are not in
-      the meeting API. Not ticked: no screenshot yet)
+      the meeting API. Not ticked: Chapters and Details language checked by eye on 2026-11-20 (#327) at 1280 and
+      390 px, but Talk time could not be seen (the test meeting has no speakers), the prototype uses uppercase
+      muted labels for Chapters, Talk time and Details, and its Details also show Shared with and the deletion date)
 - [ ] Transcript: speaker colour bar, time, speaker name, text, current line highlighted, click seeks
       (colour bar, time, speaker name, text, highlight, seek done. The name shows only on lines with a speaker; a
       speaker with no name reads "Unknown". One colour per person, by order of first speaking, shared with the
-      ribbon, faces and Talk time. Not ticked: no screenshot yet)
+      ribbon, faces and Talk time. Not ticked: line text, time and seek checked by eye on 2026-11-20 (#327), but the
+      test meeting has no speakers, so the colour bar, speaker name and Unknown label were not seen)
 - [ ] Processing, failed with retry, no report yet, no audio yet, 404
       (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
+      Not ticked: only 404 was checked by eye (2026-11-20, #327); the other states have tests in Report.test.tsx
+      but no meeting in that state to screenshot.
 
 ## S4 Ask
 - [ ] Question line, answer with numbered markers, three citation cards (number, time, meeting title, two-line
