@@ -133,11 +133,23 @@ non-owners once the list returns the owner.
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
-- [ ] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138; no screenshot yet. The lede names no speech provider (jsdom test).
-- [ ] Fields: title, language, speaker count; button "Process recording". The language select (Vietnamese default, English, Mixed languages) is built from #245 (checked by eye at 1280 px, Daylight light, no prototype side-by-side); speaker count is still hidden. Built in #138; no screenshot yet. Only title is built: the upload API reads
+- [x] Drop zone with accepted types and size limit (only formats the backend accepts). Built in #138. The lede names no speech provider (jsdom test).
+      Checked by eye on 2026-11-20 (#328) at 1280 and 390 px against the prototype Upload state, Daylight light. The
+      listed formats (MP3, M4A, AAC, WAV, MP4, OGG, FLAC, MKV) are the ones `crates/speech` decodes and the 2 GB
+      limit is `MAX_UPLOAD_BYTES` in `routes.rs`; the prototype lists only four and its lede adds "up to 4 hours" and
+      "Processed on your server", which the app does not claim. The browser's own file button is unstyled in both.
+- [x] Fields: title, language, speaker count; button "Process recording". The language select (Vietnamese default, English, Mixed languages) is built from #245 (checked by eye at 1280 px, Daylight light, no prototype side-by-side); speaker count is still hidden. Built in #138. Only title is built: the upload API reads
       no language or speaker count, so those are hidden rather than faked.
+      Checked by eye on 2026-11-20 (#328) at 1280 and 390 px: the fields stack under the drop zone at 390 px and the
+      button stays disabled until a file is chosen. The prototype calls the third language "Vietnamese + English";
+      the app says "Mixed languages". The prototype's Number of speakers field is hidden on purpose.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
-      link to the new meeting when ready. Built in #138; no screenshot yet. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
+      link to the new meeting when ready. Built in #138. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
+      Not ticked: on 2026-11-20 (#328) a real 1.4 MB WAV was uploaded to a local server whose speech key was
+      invalid. The four steps and the red error ("Processing failed: speech provider refused the request: HTTP 401
+      Unauthorized") showed, and pressing "Process recording" again re-uploaded the file (a second failed meeting,
+      deleted afterwards). The error runs into the retry hint with no full stop between them. The link to a finished
+      meeting was not exercised: it needs a working speech key.
 
 ## S6 Live meeting (built from the spec in #194, not checked against the prototype: it is not in the repo)
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
