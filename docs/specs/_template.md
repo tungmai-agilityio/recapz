@@ -26,7 +26,7 @@ Checkable statements for the whole feature. Each ticket below carries its own su
 ## Tickets
 
 One ticket is one PR (about 300 source lines small, 600 medium). Order is by dependency. `touches` lists the
-paths the ticket changes. Testing scope follows the merge rule in `CLAUDE.md`.
+paths the ticket changes. Testing scope follows "Testing & Verification" in `CLAUDE.md`.
 
 | # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|

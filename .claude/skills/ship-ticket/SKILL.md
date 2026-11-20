@@ -8,8 +8,6 @@ description: Implement one ticket issue end to end in its own worktree - claim, 
 Input: a ticket issue number, or none for "the next ticket". One ticket is one PR. Work in your own worktree
 (the maintainer starts one per ticket; at most 3 tickets are `status:in-progress` at once).
 
-Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
-
 ## 1. Pick and claim
 
 - No number given: list open `kind:ticket` + `status:ready` issues, sort by `priority:p0` first through `p3`, then
@@ -23,10 +21,10 @@ Use `gh` as the account that has access to this repository. If several accounts 
 
 - Branch from `origin/main` as the `pull-request` skill says: `<type>/<short-name>`, `type` from the `type:` label.
 - Build only what the ticket's Acceptance list asks, inside `Touches`. Follow the web rule in `CLAUDE.md` (prototype
-  first, `web/src/ui/`, `docs/ui-parity.md`) and the test rules under "Things Claude gets wrong".
+  first, `web/src/ui/`, `docs/ui-parity.md`) and the test rules under "Testing & Verification".
 - **Drift:** if the spec is wrong, the ticket is too big (over about 600 source lines) or you need a path outside
   `Touches`, stop. Do not deviate or widen the PR. Go to "Escalate".
-- Anything else that is unclear is not drift: decide by the order in "Autonomy" in `CLAUDE.md`, never ask the
+- Anything else that is unclear is not drift: decide by the order in "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, never ask the
   maintainer, and write it under "Decisions made" in the PR.
 
 ## 3. Test, review, PR
@@ -46,8 +44,7 @@ Use `gh` as the account that has access to this repository. If several accounts 
 
 ## 4. Merge or hand over
 
-Grade the risk yourself, `low` or `high`. `high` only if the change is critical under "Merging and escalation" in
-`CLAUDE.md`: an always-critical item, or a meeting-access, language-model-data, migration or deletion change that the
+Grade the risk yourself, `low` or `high`. `high` only if the change is critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`: an always-critical item, or a meeting-access, migration or deletion change that the
 spec and the ticket's Acceptance do not decide. A spec-approved change of that kind is `low`. A doubt is something
 to check in the spec and the code, not a reason to grade `high`. Then run:
 
@@ -60,8 +57,7 @@ to check in the spec and the code, not a reason to grade `high`. Then run:
   closed issue. Then check CI on the merge commit once (`gh run list --branch main --limit 3`); a cancelled run
   superseded by a newer merge does not count. If it failed because of this PR, file a `type:fix` `priority:p0`
   ticket linking this one and ship it; revert only if that fix fails.
-- Prints `ESCALATE: ...`: if every reason is a denylisted path and the change is not critical under "Merging and
-  escalation" in `CLAUDE.md`, merge anyway with the same command and name the overridden paths in the audit comment.
+- Prints `ESCALATE: ...`: if every reason is a denylisted path and the change is not critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, merge anyway with the same command and name the overridden paths in the audit comment.
   Any other reason (paused, `human-merge`, high risk, open decisions, CI or HEAD problems, unreadable data), or a
   critical change, means do not merge: comment the reasons on the PR, set the issue `status:needs-human`, stop.
 - Before starting any ticket, run `scripts/automerge-pause.sh detect`; if a revert of an auto-merged PR exists it pauses

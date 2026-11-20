@@ -23,8 +23,7 @@
   Limit is 100 requests per minute per key with bursts to 150.
   Over-limit responses return 429 with a Retry-After header.
   ```
-- Clean-room rules apply to everything: no AI mentions, no `Co-Authored-By` trailers, no other product names.
-  See `CLAUDE.md`.
+- No AI mentions and no `Co-Authored-By` trailers anywhere (Security & Privacy in `CLAUDE.md`).
 
 ## Issues and tickets
 - Issues own task status; `docs/specs/` and `docs/decisions/` hold specs and decisions. The full flow, labels and
@@ -39,6 +38,6 @@
 - One concern per PR; keep it reviewable. Title uses the same `type(scope): summary` format.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.
 - CI runs `guards`, `rust` and `web` on every PR. Commit, title, branch and size rules are not checked in CI: before opening a PR run the scoped checks in
-  `CLAUDE.md` (Commands), `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and
+  `CLAUDE.md` (Testing & Verification), `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and
   `node scripts/pr-size.mjs origin/main`.
 - Merge with **squash**; the PR title becomes the commit subject on `main`.

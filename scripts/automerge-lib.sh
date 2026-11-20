@@ -6,7 +6,7 @@ REQUIRED_CHECKS="guards rust web"
 
 # denied_path <repo-relative path>: succeeds when a change to this path must go to the maintainer.
 # Over-matching is cheap: this list only forces escalation. Meeting access in crates/core is not listed: the reviewer
-# checks it and a spec-approved change is not critical (CLAUDE.md, Merging and escalation).
+# checks it and a spec-approved change is not critical (docs/specs/delivery-pipeline.md, Autonomy and escalation).
 denied_path() {
   shopt -s nocasematch
   local r=1

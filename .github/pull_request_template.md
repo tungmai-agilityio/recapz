@@ -15,11 +15,11 @@
 these do not block the merge. -->
 
 ## Decisions needing the maintainer
-<!-- Only a choice the spec does not settle that is costly to undo (privacy, data deletion, data sent to
-language-model providers, API shape other code depends on). Otherwise write "None". -->
+<!-- Only a choice the spec does not settle that is costly to undo (privacy, data deletion, API shape other
+code depends on). Otherwise write "None". -->
 
 ## Checklist
 - [ ] Branch is `<type>/<name>`; title is `type(scope): summary`
 - [ ] About 300 (small) or 600 (medium) source lines, at most 800 (`node scripts/pr-size.mjs origin/main`)
-- [ ] No other product names, no AI mentions or tool trailers
+- [ ] No AI mentions or tool trailers
 - [ ] Meeting reads check the member's access; migrations are additive

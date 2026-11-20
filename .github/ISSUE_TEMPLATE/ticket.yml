@@ -51,6 +51,6 @@ body:
     id: testing
     attributes:
       label: Testing scope
-      description: Crates or web to test, per the merge rule in CLAUDE.md, for example `core` or `web`.
+      description: Crates or web to test, per Testing & Verification in CLAUDE.md, for example `core` or `web`.
     validations:
       required: true
