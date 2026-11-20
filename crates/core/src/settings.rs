@@ -53,10 +53,10 @@ pub fn set_join_rule(c: &Connection, rule: &str) -> Result<()> {
 const NOTETAKER_NAME: &str = "notetaker_name";
 const JOIN_MESSAGE: &str = "join_message";
 pub const DEFAULT_NOTETAKER_NAME: &str = "Recapz notetaker";
-/// Same text the notetaker posts today; the words "opt out" must stay, members are told to type them.
+/// Default text the notetaker posts; the words "opt out" must stay, members are told to type them.
 pub const DEFAULT_JOIN_MESSAGE: &str =
-    "Recapz notetaker is recording this call and transcribing it live; \
-the audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording.";
+    "Recapz notetaker is recording this call and transcribing it live. \
+Type 'opt out' to make it leave and delete the recording.";
 
 fn text(c: &Connection, key: &str, default: &str) -> Result<String> {
     let v: Option<String> = c

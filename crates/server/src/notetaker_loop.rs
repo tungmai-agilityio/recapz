@@ -23,15 +23,10 @@ const TICK: Duration = Duration::from_secs(15);
 /// A calendar event is booked this long before it starts, so the notetaker is in the lobby on time.
 const LEAD_MS: i64 = 60_000;
 
-/// The chat notice: the saved message with `{name}` and `{provider}` filled in. The words "opt out"
-/// and the speech provider's name are appended when the message lacks them, so consent is never lost.
-pub fn build_notice(message: &str, name: &str, provider: &str) -> String {
-    let mut n = message
-        .replace("{name}", name)
-        .replace("{provider}", provider);
-    if !n.contains(provider) {
-        n.push_str(&format!(" Audio is sent to {provider}."));
-    }
+/// The chat notice: the saved message with `{name}` filled in. The words "opt out" are appended
+/// when the message lacks them, so consent is never lost.
+pub fn build_notice(message: &str, name: &str) -> String {
+    let mut n = message.replace("{name}", name);
     if !n.to_lowercase().contains("opt out") {
         n.push_str(" Type 'opt out' to make it leave and delete the recording.");
     }
@@ -154,7 +149,6 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
             notice: build_notice(
                 &recapz_core::settings::join_message(&c)?,
                 &recapz_core::settings::notetaker_name(&c)?,
-                crate::config::Speech::PROVIDER,
             ),
             // Opt in with RECAPZ_NOTETAKER_DEBUG=1: a failing page step saves a screenshot.
             debug_dir: (std::env::var("RECAPZ_NOTETAKER_DEBUG").as_deref() == Ok("1"))
@@ -472,31 +466,29 @@ mod tests {
         assert_eq!(status(&c, &got[0].1), "joining");
     }
 
-    const P: &str = crate::config::Speech::PROVIDER;
-
     #[test]
     fn default_settings_post_todays_text() {
         use recapz_core::settings::{DEFAULT_JOIN_MESSAGE, DEFAULT_NOTETAKER_NAME};
         assert_eq!(
-            build_notice(DEFAULT_JOIN_MESSAGE, DEFAULT_NOTETAKER_NAME, P),
-            "Recapz notetaker is recording this call and transcribing it live; \
-the audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording."
+            build_notice(DEFAULT_JOIN_MESSAGE, DEFAULT_NOTETAKER_NAME),
+            "Recapz notetaker is recording this call and transcribing it live. \
+Type 'opt out' to make it leave and delete the recording."
         );
     }
 
     #[test]
-    fn custom_message_fills_name_and_provider() {
+    fn custom_message_fills_name() {
         assert_eq!(
-            build_notice("{name} records via {provider}. Say opt out.", "Scribe", P),
-            "Scribe records via Deepgram. Say opt out."
+            build_notice("{name} records this call. Say opt out.", "Scribe"),
+            "Scribe records this call. Say opt out."
         );
     }
 
     #[test]
-    fn missing_opt_out_and_provider_are_appended() {
+    fn missing_opt_out_is_appended() {
         assert_eq!(
-            build_notice("Recording.", "Scribe", P),
-            "Recording. Audio is sent to Deepgram. Type 'opt out' to make it leave and delete the recording."
+            build_notice("Recording.", "Scribe"),
+            "Recording. Type 'opt out' to make it leave and delete the recording."
         );
         assert!(recapz_notetaker::optout::is_opt_out("opt out"));
     }

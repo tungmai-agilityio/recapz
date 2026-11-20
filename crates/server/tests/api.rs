@@ -75,7 +75,7 @@ async fn sign_in_is_invite_only_and_sessions_end_on_logout() {
     let (s, _, body) = send(&app, me(&cookie)).await;
     assert_eq!(s, StatusCode::OK);
     assert!(body.contains(r#""email":"boss@example.com""#) && body.contains(r#""role":"admin""#));
-    assert!(body.contains(r#""speech_provider":"Deepgram""#), "{body}");
+    assert!(!body.contains("speech_provider"), "{body}");
 
     let logout = Request::post("/auth/logout")
         .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
