@@ -33,7 +33,7 @@ One Rust binary (axum) serves an embedded React + Vite + TypeScript + Tailwind a
 - Rust tests: `cargo test --workspace` for core, migrations, auth, meeting access, or shared API changes; otherwise test each changed crate.
 - Web changes: `pnpm -C web test` and frontend lint. Browser tests for shared UI or cross-page flows.
 - Tests must assert exact values/counts and fail when their guard is removed. Never disable or weaken tests to pass.
-- UI changes require updated `docs/ui-parity.md` and prototype screenshots.
+- UI changes tick their rows in `docs/ui-parity.md` with prototype screenshots; an unticked row needs a written reason.
 - Before PR: `test-runner` PASS on current HEAD, then `code-reviewer`. Docs-only PRs (Markdown and `CLAUDE.md` only; `.claude/`, config and scripts count as code) skip both and state `docs only, no tests run`.
 
 ## Git Workflow

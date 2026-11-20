@@ -23,8 +23,7 @@
   Limit is 100 requests per minute per key with bursts to 150.
   Over-limit responses return 429 with a Retry-After header.
   ```
-- Clean-room rules apply to everything: no AI mentions, no `Co-Authored-By` trailers.
-  See `CLAUDE.md`.
+- No AI mentions and no `Co-Authored-By` trailers anywhere (Security & Privacy in `CLAUDE.md`).
 
 ## Issues and tickets
 - Issues own task status; `docs/specs/` and `docs/decisions/` hold specs and decisions. The full flow, labels and

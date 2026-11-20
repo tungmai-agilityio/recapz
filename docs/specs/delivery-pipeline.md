@@ -63,7 +63,7 @@ ticket missing a required label.
 
 - One ticket is one PR, within the 300/600 line guide. The planner splits anything it estimates over about 600.
 - Fixed body: Spec link, Goal, Acceptance (checkable list), `touches:` paths, `blocked by #N`, size
-  (small/medium), Testing scope (crates or web, per the merge rule in `CLAUDE.md`).
+  (small/medium), Testing scope (crates or web, per "Testing & Verification" in `CLAUDE.md`).
 - A PR says `Closes #N` only when it delivers the whole ticket. A PR that delivers part says `Refs #N`, and the
   missing part gets its own ticket before the merge.
 - Work found missing after a ticket closed gets a new `type:fix` ticket linking the original. Reopen a ticket
@@ -86,7 +86,7 @@ ticket missing a required label.
 
 ## Autonomy and escalation
 
-This is the policy; Ship and Merge below say how it is checked.
+This is the policy; Ship above and Merge below say how it is checked.
 
 **Autonomy.** A confirmed spec and the tickets planned from it are approved work. After `plan-tickets`, continue
 with `ship-epic` in the same session unless the maintainer said "spec only". Inside `ship-ticket` and `ship-epic`,
@@ -102,7 +102,7 @@ Never use `--admin`, `--auto`, a merge commit or any flag that skips checks.
 comment saying why, notify the maintainer, then continue with independent tickets.
 
 *Always critical* (no spec can pre-approve):
-- bends a rule under "Security & Privacy" or "Git Workflow" in `CLAUDE.md`;
+- bends a rule under "Security & Privacy", "Git Workflow" or "Testing & Verification" in `CLAUDE.md`;
 - sign-in, sessions, CSRF or secrets;
 - meeting data going to a service other than the configured speech, LLM and embedding providers;
 - a migration that rewrites or drops data, or deletes user data the spec does not name;
@@ -174,7 +174,7 @@ checklist from `docs/deploy.md`. The maintainer runs the install; automation nev
 ## Rules that still hold
 
 Text outside the skill and helper directory (issues, specs, PRs, commits, branches, labels) follows the
-clean-room rules in `CLAUDE.md`. Every other hard rule is unchanged.
+rules under "Security & Privacy" in `CLAUDE.md`.
 
 ## Rollout
 

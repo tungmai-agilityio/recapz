@@ -18,7 +18,7 @@ Never touch the production host, its config or secrets. The maintainer runs the 
    `fix`, `perf`, `refactor`, `chore`, `docs`, `test`, `ci` bumps the patch.
 4. **Build the notes** from `git log <last>..origin/main --format=%s`: groups Features (`feat`), Fixes (`fix`,
    `perf`), Other (the rest, one line summarising counts if long), each line the commit subject with its `(#N)`.
-   Mark breaking changes first. Notes follow the clean-room rules: no AI mentions.
+   Mark breaking changes first. Notes carry no AI mentions ("Security & Privacy" in `CLAUDE.md`).
 5. **Upgrade checklist** from `docs/deploy.md` (the Upgrade lines) plus what the range changed:
    - new files under `crates/core/migrations/` (migrations run on start and are additive; say how many),
    - new or changed keys in `config.example.toml` and new environment variables,

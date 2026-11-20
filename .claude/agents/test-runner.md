@@ -23,7 +23,7 @@ Run the requested checks and report results. **Never edit code, fix failures, or
 
 ## Execution
 
-- Use the caller's working folder. Run only the requested checks.
+- Start every Bash call with `cd <working folder> && `; each call starts in the main checkout. Run only the requested checks.
 - Capture the starting commit and working-tree status before running anything.
 - Store logs in `/tmp/recapz-tests/<working-folder-name>/`. Create the directory first. Use fresh log files for every run; never rely on old logs.
 - Run each check in its own Bash call so its exit code is reported on its own; never chain checks with `;`.

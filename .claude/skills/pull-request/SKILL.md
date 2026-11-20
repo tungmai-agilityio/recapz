@@ -8,9 +8,9 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 ## Rules for branches
 
 - Merge your own PRs under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`; escalate only when the change is critical.
-- Docs-only PRs (Markdown and `CLAUDE.md` only, no code, config or scripts) skip `test-runner` and `code-reviewer`.
+- Docs-only PRs (Markdown and `CLAUDE.md` only; `.claude/`, config and scripts count as code) skip `test-runner` and `code-reviewer`.
 - Branch names are `<type>/<short-kebab-name>` with the Conventional Commit type (`feat/google-sign-in`, `fix/upload-size-limit`, `chore/ci-cache`, `docs/spec-update`). Never a user prefix or a tool-suggested name: rename the branch before the first push.
-- Clean-room rules (CLAUDE.md) apply to branch names, titles, bodies and commits: no AI mentions or tool trailers.
+- Branch names, titles, bodies and commits carry no AI mentions or tool trailers ("Security & Privacy" in `CLAUDE.md`).
 - One task, one concern, one PR. Do not deliver a milestone in one PR.
 
 ## Create
