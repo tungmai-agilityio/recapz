@@ -36,7 +36,7 @@ definition of done for every web PR.
       Checked in code and in a browser on 2026-11-20 (#332): the playhead, the Recording badge and the 2 px focus ring
       are amber (`rgb(227, 154, 45)`). Not ticked: amber is also the stage badge for Uploaded, Joining, Labelling
       speakers, Indexing, Transcribing and Writing report (`meeting-days.ts`, Documents), the wash behind the
-      current transcript line (Report) and the selected line in the live view, and the Ribbon glyph bar in the rail.
+      current transcript line (Report) and the selected line in the live view, and the amber bar of the logo glyph in the rail.
       The prototype uses an amber badge for "Transcribing" too, so the rule may need to say so.
 - [x] Layout: 208 px rail, page max 1120 px, two columns `1fr 320px` (`ui/Columns`) that stack when the page area is
       under 56rem, rail becomes a top strip under 900 px
