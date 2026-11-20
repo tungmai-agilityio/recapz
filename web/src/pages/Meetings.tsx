@@ -10,7 +10,6 @@ import { useToast } from '../ui/toast-context'
 import { LiveCard } from './LiveCard'
 import { NextUp } from './NextUp'
 import { RecordDialog } from './Record'
-import { useSpeechProvider } from '../speech'
 import { Face } from '../ui/Face'
 import { Ribbon } from '../ui/Ribbon'
 import { groupByDay, hoursLabel, meetingTime, minutesLabel, statusBadge } from './meeting-days'
@@ -20,10 +19,10 @@ import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized, type M
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const thisMonth = (ms: number) => { const a = new Date(ms), b = new Date(); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() }
 
-const counts = (all: Meeting[], provider: string) => {
+const counts = (all: Meeting[]) => {
   const month = all.filter((m) => thisMonth(meetingTime(m)))
   const ms = month.reduce((n, m) => n + (m.duration_ms ?? 0), 0)
-  return [`${month.length} meetings this month`, ms > 0 && `${hoursLabel(ms)} recorded`, `audio is processed by ${provider}`].filter(Boolean).join(' · ')
+  return [`${month.length} meetings this month`, ms > 0 && `${hoursLabel(ms)} recorded`].filter(Boolean).join(' · ')
 }
 
 /** Shown only by the Vite dev server (`import.meta.env.DEV`), never in a production build. */
@@ -107,7 +106,6 @@ export function Meetings() {
     queryFn: getMeetings,
     retry: (n, e) => !(e instanceof Unauthorized) && n < 2,
   })
-  const provider = useSpeechProvider()
   const toast = useToast()
   const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
@@ -136,7 +134,7 @@ export function Meetings() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="Meetings"
-        lede={data ? counts(data, provider) : undefined}
+        lede={data ? counts(data) : undefined}
         actions={<>
           <Link to="/upload" className="inline-flex items-center gap-2 rounded-md border border-hair bg-sheet px-3 py-1.5 text-sm font-medium hover:border-ink-2">Upload</Link>
           <Button onClick={() => setSending(true)}>Send notetaker</Button>
