@@ -8,8 +8,6 @@ description: Turn a merged spec's ticket table into GitHub ticket issues with th
 Input: a spec file in `docs/specs/`. Output: one `kind:ticket` issue per row of its Tickets table, then the intent
 issue closed. Never invent tickets that are not in the table; if the table is wrong, stop and escalate.
 
-Use `gh` as the account that has access to this repository. If several accounts are logged in, set `GH_TOKEN` for the command; never run `gh auth switch`.
-
 ## Checks before creating anything
 
 1. The spec is on `origin/main` (`git fetch origin main && git cat-file -e origin/main:docs/specs/<file>`). An
@@ -43,4 +41,4 @@ comment listing what exists and what is missing, and stop.
 
 ## Next
 
-Unless the maintainer said "spec only", continue with the `ship-epic` skill for this spec (`CLAUDE.md`, Autonomy).
+Unless the maintainer said "spec only", continue with the `ship-epic` skill for this spec ("Autonomy and escalation" in `docs/specs/delivery-pipeline.md`).

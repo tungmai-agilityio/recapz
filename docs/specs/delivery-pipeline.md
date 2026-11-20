@@ -80,13 +80,48 @@ ticket missing a required label.
   stop the ticket with `status:needs-human` and the last failure in a comment. An infrastructure-looking CI failure
   is re-run once without counting.
 - **No questions:** a confirmed spec and its tickets are approved work. Unclear points are decided by the order in
-  `CLAUDE.md` (Autonomy) and recorded in the PR under "Decisions made"; only the stop conditions escalate.
+  "Autonomy and escalation" and recorded in the PR under "Decisions made"; only the stop conditions escalate.
 - **Drift:** if the spec is wrong or the ticket too big, stop, comment, set `status:needs-human`. Never deviate
   silently or widen the PR. A spec amendment goes through a docs-only PR, then the ticket resumes.
 
+## Autonomy and escalation
+
+This is the policy; Ship and Merge below say how it is checked.
+
+**Autonomy.** A confirmed spec and the tickets planned from it are approved work. After `plan-tickets`, continue
+with `ship-epic` in the same session unless the maintainer said "spec only". Inside `ship-ticket` and `ship-epic`,
+ask the maintainer nothing and use no interactive question tool; stop only for a critical change below. Resolve
+ambiguity in this order and record it under "Decisions made" in the PR: ticket Acceptance, spec,
+`docs/decisions/`, an existing code pattern, the smallest reversible option.
+
+**Merging.** Merge your own PR (squash, `--match-head-commit` on the commit you checked) once CI is green on the
+current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
+Never use `--admin`, `--auto`, a merge commit or any flag that skips checks.
+
+**Escalation.** Escalate only critical changes: leave the PR open, set the ticket `status:needs-human` with a
+comment saying why, notify the maintainer, then continue with independent tickets.
+
+*Always critical* (no spec can pre-approve):
+- bends a rule under "Security & Privacy" or "Git Workflow" in `CLAUDE.md`;
+- sign-in, sessions, CSRF or secrets;
+- meeting data going to a service other than the configured speech, LLM and embedding providers;
+- a migration that rewrites or drops data, or deletes user data the spec does not name;
+- a production deploy, a new dependency with a doubtful licence or security record, or a new system requirement;
+- the guard rails: `CLAUDE.md`, push and test guards, `scripts/git-hooks/`, auto-merge scripts, CI;
+- deviates from or contradicts the spec, or needs a product decision the spec does not make;
+- CI red or reviewer blockers open after the retry caps in Ship.
+
+*Critical only when the spec does not decide it*: meeting access rules, an additive migration, deleting user
+data. Sending meeting data to the configured LLM and embedding providers is allowed and never escalates by itself. When the spec
+decides it, the ticket's Acceptance names it and `code-reviewer` confirms the diff matches, merge it.
+
+`scripts/automerge-check.sh` is a signal; read its reasons. A denylisted-path reason alone, on a change that is
+not critical, may be overridden: name the paths in the audit comment. Every other reason (paused, `human-merge`,
+high risk, open decisions, CI or HEAD problems, unreadable data) escalates.
+
 ## Merge
 
-`CLAUDE.md` (Merging and escalation) is the rule: PRs merge themselves and only critical changes go to the
+"Autonomy and escalation" above is the rule: PRs merge themselves and only critical changes go to the
 maintainer. This section is how a ticket PR is checked. It merges without the maintainer when **all** hold:
 
 1. Every CI check passed on the current HEAD, read by the merge step itself with `gh pr checks`: no pending, failed or
@@ -97,11 +132,9 @@ maintainer. This section is how a ticket PR is checked. It merges without the ma
    `CLAUDE.md`, `CONTRIBUTING.md`, `.claude/`, `.github/` and any other change run the full jobs.
 2. `code-reviewer` returns APPROVE with zero blockers for that HEAD, and every acceptance item is met.
 3. The PR's "Decisions needing the maintainer" section is exactly `None`. Choices settled from the spec go under
-   "Decisions made", which does not block. A change touching privacy, data deletion or data sent to language-model
-   providers is not an escalation by itself: it escalates only when the spec does not decide it (`CLAUDE.md`,
-   Merging and escalation).
+   "Decisions made", which does not block. A change touching privacy or data deletion is not an escalation by itself: it escalates only when the spec does not decide it ("Autonomy and escalation").
 4. Both the implementer and the reviewer grade the risk as low; any disagreement escalates. `high` means critical
-   under `CLAUDE.md`, not "unsure": a doubt is resolved from the spec and the code. A docs-only PR has no reviewer
+   under "Autonomy and escalation", not "unsure": a doubt is resolved from the spec and the code. A docs-only PR has no reviewer
    and passes `--reviewer-risk na`, accepted only when every changed file is Markdown.
 5. The path denylist does not match: migrations, any path containing auth, access, session, csrf, privacy or purge,
    dependency manifests, lockfiles and toolchain files, `deploy/`, `scripts/`, `Makefile`, `config.example.toml`,
@@ -109,7 +142,7 @@ maintainer. This section is how a ticket PR is checked. It merges without the ma
    `crates/core`, prompts, API handlers and specs are not listed: the reviewer checks them against the spec. Both
    names of a renamed file are checked.
    The denylist is a signal and never grants a merge by itself: a path-only reason for a change that is not critical
-   under `CLAUDE.md` may be overridden, naming the overridden paths in the audit comment. `scripts/automerge-lib.sh`
+   under "Autonomy and escalation" may be overridden, naming the overridden paths in the audit comment. `scripts/automerge-lib.sh`
    holds the list.
 6. No `human-merge` label.
 
@@ -126,8 +159,7 @@ merging a red PR by hand.
 **Safety net:** every auto-merged PR gets a comment listing what was checked. If an auto-merged PR is
 reverted, auto-merge pauses until the maintainer resumes it. The audit comment starts with `Auto-merged:`; the
 pause flag is the repository variable `AUTOMERGE_PAUSED`, set by `scripts/automerge-pause.sh`, which detects a
-merged revert PR that mentions an auto-merged PR. A variable that cannot be read counts as paused. Critical changes (`CLAUDE.md`, Merging and
-escalation) are never merged without the maintainer.
+merged revert PR that mentions an auto-merged PR. A variable that cannot be read counts as paused. Critical changes ("Autonomy and escalation") are never merged without the maintainer.
 
 **Accepted risk:** risk is judged by the implementer and reviewer, not only by script, and auto-merge starts on
 the full non-risky set with no trial period. CI covers lint and tests, not behaviour; the acceptance checks
@@ -187,7 +219,7 @@ Known gaps:
 ## Epic runs
 
 `ship-epic <spec>` runs a spec's tickets in the background without the maintainer starting each one. It stops
-only on `status:needs-human`; the spec merge and critical PRs (`CLAUDE.md`) still need the maintainer. It starts
+only on `status:needs-human`; the spec merge and critical PRs ("Autonomy and escalation") still need the maintainer. It starts
 by itself after `plan-tickets` unless the maintainer said "spec only".
 
 - Reads the spec's tickets, applies the order rule, the `touches:` overlap check and the cap of 3, and starts
