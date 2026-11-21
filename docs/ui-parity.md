@@ -219,7 +219,7 @@ non-owners once the list returns the owner.
 - [ ] Members table: face, name, email, role select, meetings, pending badge, Remove or Cancel invite with inline confirm
 - [ ] Default sharing and Who can sign in radio groups
 
-## S8 Recording & privacy (blocked: settings API)
+## S8 Recording & privacy
 - [x] Calendar row: Google Calendar tile with Connected, Reconnect needed or Not connected, Connect or Reconnect, Disconnect with confirm, and the `?calendar=` outcome message (both skins, mobile checked by eye)
 - [ ] Notetaker sign-in status on this screen: no API exposes it yet (a signed-out account only shows as a failed meeting's error), so there is nothing to show
 - [x] Join rule radios, notetaker name, join message: admins edit and Save (`PUT /api/settings`, saved toast, server refusals next to the field) with a live preview of the chat notice that adds the "opt out" wording like the server; members read text only (jsdom tests). Screenshots at 1280 and 390 px, both skins: not taken, checked by jsdom only.
