@@ -35,7 +35,7 @@ recording to the same `transcribe` job uploads use.
 
 Non-goals: Zoom (comes after Meet; the join path in `docs/decisions/zoom-join-path.md` will be revisited then,
 with Zoom's real-time media streams as a candidate that needs no bot), Teams, live view streaming, video capture,
-hosted speech (opt-in per `docs/decisions/hosted-speech.md`, unaffected by this plan).
+hosted speech (the Deepgram speech provider, per `docs/decisions/hosted-speech.md`, unaffected by this plan).
 
 ## 1. Join path
 
@@ -46,7 +46,7 @@ hosted speech (opt-in per `docs/decisions/hosted-speech.md`, unaffected by this 
 | **A. Chromium on the Meet web client** (chosen) | Rust drives Chromium over the DevTools protocol | Works on any Meet call the account can reach; no Google review; audio stays on our server | Page changes break it; automation may be detected; terms risk (see Risks) |
 | B. Meet Media API | Official real-time media over WebRTC | Supported interface, no participant in the call | Never left Developer Preview; Google announced its shutdown on 2026-10-28, endpoints off on 2027-01-15 ([release notes](https://developers.google.com/workspace/meet/release-notes)) |
 | C. Meet REST API after the call | Read Google's own recording or transcript | No bot at all | Needs Workspace plans with recording/transcripts; no Vietnamese quality data; no opt-out in call |
-| D. Scrape in-call captions | Read caption text from the page | No audio handling | Caption languages and quality are Google's, not our whisper; still a bot |
+| D. Scrape in-call captions | Read caption text from the page | No audio handling | Caption languages and quality are Google's, not ours; still a bot |
 
 Decision (maintainer, 2026-11-12): **A for v1.** B is being shut down, so it is not an option. Upload stays
 the fallback for calls the notetaker cannot join.
