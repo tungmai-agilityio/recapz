@@ -32,9 +32,9 @@ async fn mock_google() -> (String, Revoked) {
         .route(
             "/token",
             post(|Form(f): Form<HashMap<String, String>>| async move {
-                let (scope, access) = match f["code"].as_str() {
-                    "unticked" => ("openid email".to_string(), "at-boss"),
-                    "other" => (format!("openid email {CAL}"), "at-other"),
+                let (scope, access) = match f.get("code").map(String::as_str) {
+                    Some("unticked") => ("openid email".to_string(), "at-boss"),
+                    Some("other") => (format!("openid email {CAL}"), "at-other"),
                     _ => (format!("openid email {CAL}"), "at-boss"),
                 };
                 Json(serde_json::json!({"access_token": access, "refresh_token": "rt-1", "scope": scope}))
@@ -334,4 +334,42 @@ async fn disconnect_deletes_the_token_even_when_google_cannot_be_reached() {
         .unwrap();
     assert_eq!(send(&app, req).await.status, StatusCode::NO_CONTENT);
     assert_eq!(stored(dir.path()), None);
+}
+
+#[tokio::test]
+async fn connecting_fetches_the_calendar_at_once_instead_of_waiting_for_the_next_tick() {
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    let dir = tempfile::tempdir().unwrap();
+    let (base, _) = mock_google().await;
+    let hits = Arc::new(AtomicUsize::new(0));
+    let h = hits.clone();
+    let events = Router::new().route(
+        "/events",
+        get(move |hd: HeaderMap| async move {
+            assert_eq!(hd[header::AUTHORIZATION], "Bearer at-boss");
+            h.fetch_add(1, SeqCst);
+            Json(serde_json::json!({"items": []}))
+        }),
+    );
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let events_url = format!("http://{}/events", l.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(l, events).await.unwrap() });
+    let app = app(
+        dir.path(),
+        Google {
+            events_url,
+            ..google(&base)
+        },
+        KEY,
+    );
+    let session = sign_in(&app).await;
+    assert_eq!(hits.load(SeqCst), 0);
+    callback(&app, &session, "good").await;
+    for _ in 0..100 {
+        if hits.load(SeqCst) > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(hits.load(SeqCst), 1);
 }
