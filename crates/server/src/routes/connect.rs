@@ -137,11 +137,22 @@ pub(super) async fn callback(
         return back(jar, "error");
     };
     let scope = tok.scope;
+    let (tenant, member) = (u.tenant_id.clone(), u.id.clone());
     app.tenant(u.tenant_id.clone(), move |c| {
         ensure_member(c, &u)?;
         google_tokens::save(c, &k, &u.id, &refresh, &scope)
     })
     .await?;
+    // First fetch now, so the member does not wait up to ten minutes for the loop to reach them.
+    let (data_dir, google, k) = (app.cfg.data_dir.clone(), app.cfg.google.clone(), key(&app)?);
+    tokio::spawn(async move {
+        if let Err(e) =
+            crate::calendar_sync::sync_member(&data_dir, &tenant, &member, &google, k, db::now_ms())
+                .await
+        {
+            tracing::warn!(member = %member, "first calendar sync failed: {e:#}");
+        }
+    });
     back(jar, "connected")
 }
 
