@@ -22,14 +22,14 @@ beforeEach(() => {
     },
     { OPEN: 1 },
   ))
-  vi.stubGlobal('window', {
+  vi.stubGlobal('window', Object.assign(new EventTarget(), {
     __TAURI__: {
       core: {
         invoke,
         Channel: class { onmessage = () => {}; constructor() { channel = this as never } },
       },
     },
-  })
+  }))
   vi.stubGlobal('location', { href: 'http://localhost/' })
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -60,4 +60,41 @@ test('a missing permission names what to grant and does not start', async () => 
   await expect(startCapture('tab', '/x')).rejects.toThrow(/Microphone and System Audio Recording/)
   expect(invoke).not.toHaveBeenCalledWith('audio_start', expect.anything())
   expect(sockets).toHaveLength(0)
+})
+
+test('the menu-bar dot goes on when a recording starts and off when it ends', async () => {
+  const c = await startCapture('room', '/x')
+  expect(invoke).toHaveBeenCalledWith('recording_state', { on: true })
+  c.discard()
+  expect(invoke).toHaveBeenCalledWith('recording_state', { on: false })
+  expect(invoke.mock.calls.filter(([cmd]) => cmd === 'recording_state')).toHaveLength(2)
+})
+
+test('the dot never goes on when the capture does not start', async () => {
+  invoke.mockImplementation(async (cmd: string) => {
+    if (cmd === 'audio_permission') return 'granted'
+    if (cmd === 'audio_start') throw 'no device'
+  })
+  await expect(startCapture('room', '/x')).rejects.toThrow('no device')
+  expect(invoke).not.toHaveBeenCalledWith('recording_state', { on: true })
+})
+
+test('a system-audio-stopped event from the shell sets tabEnded and keeps recording', async () => {
+  const c = await startCapture('tab', '/x')
+  const changed = vi.fn()
+  c.onChange = changed
+  expect(c.tabEnded).toBe(false)
+  window.dispatchEvent(new Event('recapz-system-audio-stopped'))
+  expect(c.tabEnded).toBe(true)
+  expect(c.state).toBe('recording')
+  expect(changed).toHaveBeenCalledTimes(1)
+  c.stop()
+  window.dispatchEvent(new Event('recapz-system-audio-stopped'))
+  expect(changed).toHaveBeenCalledTimes(2) // only stop's own change, not the late event
+})
+
+test('in-room mode ignores the system-audio event', async () => {
+  const c = await startCapture('room', '/x')
+  window.dispatchEvent(new Event('recapz-system-audio-stopped'))
+  expect(c.tabEnded).toBe(false)
 })

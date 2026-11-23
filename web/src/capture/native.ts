@@ -14,6 +14,8 @@ declare global {
 /** True inside the Recapz desktop app, which records through the Mac's audio instead of the browser. */
 export const inDesktopApp = () => !!window.__TAURI__
 
+const SYSTEM_STOPPED = 'recapz-system-audio-stopped'
+
 const MISSING: Record<string, string> = {
   microphone: 'Microphone',
   audio_capture: 'System Audio Recording',
@@ -40,12 +42,19 @@ export async function startNativeCapture(mode: CaptureMode, wsUrl: string): Prom
     capture.state = s === 'reconnecting' ? 'reconnecting' : 'recording'
     capture.onChange?.()
   })
+  // The shell fires this when the system-audio tap stops or fails; the microphone keeps going.
+  const onSystemStopped = () => {
+    capture.tabEnded = true
+    capture.onChange?.()
+  }
   const frames = new Channel<ArrayBuffer>()
   const finish = (end: () => void) => {
     if (capture.state === 'stopped') return
     capture.state = 'stopped'
     frames.onmessage = () => {}
+    window.removeEventListener(SYSTEM_STOPPED, onSystemStopped)
     end()
+    void invoke('recording_state', { on: false })
     void invoke('audio_stop')
     capture.onChange?.()
   }
@@ -63,5 +72,9 @@ export async function startNativeCapture(mode: CaptureMode, wsUrl: string): Prom
     socket.discard()
     throw new CaptureError(typeof e === 'string' ? e : 'The app could not start recording.')
   }
+  // The server may have ended the recording while the app was starting; then finish() already cleaned up.
+  if (capture.state === 'stopped') return capture
+  void invoke('recording_state', { on: true })
+  if (mode === 'tab') window.addEventListener(SYSTEM_STOPPED, onSystemStopped)
   return capture
 }
