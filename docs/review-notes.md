@@ -255,3 +255,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Assumption: the native side sends no levels, so the page takes the peak of each 100 ms frame and shows one "Audio" meter.
 - Not done, needs Rust: the menu-bar red dot (no command to set it) and the "system audio stopped" signal (no native event for it). The warning text is wired to `tabEnded` and shows "System audio stopped" once a native event sets it. Both belong in a small follow-up.
 - Not verified: recording in the running app, a Zoom call and a Safari Meet call with headphones, and the 30-minute minimized-window run. Only `pnpm test`, lint and the type check ran.
+
+## #348 Local macOS build and release attach
+- `scripts/desktop-cert.sh` creates the "Recapz Local" self-signed code-signing certificate in the login keychain (idempotent, 10 years, code-signing usage). It uses `/usr/bin/openssl` because Homebrew OpenSSL 3+ writes a PKCS#12 that `security import` rejects. The cert shows as `CSSMERR_TP_NOT_TRUSTED`; that is expected for self-signed and does not stop `codesign`.
+- `make desktop-dmg` runs `cargo tauri build` in `desktop/src-tauri` with `APPLE_SIGNING_IDENTITY="Recapz Local"`, copies the `.dmg` to `./Recapz.dmg` (gitignored), and verifies the `.app` signature. Assumption: `RECAPZ_BASE_URL` defaults to `https://recapz.tungmai.com` (the host in `docs/deploy.md`), overridable with `DESKTOP_BASE_URL`. It needs `tauri-cli` v2 installed once (`cargo install`, not a repo dependency).
+- Release skill: new step 7 runs the build and `gh release upload <version> Recapz.dmg`, skipped off the maintainer's Mac.
+- Not verified: the cert import was tested against a temporary keychain only. `cargo tauri build` with the self-signed identity, the signed `.dmg` itself, the TCC grants surviving a second build, and installing on a clean macOS 14.2 machine were not run.
