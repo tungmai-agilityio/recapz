@@ -101,7 +101,7 @@ What already exists:
 | 3a | feat(desktop): capture macOS system audio | desktop | 2 | `desktop/src-tauri/src/audio/tap.rs`, `desktop/src-tauri/Info.plist`, `desktop/src-tauri/capabilities/` | medium | unit test on the resampler/framer, manual Zoom call |
 | 3b | feat(desktop): capture and mix the microphone | desktop | 3a | `desktop/src-tauri/src/audio/mic.rs`, `desktop/src-tauri/src/audio/mix.rs`, `desktop/src-tauri/Info.plist` | medium | unit test on the mixer, manual device swap |
 | 4 | feat(web): record in the desktop app | web | 3b | `web/src/capture/`, `web/src/pages/Record*.tsx`, `docs/spec.md`, `docs/ui-parity.md` | small | `pnpm -C web test`, lint, manual flow in the app |
-| 5 | chore(release): build the macOS app locally and attach it to the release | release | 2 | `Makefile`, `.claude/skills/release/`, `docs/deploy.md` | small | `make desktop-dmg` on the maintainer's Mac |
+| 5 | chore(deploy): build the macOS app locally and attach it to the release | deploy | 2 | `Makefile`, `.claude/skills/release/`, `docs/deploy.md` | small | `make desktop-dmg` on the maintainer's Mac |
 
 1. `GET /auth/desktop` runs the normal Google sign-in in the system browser, then redirects to
    `recapz://signed-in?code=`. `POST /auth/desktop/exchange` (same-origin, CSRF-checked) swaps the code for the
