@@ -45,6 +45,9 @@ What already exists:
   covered window drops audio, the socket moves to Rust in a follow-up.
 - **Record dialog modes in the app:** "Meeting app" (system audio + mic) and "In-room" (mic only, native). The
   tab mode is hidden because the webview has no tab picker and system audio covers browser calls too.
+- **Everything the Mac plays is recorded:** the global tap also captures music, videos and notification sounds,
+  not only the call. The "Meeting app" option tells the member to turn off other music and videos while
+  recording. Picking one app to record is not in v1, because a global tap keeps recording through device changes.
 - **No server recording changes:** the desktop sends the same frames as a browser recording, so `platform =
   'browser'` and the usage-cap rules carry over. The server only validates `mode`: "Meeting app" sends `"tab"`
   and "In-room" sends `"room"`.
@@ -76,8 +79,9 @@ What already exists:
 
 - [ ] A member signs in once through the system browser and lands signed in inside the app. The code works once and
       expires after 60 s.
-- [ ] In the app, Record offers "Meeting app" and "In-room", and not the tab mode. A Zoom desktop call recorded
-      with headphones has both sides audible, and the live view and meeting report work as for a browser
+- [ ] In the app, Record offers "Meeting app" and "In-room", and not the tab mode. "Meeting app" shows the
+      headphones and "turn off other sounds" hints. A Zoom desktop call and a Meet call in Safari, each recorded
+      with headphones, have both sides audible, and the live view and meeting report work as for a browser
       recording.
 - [ ] Without the mic or audio-capture permission, the dialog says how to grant it and does not start.
 - [ ] A recording with the window minimized and fully covered for 30 minutes has no gaps.
@@ -112,8 +116,8 @@ What already exists:
 3b. Mic capture on the default input, reopened when the default changes, plus a sum-and-clamp mixer with the
    tap. `audio_start` takes `mode: meeting | in_room`. Timeboxed VoiceProcessingIO spike, with the result
    written in the PR. It is adopted only if it cancels Zoom's output.
-4. When `window.__TAURI__` exists, the Record dialog shows "Meeting app" and "In-room" and hides the tab mode. The
-   native frames go to the socket in place of the worklet output, and the buffer and recorder bar are unchanged.
+4. When `window.__TAURI__` exists, the Record dialog shows "Meeting app" and "In-room" and hides the tab mode.
+   "Meeting app" carries the headphones and "turn off other music and videos" hints. The native frames go to the socket in place of the worklet output, and the buffer and recorder bar are unchanged.
    The recorder bar's "tab audio ended" warning becomes "system audio stopped". The menu-bar red dot follows the
    recording state.
 5. A one-time script or doc step creates the "Recapz Local" self-signed certificate. `make desktop-dmg` builds and
