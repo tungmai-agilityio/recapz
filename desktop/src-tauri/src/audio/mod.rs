@@ -2,6 +2,7 @@ pub mod frame;
 mod mic;
 mod mix;
 mod tap;
+mod watch;
 
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
@@ -20,6 +21,7 @@ pub enum Mode {
 struct Session {
     _tap: Option<tap::Tap>,
     _mic: mic::Mic,
+    _watch: Option<watch::Watchdog>,
 }
 
 static ACTIVE: Mutex<Option<Session>> = Mutex::new(None);
@@ -29,6 +31,7 @@ static ACTIVE: Mutex<Option<Session>> = Mutex::new(None);
 /// a meeting.
 #[tauri::command]
 pub async fn audio_start(
+    window: tauri::WebviewWindow,
     frames: Channel<InvokeResponseBody>,
     mode: Option<Mode>,
 ) -> Result<(), String> {
@@ -43,6 +46,7 @@ pub async fn audio_start(
         Mode::InRoom => Session {
             _tap: None,
             _mic: mic::Mic::start(Arc::new(send))?,
+            _watch: None,
         },
         Mode::Meeting => {
             // ponytail: one mutex shared by both audio threads, held for one frame's arithmetic.
@@ -52,9 +56,22 @@ pub async fn audio_start(
                 let (mixer, send) = (mixer.clone(), send.clone());
                 move |f: &[i16]| mixer.lock().unwrap().push(n, f, &*send)
             };
+            let beat = Arc::new(watch::Beat::new());
+            let tap_side = side(0);
+            let tap_beat = beat.clone();
+            let tap = tap::Tap::start(move |f: &[i16]| {
+                tap_beat.beat();
+                tap_side(f)
+            })?;
+            // The page cannot listen for app events (the capability allows commands only), so it gets a DOM event.
+            let watch = watch::Watchdog::start(beat, move || {
+                let _ = window
+                    .eval("window.dispatchEvent(new CustomEvent('recapz-system-audio-stopped'))");
+            });
             Session {
-                _tap: Some(tap::Tap::start(side(0))?),
+                _tap: Some(tap),
                 _mic: mic::Mic::start(Arc::new(side(1)))?,
+                _watch: Some(watch),
             }
         }
     });

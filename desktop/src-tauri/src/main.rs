@@ -1,9 +1,11 @@
 //! Thin macOS shell: one window on the Recapz server. The page is the normal web app; Google sign-in runs in
 //! the system browser (Google blocks embedded webviews) and comes back as `recapz://signed-in?code=…`.
 mod audio;
+mod dot;
 
 use std::sync::Mutex;
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     webview::{PageLoadEvent, WebviewWindowBuilder},
@@ -13,6 +15,32 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 /// A sign-in code waiting for the page to finish loading on our own origin.
 static PENDING_CODE: Mutex<Option<String>> = Mutex::new(None);
+
+const TRAY: &str = "recapz";
+
+/// Shows or hides the red recording dot on the menu-bar icon.
+fn set_dot(app: &AppHandle, on: bool) {
+    let (Some(tray), Some(icon)) = (app.tray_by_id(TRAY), app.default_window_icon()) else {
+        return;
+    };
+    let img = if on {
+        Image::new_owned(
+            dot::with_dot(icon.rgba(), icon.width(), icon.height()),
+            icon.width(),
+            icon.height(),
+        )
+    } else {
+        icon.clone()
+    };
+    let _ = tray.set_icon(Some(img));
+}
+
+/// The page tells the shell when a recording starts and ends. The dot also goes off when the page
+/// reloads or the window closes (see the hooks below), so a lost page never leaves it on.
+#[tauri::command]
+fn recording_state(app: AppHandle, on: bool) {
+    set_dot(&app, on);
+}
 
 const BASE_URL: &str = env!("RECAPZ_BASE_URL");
 
@@ -44,6 +72,7 @@ fn show_window(app: &AppHandle) {
             // A new page has no recorder, so drop any capture the old one left running.
             if matches!(p.event(), PageLoadEvent::Started) {
                 audio::stop();
+                set_dot(w.app_handle(), false);
             }
             if matches!(p.event(), PageLoadEvent::Finished) && is_ours(p.url()) {
                 if let Some(code) = PENDING_CODE.lock().unwrap().take() {
@@ -100,7 +129,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             audio::audio_start,
             audio::audio_stop,
-            audio::audio_permission
+            audio::audio_permission,
+            recording_state
         ])
         // A second launch (or a deep link while running) reaches the running app, which handles the URL below.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -118,7 +148,7 @@ fn main() {
                     &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
                 ],
             )?;
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id(TRAY)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app, e| match e.id.as_ref() {
@@ -133,6 +163,7 @@ fn main() {
         .on_window_event(|w, e| {
             if let WindowEvent::Destroyed = e {
                 audio::stop();
+                set_dot(w.app_handle(), false);
             }
             if let WindowEvent::CloseRequested { api, .. } = e {
                 api.prevent_close();
