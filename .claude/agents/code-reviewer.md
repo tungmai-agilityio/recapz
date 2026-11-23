@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Read-only review of a completed branch or PR. Checks correctness, security, regressions, scope, and the CLAUDE.md rules. Run after test-runner passes on the current HEAD and before opening a PR. Re-review fixes in the same session. Skip docs-only changes and small direct edits.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: medium
 maxTurns: 25
 ---
