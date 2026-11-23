@@ -8,7 +8,15 @@ use objc2_core_audio::*;
 use objc2_core_audio_types::{AudioBufferList, AudioStreamBasicDescription, AudioTimeStamp};
 use objc2_core_foundation::CFDictionary;
 use objc2_foundation::*;
-use std::{ffi::c_void, ptr::NonNull, slice, sync::Mutex};
+use std::{
+    ffi::c_void,
+    ptr::NonNull,
+    slice,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
+};
 
 type IoBlock = dyn Fn(
     NonNull<AudioTimeStamp>,
@@ -17,8 +25,24 @@ type IoBlock = dyn Fn(
     NonNull<AudioBufferList>,
     NonNull<AudioTimeStamp>,
 );
+type ListenerBlock = dyn Fn(u32, NonNull<AudioObjectPropertyAddress>);
 type ActivityToken = Retained<ProtocolObject<dyn NSObjectProtocol>>;
 const NON_INTERLEAVED: u32 = 1 << 5; // kAudioFormatFlagIsNonInterleaved
+
+static FORMAT_ADDRESS: AudioObjectPropertyAddress = AudioObjectPropertyAddress {
+    mSelector: kAudioTapPropertyFormat,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain,
+};
+
+/// The callback reads 32-bit float samples; refuse anything else instead of playing noise.
+fn check_format(f: &AudioStreamBasicDescription) -> Result<(), String> {
+    if f.mFormatID == 0x6c70636d && f.mFormatFlags & 1 != 0 && f.mBitsPerChannel == 32 {
+        Ok(())
+    } else {
+        Err("the audio tap is not 32-bit float".into())
+    }
+}
 
 fn check(what: &str, status: i32) -> Result<(), String> {
     if status == 0 {
@@ -34,6 +58,8 @@ pub struct Tap {
     aggregate: Option<AudioObjectID>,
     io_proc: AudioDeviceIOProcID,
     _block: Option<RcBlock<IoBlock>>,
+    // Re-reads the tap's sample rate when it changes (a Bluetooth headset can switch profile mid-call).
+    listener: Option<RcBlock<ListenerBlock>>,
     // Holds the App Nap opt-out for as long as we record.
     activity: Option<ActivityToken>,
 }
@@ -58,6 +84,7 @@ impl Tap {
                 aggregate: None,
                 io_proc: None,
                 _block: None,
+                listener: None,
                 activity: None,
             };
             check(
@@ -65,6 +92,7 @@ impl Tap {
                 AudioHardwareCreateProcessTap(Some(&desc), &mut me.tap),
             )?;
             let format = format_of(me.tap)?;
+            check_format(&format)?;
             let channels = format.mChannelsPerFrame as usize;
             let planar = format.mFormatFlags & NON_INTERLEAVED != 0;
 
@@ -87,7 +115,26 @@ impl Tap {
             )?;
             me.aggregate = Some(aggregate);
 
-            let framer = Mutex::new(Framer::new(format.mSampleRate as u32));
+            let rate = Arc::new(AtomicU32::new(format.mSampleRate as u32));
+            let tap_id = me.tap;
+            let listener_rate = rate.clone();
+            let listener = RcBlock::new(move |_: u32, _: NonNull<AudioObjectPropertyAddress>| {
+                if let Ok(f) = format_of(tap_id) {
+                    listener_rate.store(f.mSampleRate as u32, Ordering::Relaxed);
+                }
+            });
+            check(
+                "watch the tap format",
+                AudioObjectAddPropertyListenerBlock(
+                    me.tap,
+                    NonNull::from(&FORMAT_ADDRESS),
+                    None,
+                    RcBlock::as_ptr(&listener),
+                ),
+            )?;
+            me.listener = Some(listener);
+
+            let framer = Mutex::new(Framer::new(rate.load(Ordering::Relaxed)));
             let block = RcBlock::new(
                 move |_: NonNull<AudioTimeStamp>,
                       input: NonNull<AudioBufferList>,
@@ -110,7 +157,12 @@ impl Tap {
                             (slice::from_raw_parts(b.mData as *const f32, n), ch)
                         })
                         .collect();
-                    framer.lock().unwrap().push(&downmix(&planes), &on_frame);
+                    let mut framer = framer.lock().unwrap();
+                    let now = rate.load(Ordering::Relaxed);
+                    if now != framer.rate() {
+                        *framer = Framer::new(now);
+                    }
+                    framer.push(&downmix(&planes), &on_frame);
                 },
             );
             check(
@@ -131,6 +183,7 @@ impl Tap {
             // Without this macOS naps a hidden window and the frames stop.
             me.activity = Some(
                 NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+                    // Also keeps the Mac awake: a recording must not stop at an idle sleep.
                     NSActivityOptions::UserInitiated,
                     &NSString::from_str("Recording a meeting"),
                 ),
@@ -150,7 +203,17 @@ impl Drop for Tap {
                 }
                 AudioHardwareDestroyAggregateDevice(a);
             }
-            AudioHardwareDestroyProcessTap(self.tap);
+            if let Some(l) = &self.listener {
+                AudioObjectRemovePropertyListenerBlock(
+                    self.tap,
+                    NonNull::from(&FORMAT_ADDRESS),
+                    None,
+                    RcBlock::as_ptr(l),
+                );
+            }
+            if self.tap != 0 {
+                AudioHardwareDestroyProcessTap(self.tap);
+            }
             if let Some(a) = &self.activity {
                 NSProcessInfo::processInfo().endActivity(a);
             }
@@ -177,18 +240,13 @@ pub fn can_tap() -> Result<(), String> {
 }
 
 unsafe fn format_of(tap: AudioObjectID) -> Result<AudioStreamBasicDescription, String> {
-    let addr = AudioObjectPropertyAddress {
-        mSelector: kAudioTapPropertyFormat,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMain,
-    };
     let mut out = std::mem::zeroed::<AudioStreamBasicDescription>();
     let mut size = size_of::<AudioStreamBasicDescription>() as u32;
     check(
         "read the tap format",
         AudioObjectGetPropertyData(
             tap,
-            NonNull::from(&addr),
+            NonNull::from(&FORMAT_ADDRESS),
             0,
             std::ptr::null(),
             NonNull::from(&mut size),

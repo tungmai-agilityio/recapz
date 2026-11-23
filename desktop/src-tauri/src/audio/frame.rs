@@ -63,6 +63,7 @@ impl Resampler {
 
 /// Resampler plus i16 conversion plus cutting into whole frames; the remainder waits for the next push.
 pub struct Framer {
+    rate: u32,
     resampler: Resampler,
     pending: Vec<i16>,
 }
@@ -70,9 +71,14 @@ pub struct Framer {
 impl Framer {
     pub fn new(from_rate: u32) -> Self {
         Self {
+            rate: from_rate,
             resampler: Resampler::new(from_rate, RATE),
             pending: Vec::new(),
         }
+    }
+
+    pub fn rate(&self) -> u32 {
+        self.rate
     }
 
     /// Feeds mono samples; calls `emit` once per complete frame.

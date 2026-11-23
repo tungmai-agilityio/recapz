@@ -41,6 +41,10 @@ fn show_window(app: &AppHandle) {
         })
         // The code is sent only from a page on our own origin, never from whatever the window shows.
         .on_page_load(|w, p| {
+            // A new page has no recorder, so drop any capture the old one left running.
+            if matches!(p.event(), PageLoadEvent::Started) {
+                audio::stop();
+            }
             if matches!(p.event(), PageLoadEvent::Finished) && is_ours(p.url()) {
                 if let Some(code) = PENDING_CODE.lock().unwrap().take() {
                     exchange(&w, &code);
@@ -127,6 +131,9 @@ fn main() {
         })
         // Closing minimizes: a recording window must stay alive.
         .on_window_event(|w, e| {
+            if let WindowEvent::Destroyed = e {
+                audio::stop();
+            }
             if let WindowEvent::CloseRequested { api, .. } = e {
                 api.prevent_close();
                 let _ = w.minimize();
