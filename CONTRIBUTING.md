@@ -13,7 +13,7 @@
 - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`, `build`, `revert`.
   Add `!` after the scope for a breaking change.
 - Scopes are an area of the code: `server`, `core`, `web`, `auth`, `jobs`, `meetings`, `notetaker`, `speech`, `llm`,
-  `deploy`, `tooling` (hooks, scripts, `.github`, dependency updates).
+  `deploy`, `desktop` (the macOS app in `desktop/`), `tooling` (hooks, scripts, `.github`, dependency updates).
 - Body (optional): wrap at 72, explain why, not what.
 - Example:
 
