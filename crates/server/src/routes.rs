@@ -1,5 +1,6 @@
 use crate::config::Config;
 mod calendar;
+mod desktop_auth;
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, State},
@@ -38,6 +39,8 @@ pub struct App {
     asks: Arc<
         Mutex<std::collections::HashMap<String, std::collections::VecDeque<std::time::Instant>>>,
     >,
+    /// One-time sign-in codes for the desktop app.
+    desktop_codes: Arc<desktop_auth::Codes>,
 }
 
 mod ask;
@@ -79,6 +82,7 @@ pub fn router_with_llm(
         control,
         llm,
         asks: Default::default(),
+        desktop_codes: Default::default(),
     };
     Router::new()
         .route(
@@ -87,6 +91,8 @@ pub fn router_with_llm(
         )
         .route("/auth/google", get(google_start))
         .route("/auth/callback", get(google_callback))
+        .route("/auth/desktop", get(desktop_auth::start))
+        .route("/auth/desktop/exchange", post(desktop_auth::exchange))
         .route("/auth/calendar", get(connect::start))
         .route("/auth/calendar/callback", get(connect::callback))
         .route(
@@ -346,6 +352,13 @@ async fn google_start(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar,
         .secure(app.secure())
         .same_site(SameSite::Lax)
         .build();
+    // A desktop sign-in that was abandoned must not turn this web sign-in into a desktop one;
+    // `desktop_auth::start` adds the flag again after calling this.
+    let jar = jar.remove(
+        Cookie::build(desktop_auth::FLAG_COOKIE)
+            .path("/auth")
+            .build(),
+    );
     Ok((jar.add(c), Redirect::to(&url)))
 }
 
@@ -414,6 +427,9 @@ async fn google_callback(
         .await?;
     if !info.email_verified {
         return Err(ApiError::Forbidden);
+    }
+    if jar.get(desktop_auth::FLAG_COOKIE).is_some() {
+        return desktop_auth::finish(&app, jar, info.email, info.name).await;
     }
     let jar = jar.remove(Cookie::build(OAUTH_STATE_COOKIE).path("/auth").build());
     let jar = app.sign_in(jar, info.email, info.name).await?;
