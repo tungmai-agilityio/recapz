@@ -245,4 +245,4 @@ make desktop-dmg    # builds, signs with "Recapz Local" and writes ./Recapz.dmg
 gh release upload <tag> Recapz.dmg
 ```
 
-`make desktop-dmg` bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).
+`make desktop-dmg` stops with a message if `cargo tauri` is not installed (the first command above). It bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).
