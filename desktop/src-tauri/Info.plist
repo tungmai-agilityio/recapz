@@ -4,5 +4,7 @@
 <dict>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Recapz records the sound your Mac plays, such as the other people on a call, to write the meeting report.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Recapz records your microphone so your side of the meeting is in the meeting report.</string>
 </dict>
 </plist>
