@@ -104,7 +104,8 @@ What already exists:
 | 5 (#348) | chore(deploy): build the macOS app locally and attach it to the release | deploy | 2 | `Makefile`, `.claude/skills/release/`, `docs/deploy.md` | small | `make desktop-dmg` on the maintainer's Mac |
 
 1. `GET /auth/desktop` runs the normal Google sign-in in the system browser, then redirects to
-   `recapz://signed-in?code=`. `POST /auth/desktop/exchange` (same-origin, CSRF-checked) swaps the code for the
+   `recapz://signed-in?code=…&state=…` (the app's own random `state`, passed in as `/auth/desktop?state=`).
+   `POST /auth/desktop/exchange` (same-origin, CSRF-checked, code and state must match) swaps the code for the
    usual session cookie. Codes are hashed, single use and expire after 60 s. Critical by `CLAUDE.md`:
    `human-merge`.
 2. Tauri 2 app: one window on `base_url`, the deep-link and single-instance plugins (reason: the sign-in

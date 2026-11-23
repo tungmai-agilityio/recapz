@@ -18,6 +18,8 @@ use std::{
 use tower::ServiceExt;
 
 const ORIGIN: &str = "http://localhost:8080";
+/// The app's random state; the real one is 32 random characters.
+const STATE: &str = "app-state-0123456789abcdef";
 
 /// Mock Google: code `boss` is boss@example.com (a member), anything else is stranger@example.com.
 async fn mock_google() -> String {
@@ -97,7 +99,9 @@ async fn send(app: &Router, req: Request<Body>) -> Reply {
 async fn browser_sign_in(app: &Router, google_code: &str) -> Reply {
     let start = send(
         app,
-        Request::get("/auth/desktop").body(Body::empty()).unwrap(),
+        Request::get(format!("/auth/desktop?state={STATE}"))
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     assert_eq!(start.status, StatusCode::SEE_OTHER);
@@ -120,12 +124,24 @@ async fn browser_sign_in(app: &Router, google_code: &str) -> Reply {
 
 fn code_of(r: &Reply) -> String {
     let loc = r.location.as_deref().unwrap();
-    loc.strip_prefix("recapz://signed-in?code=")
-        .unwrap_or_else(|| panic!("{loc}"))
-        .to_owned()
+    let rest = loc
+        .strip_prefix("recapz://signed-in?code=")
+        .unwrap_or_else(|| panic!("{loc}"));
+    let (code, state) = rest.split_once("&state=").unwrap();
+    assert_eq!(state, STATE, "the deep link carries the app's state back");
+    code.to_owned()
 }
 
 fn exchange(code: &str, origin: Option<&str>, cookie: Option<&str>) -> Request<Body> {
+    exchange_with(code, Some(STATE), origin, cookie)
+}
+
+fn exchange_with(
+    code: &str,
+    state: Option<&str>,
+    origin: Option<&str>,
+    cookie: Option<&str>,
+) -> Request<Body> {
     let mut r =
         Request::post("/auth/desktop/exchange").header(header::CONTENT_TYPE, "application/json");
     if let Some(o) = origin {
@@ -134,8 +150,11 @@ fn exchange(code: &str, origin: Option<&str>, cookie: Option<&str>) -> Request<B
     if let Some(c) = cookie {
         r = r.header(header::COOKIE, c);
     }
-    r.body(Body::from(format!(r#"{{"code":"{code}"}}"#)))
-        .unwrap()
+    let body = match state {
+        Some(st) => format!(r#"{{"code":"{code}","state":"{st}"}}"#),
+        None => format!(r#"{{"code":"{code}"}}"#),
+    };
+    r.body(Body::from(body)).unwrap()
 }
 
 #[tokio::test]
@@ -262,7 +281,9 @@ async fn an_abandoned_desktop_sign_in_does_not_hijack_the_next_web_sign_in() {
     // Starts /auth/desktop and never finishes; the browser keeps the flag cookie.
     let abandoned = send(
         &app,
-        Request::get("/auth/desktop").body(Body::empty()).unwrap(),
+        Request::get(format!("/auth/desktop?state={STATE}"))
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     let flag = abandoned
@@ -302,4 +323,45 @@ async fn an_abandoned_desktop_sign_in_does_not_hijack_the_next_web_sign_in() {
         "google_start clears the flag: {:?}",
         start.cookies
     );
+}
+
+#[tokio::test]
+async fn the_code_only_works_with_the_state_the_app_started_with() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path()).await;
+
+    // Wrong or missing state: refused, and the code is burned so it cannot be guessed against.
+    for state in [Some("some-other-app-state-0123456789"), Some(""), None] {
+        let code = code_of(&browser_sign_in(&app, "boss").await);
+        let ex = send(&app, exchange_with(&code, state, Some(ORIGIN), None)).await;
+        assert_eq!(ex.status, StatusCode::FORBIDDEN, "{state:?}");
+        assert!(ex.cookies.is_empty());
+        assert_eq!(
+            send(&app, exchange(&code, Some(ORIGIN), None)).await.status,
+            StatusCode::FORBIDDEN,
+            "{state:?}: a wrong try uses the code up"
+        );
+    }
+    // The matching state works.
+    let code = code_of(&browser_sign_in(&app, "boss").await);
+    assert_eq!(
+        send(&app, exchange(&code, Some(ORIGIN), None)).await.status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn a_desktop_sign_in_needs_a_well_formed_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path()).await;
+    for uri in [
+        "/auth/desktop".to_owned(),
+        "/auth/desktop?state=short".to_owned(),
+        "/auth/desktop?state=has%20a%20space%20in%20it%20xxxxxxxx".to_owned(),
+        format!("/auth/desktop?state={}", "a".repeat(129)),
+    ] {
+        let r = send(&app, Request::get(&uri).body(Body::empty()).unwrap()).await;
+        assert!(r.status.is_client_error(), "{uri}: {:?}", r.status);
+        assert!(r.location.is_none(), "{uri}");
+    }
 }
