@@ -1,9 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(gh pr:*)"
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)"
     ],
     "deny": [
       "Bash(git push origin main*)",
