@@ -14,7 +14,30 @@ use tauri::{
 use tauri_plugin_deep_link::DeepLinkExt;
 
 /// A sign-in code waiting for the page to finish loading on our own origin.
-static PENDING_CODE: Mutex<Option<String>> = Mutex::new(None);
+static PENDING_CODE: Mutex<Option<(String, String)>> = Mutex::new(None);
+
+/// The random `state` of the sign-in this app started; a deep link counts only if it carries it back.
+static PENDING_STATE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Takes the pending state if `got` is it. One use: a replayed link finds nothing pending.
+fn take_state(got: Option<&str>) -> Option<String> {
+    let mut pending = PENDING_STATE.lock().unwrap();
+    if got.is_some() && pending.as_deref() == got {
+        pending.take()
+    } else {
+        None
+    }
+}
+
+fn new_state() -> String {
+    use std::io::Read;
+    let mut b = [0u8; 16];
+    // macOS only app, so /dev/urandom is always there; no randomness crate needed.
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut b))
+        .expect("no randomness");
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
 
 const TRAY: &str = "recapz";
 
@@ -60,8 +83,10 @@ fn show_window(app: &AppHandle) {
         // The sign-in button goes to the system browser, signed in as a desktop sign-in.
         .on_navigation(move |u| {
             if u.path() == "/auth/google" && u.as_str().starts_with(&google) {
+                let state = new_state();
+                *PENDING_STATE.lock().unwrap() = Some(state.clone());
                 let _ = std::process::Command::new("open")
-                    .arg(format!("{BASE_URL}/auth/desktop"))
+                    .arg(format!("{BASE_URL}/auth/desktop?state={state}"))
                     .spawn();
                 return false;
             }
@@ -75,8 +100,8 @@ fn show_window(app: &AppHandle) {
                 set_dot(w.app_handle(), false);
             }
             if matches!(p.event(), PageLoadEvent::Finished) && is_ours(p.url()) {
-                if let Some(code) = PENDING_CODE.lock().unwrap().take() {
-                    exchange(&w, &code);
+                if let Some((code, state)) = PENDING_CODE.lock().unwrap().take() {
+                    exchange(&w, &code, &state);
                 }
             }
         })
@@ -92,28 +117,36 @@ fn is_ours(u: &tauri::Url) -> bool {
 
 /// Swaps the one-time code for the session cookie (same origin, so cookie and CSRF work unchanged), then
 /// reloads. A failed exchange stays on the sign-in page.
-fn exchange(w: &tauri::WebviewWindow, code: &str) {
+fn exchange(w: &tauri::WebviewWindow, code: &str, state: &str) {
     let js = format!(
         "fetch('/auth/desktop/exchange',{{method:'POST',headers:{{'content-type':'application/json'}},\
-         body:JSON.stringify({{code:{}}})}}).then(r=>{{if(r.ok)location.assign('/')}})",
-        serde_json::Value::String(code.into())
+         body:JSON.stringify({{code:{},state:{}}})}}).then(r=>{{if(r.ok)location.assign('/')}})",
+        serde_json::Value::String(code.into()),
+        serde_json::Value::String(state.into())
     );
     let _ = w.eval(&js);
 }
 
 fn signed_in(app: &AppHandle, urls: &[tauri::Url]) {
-    let Some(code) = urls
+    let Some((code, state)) = urls
         .iter()
         .filter(|u| u.scheme() == "recapz" && u.host_str() == Some("signed-in"))
         .find_map(|u| {
-            u.query_pairs()
-                .find(|(k, _)| k == "code")
-                .map(|(_, v)| v.into_owned())
+            let q = |name| {
+                u.query_pairs()
+                    .find(|(k, _)| k == name)
+                    .map(|(_, v)| v.into_owned())
+            };
+            Some((q("code")?, q("state")?))
         })
     else {
         return;
     };
-    *PENDING_CODE.lock().unwrap() = Some(code);
+    // A link this app did not ask for (a web page can open recapz:// on its own) is ignored.
+    let Some(state) = take_state(Some(&state)) else {
+        return;
+    };
+    *PENDING_CODE.lock().unwrap() = Some((code, state));
     match app.get_webview_window("main") {
         // Reload our own origin first; the page-load hook then runs the exchange.
         Some(w) => {
@@ -178,4 +211,27 @@ fn main() {
             show_window(app);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_link_counts_only_with_the_pending_state_and_only_once() {
+        *PENDING_STATE.lock().unwrap() = Some("abc".into());
+        assert_eq!(take_state(None), None, "no state on the link");
+        assert_eq!(take_state(Some("other")), None, "wrong state");
+        assert_eq!(take_state(Some("abc")), Some("abc".into()));
+        assert_eq!(take_state(Some("abc")), None, "used up");
+        assert_eq!(take_state(Some("")), None, "nothing pending");
+    }
+
+    #[test]
+    fn states_are_32_hex_characters_and_differ() {
+        let (a, b) = (new_state(), new_state());
+        assert_eq!(a.len(), 32);
+        assert!(a.bytes().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
+    }
 }
