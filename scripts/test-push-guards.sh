@@ -26,7 +26,7 @@ failclosed() { # description; the hook must exit 2 (any other code lets the comm
 }
 prepush() { # expected-exit remote-ref
   n=$((n + 1))
-  echo "refs/heads/x abc $2 def" | scripts/git-hooks/pre-push 2>/dev/null
+  echo "refs/heads/x 0000000000000000000000000000000000000000 $2 def" | scripts/git-hooks/pre-push 2>/dev/null
   got=$?
   [ "$got" = "$1" ] || { echo "pre-push: want $1, got $got: $2"; fail=1; }
 }
@@ -130,13 +130,13 @@ failclosed nopython
 prepush 0 refs/heads/feat/x
 prepush 0 refs/heads/main-notes
 prepush 1 refs/heads/main
-desktop_gate() { # expected-exit path-changed fake-make-exit: pushes a new branch through the hook in a scratch repo
+desktop_gate() { # expected-exit path-changed fake-make-exit [unfetched]: pushes a new branch through the hook in a scratch repo
   n=$((n + 1))
   d=$(mktemp -d) && root=$PWD
   (cd "$d" && git init -q && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m a && git update-ref refs/remotes/origin/main HEAD \
     && mkdir -p "$(dirname "$2")" && touch "$2" && git add . && git -c user.name=t -c user.email=t@t commit -q -m b \
     && mkdir bin && printf '#!/bin/sh\nexit %s\n' "$3" > bin/make && chmod +x bin/make \
-    && echo "refs/heads/x $(git rev-parse HEAD) refs/heads/x 0000000000000000000000000000000000000000" | PATH="$d/bin:$PATH" "$root/scripts/git-hooks/pre-push" 2>/dev/null)
+    && echo "refs/heads/x $(git rev-parse HEAD) refs/heads/x $([ -n "$4" ] && echo 1111111111111111111111111111111111111111 || echo 0000000000000000000000000000000000000000)" | PATH="$d/bin:$PATH" "$root/scripts/git-hooks/pre-push" 2>/dev/null)
   got=$?
   rm -rf "$d"
   [ "$got" = "$1" ] || { echo "pre-push desktop gate: want $1, got $got: $2 (make exits $3)"; fail=1; }
@@ -144,10 +144,11 @@ desktop_gate() { # expected-exit path-changed fake-make-exit: pushes a new branc
 desktop_gate 1 desktop/src-tauri/src/main.rs 1
 desktop_gate 0 desktop/src-tauri/src/main.rs 0
 desktop_gate 0 crates/server/src/x.rs 1
+desktop_gate 1 crates/server/src/x.rs 1 unfetched # remote commit missing locally: fail closed
 precommit 0 a@asnet.com.vn b@asnet.com.vn
 precommit 0 1+tungmai-agilityio@users.noreply.github.com a@asnet.com.vn
 precommit 1 a@asnet.com.vn someone@gmail.com
 precommit 1 someone@gmail.com a@asnet.com.vn
-[ "$n" = 101 ] || { echo "ran $n cases, want 101"; fail=1; }
+[ "$n" = 102 ] || { echo "ran $n cases, want 102"; fail=1; }
 [ "$fail" = 0 ] && echo "push guards: $n cases pass"
 exit "$fail"

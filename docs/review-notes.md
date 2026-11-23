@@ -223,3 +223,6 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Placeholder icon (generated flat PNG) serves Dock, tray and bundle; swap for the real mark later. The tray icon is not a template image, so it will not tint in dark menu bars.
 - Not verified: a real launch, the sign-in round trip and the deep link (they need a bundled `.app`; `cargo run` does not register `recapz://`). Only `cargo build` and Clippy ran. Unverified assumption: the webview's `fetch` carries the `Origin` header the exchange requires.
 - Spec status moved from draft to agreed (2026-11-23).
+- Review follow-ups: the exchange now waits for a page load on the app's own origin (a pending code, run by the page-load hook) and reloads only when the exchange succeeds; `build.rs` creates `capabilities/` itself (a fresh clone has none); the pre-push gate fails closed when it cannot diff the pushed range.
+- Open decision, not changed here: the deep link carries no app-side `state`, so a web page could open `recapz://signed-in?code=` with a code from the attacker's own sign-in and leave a member in that session (login CSRF). Fixing it needs a server change (bind the code to a value the app generated before opening the browser); suggest a follow-up ticket after #343.
+- Not done: a CSP for the remote webview, and handing links outside `base_url` to the system browser.

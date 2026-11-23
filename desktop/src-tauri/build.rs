@@ -13,6 +13,7 @@ fn main() {
         "remote": { "urls": [format!("{base}/*")] },
         "permissions": []
     });
+    fs::create_dir_all("capabilities").unwrap();
     fs::write("capabilities/base-url.json", cap.to_string()).unwrap();
     tauri_build::build();
 }

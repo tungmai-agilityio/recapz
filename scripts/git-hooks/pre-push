@@ -9,8 +9,8 @@ while read -r _ local_sha remote_ref remote_sha; do
   fi
   case "$local_sha" in *[!0]*) ;; *) continue ;; esac # deleting a branch
   case "$remote_sha" in *[!0]*) base=$remote_sha ;; *) base=$(git merge-base origin/main "$local_sha" 2>/dev/null) ;; esac
-  if [ -n "$base" ] && git diff --name-only "$base" "$local_sha" 2>/dev/null | grep -q '^desktop/'; then
-    make desktop-check || { echo "pre-push: make desktop-check failed" >&2; exit 1; }
-  fi
+  # Fail closed: a base we cannot diff against (e.g. a remote commit not fetched) still runs the check.
+  files=$(git diff --name-only "$base" "$local_sha" 2>/dev/null) && ! printf '%s\n' "$files" | grep -q '^desktop/' && continue
+  make desktop-check </dev/null || { echo "pre-push: make desktop-check failed" >&2; exit 1; }
 done
 exit 0

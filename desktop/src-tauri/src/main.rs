@@ -1,12 +1,16 @@
 //! Thin macOS shell: one window on the Recapz server. The page is the normal web app; Google sign-in runs in
 //! the system browser (Google blocks embedded webviews) and comes back as `recapz://signed-in?code=…`.
+use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    webview::WebviewWindowBuilder,
+    webview::{PageLoadEvent, WebviewWindowBuilder},
     AppHandle, Manager, RunEvent, WebviewUrl, WindowEvent,
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+
+/// A sign-in code waiting for the page to finish loading on our own origin.
+static PENDING_CODE: Mutex<Option<String>> = Mutex::new(None);
 
 const BASE_URL: &str = env!("RECAPZ_BASE_URL");
 
@@ -25,7 +29,7 @@ fn show_window(app: &AppHandle) {
         .inner_size(1280.0, 840.0)
         // The sign-in button goes to the system browser, signed in as a desktop sign-in.
         .on_navigation(move |u| {
-            if u.as_str().starts_with(&google) {
+            if u.path() == "/auth/google" && u.as_str().starts_with(&google) {
                 let _ = std::process::Command::new("open")
                     .arg(format!("{BASE_URL}/auth/desktop"))
                     .spawn();
@@ -33,12 +37,35 @@ fn show_window(app: &AppHandle) {
             }
             true
         })
+        // The code is sent only from a page on our own origin, never from whatever the window shows.
+        .on_page_load(|w, p| {
+            if matches!(p.event(), PageLoadEvent::Finished) && is_ours(p.url()) {
+                if let Some(code) = PENDING_CODE.lock().unwrap().take() {
+                    exchange(&w, &code);
+                }
+            }
+        })
         .build()
         .expect("cannot open the window");
 }
 
-/// `recapz://signed-in?code=…`: the page swaps the one-time code for the session cookie (same origin, so
-/// cookie and CSRF work unchanged), then reloads.
+fn is_ours(u: &tauri::Url) -> bool {
+    BASE_URL
+        .parse::<tauri::Url>()
+        .is_ok_and(|b| b.origin() == u.origin())
+}
+
+/// Swaps the one-time code for the session cookie (same origin, so cookie and CSRF work unchanged), then
+/// reloads. A failed exchange stays on the sign-in page.
+fn exchange(w: &tauri::WebviewWindow, code: &str) {
+    let js = format!(
+        "fetch('/auth/desktop/exchange',{{method:'POST',headers:{{'content-type':'application/json'}},\
+         body:JSON.stringify({{code:{}}})}}).then(r=>{{if(r.ok)location.assign('/')}})",
+        serde_json::Value::String(code.into())
+    );
+    let _ = w.eval(&js);
+}
+
 fn signed_in(app: &AppHandle, urls: &[tauri::Url]) {
     let Some(code) = urls
         .iter()
@@ -51,14 +78,14 @@ fn signed_in(app: &AppHandle, urls: &[tauri::Url]) {
     else {
         return;
     };
-    show_window(app);
-    if let Some(w) = app.get_webview_window("main") {
-        let js = format!(
-            "fetch('/auth/desktop/exchange',{{method:'POST',headers:{{'content-type':'application/json'}},\
-             body:JSON.stringify({{code:{}}})}}).then(()=>location.assign('/'))",
-            serde_json::Value::String(code)
-        );
-        let _ = w.eval(&js);
+    *PENDING_CODE.lock().unwrap() = Some(code);
+    match app.get_webview_window("main") {
+        // Reload our own origin first; the page-load hook then runs the exchange.
+        Some(w) => {
+            let _ = w.navigate(BASE_URL.parse().unwrap());
+            show_window(app);
+        }
+        None => show_window(app),
     }
 }
 
