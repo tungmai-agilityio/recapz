@@ -44,6 +44,10 @@ impl Resampler {
     }
 
     pub fn push(&mut self, input: &[f32], out: &mut Vec<f32>) {
+        // A device mid-switch can report rate 0; without this the loop below never ends.
+        if self.from == 0 {
+            return;
+        }
         for &x in input {
             let mut left = self.to;
             while left > 0 {
@@ -131,6 +135,12 @@ mod tests {
         out.clear();
         r.push(&vec![0.0; 100], &mut out);
         assert_eq!(out.len(), 36);
+    }
+
+    #[test]
+    fn rate_zero_yields_nothing_and_does_not_hang() {
+        let mut f = Framer::new(0);
+        f.push(&[0.5; 100], |_| panic!("no frame expected"));
     }
 
     #[test]

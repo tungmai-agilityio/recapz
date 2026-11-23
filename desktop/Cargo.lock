@@ -2938,6 +2938,7 @@ dependencies = [
  "objc2-core-audio-types",
  "objc2-core-foundation",
  "objc2-foundation",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",

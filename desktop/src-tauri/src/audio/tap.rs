@@ -18,16 +18,58 @@ use std::{
     },
 };
 
-type IoBlock = dyn Fn(
+pub(super) type IoBlock = dyn Fn(
     NonNull<AudioTimeStamp>,
     NonNull<AudioBufferList>,
     NonNull<AudioTimeStamp>,
     NonNull<AudioBufferList>,
     NonNull<AudioTimeStamp>,
 );
-type ListenerBlock = dyn Fn(u32, NonNull<AudioObjectPropertyAddress>);
-type ActivityToken = Retained<ProtocolObject<dyn NSObjectProtocol>>;
-const NON_INTERLEAVED: u32 = 1 << 5; // kAudioFormatFlagIsNonInterleaved
+pub(super) type ListenerBlock = dyn Fn(u32, NonNull<AudioObjectPropertyAddress>);
+pub(super) const NON_INTERLEAVED: u32 = 1 << 5; // kAudioFormatFlagIsNonInterleaved
+
+/// Opts out of App Nap and idle sleep for as long as it lives: without it macOS naps a hidden window and the
+/// frames stop, and a recording must not end at an idle sleep.
+pub struct Awake(Retained<ProtocolObject<dyn NSObjectProtocol>>);
+
+unsafe impl Send for Awake {}
+
+impl Awake {
+    pub fn new() -> Awake {
+        Awake(
+            NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+                NSActivityOptions::UserInitiated,
+                &NSString::from_str("Recording a meeting"),
+            ),
+        )
+    }
+}
+
+impl Drop for Awake {
+    fn drop(&mut self) {
+        unsafe { NSProcessInfo::processInfo().endActivity(&self.0) }
+    }
+}
+
+/// Reads the buffers of an input callback down to one mono channel. `planar` buffers hold one channel each,
+/// interleaved ones `mNumberChannels`, capped at the format's channel count.
+pub(super) unsafe fn mono_of(list: &AudioBufferList, planar: bool, channels: usize) -> Vec<f32> {
+    let bufs = slice::from_raw_parts(list.mBuffers.as_ptr(), list.mNumberBuffers as usize);
+    let planes: Vec<(&[f32], usize)> = bufs
+        .iter()
+        .filter(|b| !b.mData.is_null())
+        .map(|b| {
+            let n = b.mDataByteSize as usize / 4;
+            let ch = if planar {
+                1
+            } else {
+                (b.mNumberChannels as usize).max(1).min(channels.max(1))
+            };
+            (slice::from_raw_parts(b.mData as *const f32, n), ch)
+        })
+        .collect();
+    downmix(&planes)
+}
 
 static FORMAT_ADDRESS: AudioObjectPropertyAddress = AudioObjectPropertyAddress {
     mSelector: kAudioTapPropertyFormat,
@@ -36,7 +78,7 @@ static FORMAT_ADDRESS: AudioObjectPropertyAddress = AudioObjectPropertyAddress {
 };
 
 /// The callback reads 32-bit float samples; refuse anything else instead of playing noise.
-fn check_format(f: &AudioStreamBasicDescription) -> Result<(), String> {
+pub(super) fn check_format(f: &AudioStreamBasicDescription) -> Result<(), String> {
     if f.mFormatID == 0x6c70636d && f.mFormatFlags & 1 != 0 && f.mBitsPerChannel == 32 {
         Ok(())
     } else {
@@ -44,7 +86,7 @@ fn check_format(f: &AudioStreamBasicDescription) -> Result<(), String> {
     }
 }
 
-fn check(what: &str, status: i32) -> Result<(), String> {
+pub(super) fn check(what: &str, status: i32) -> Result<(), String> {
     if status == 0 {
         Ok(())
     } else {
@@ -60,8 +102,7 @@ pub struct Tap {
     _block: Option<RcBlock<IoBlock>>,
     // Re-reads the tap's sample rate when it changes (a Bluetooth headset can switch profile mid-call).
     listener: Option<RcBlock<ListenerBlock>>,
-    // Holds the App Nap opt-out for as long as we record.
-    activity: Option<ActivityToken>,
+    _awake: Option<Awake>,
 }
 
 // The Objective-C handles are only touched from `start` and `drop`, never from the audio thread.
@@ -85,7 +126,7 @@ impl Tap {
                 io_proc: None,
                 _block: None,
                 listener: None,
-                activity: None,
+                _awake: None,
             };
             check(
                 "create the audio tap",
@@ -141,28 +182,13 @@ impl Tap {
                       _: NonNull<AudioTimeStamp>,
                       _: NonNull<AudioBufferList>,
                       _: NonNull<AudioTimeStamp>| {
-                    let list = input.as_ref();
-                    let bufs =
-                        slice::from_raw_parts(list.mBuffers.as_ptr(), list.mNumberBuffers as usize);
-                    let planes: Vec<(&[f32], usize)> = bufs
-                        .iter()
-                        .filter(|b| !b.mData.is_null())
-                        .map(|b| {
-                            let n = b.mDataByteSize as usize / 4;
-                            let ch = if planar {
-                                1
-                            } else {
-                                (b.mNumberChannels as usize).max(1).min(channels.max(1))
-                            };
-                            (slice::from_raw_parts(b.mData as *const f32, n), ch)
-                        })
-                        .collect();
+                    let mono = mono_of(input.as_ref(), planar, channels);
                     let mut framer = framer.lock().unwrap();
                     let now = rate.load(Ordering::Relaxed);
                     if now != framer.rate() {
                         *framer = Framer::new(now);
                     }
-                    framer.push(&downmix(&planes), &on_frame);
+                    framer.push(&mono, &on_frame);
                 },
             );
             check(
@@ -180,14 +206,7 @@ impl Tap {
                 AudioDeviceStart(aggregate, me.io_proc),
             )?;
 
-            // Without this macOS naps a hidden window and the frames stop.
-            me.activity = Some(
-                NSProcessInfo::processInfo().beginActivityWithOptions_reason(
-                    // Also keeps the Mac awake: a recording must not stop at an idle sleep.
-                    NSActivityOptions::UserInitiated,
-                    &NSString::from_str("Recording a meeting"),
-                ),
-            );
+            me._awake = Some(Awake::new());
             Ok(me)
         }
     }
@@ -213,9 +232,6 @@ impl Drop for Tap {
             }
             if self.tap != 0 {
                 AudioHardwareDestroyProcessTap(self.tap);
-            }
-            if let Some(a) = &self.activity {
-                NSProcessInfo::processInfo().endActivity(a);
             }
         }
     }
