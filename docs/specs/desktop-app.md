@@ -1,6 +1,6 @@
 # Desktop app
 
-Status: **draft**
+Status: **agreed with the maintainer (2026-11-23)**
 Intent: #340
 
 ## Problem

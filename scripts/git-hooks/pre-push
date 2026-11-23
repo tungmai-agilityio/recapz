@@ -1,10 +1,16 @@
 #!/bin/sh
-# Refuses any push that updates or deletes main; main only changes through a merged PR.
+# Refuses any push that updates or deletes main (main only changes through a merged PR), and runs
+# `make desktop-check` when the pushed commits touch desktop/ (no CI builds it).
 # Enable once per clone with `make hooks`.
-while read -r _ _ remote_ref _; do
+while read -r _ local_sha remote_ref remote_sha; do
   if [ "$remote_ref" = refs/heads/main ]; then
     echo "pre-push: pushing to main is blocked; merge through a PR" >&2
     exit 1
   fi
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac # deleting a branch
+  case "$remote_sha" in *[!0]*) base=$remote_sha ;; *) base=$(git merge-base origin/main "$local_sha" 2>/dev/null) ;; esac
+  # Fail closed: a base we cannot diff against (e.g. a remote commit not fetched) still runs the check.
+  files=$(git diff --name-only "$base" "$local_sha" 2>/dev/null) && ! printf '%s\n' "$files" | grep -q '^desktop/' && continue
+  make desktop-check </dev/null || { echo "pre-push: make desktop-check failed" >&2; exit 1; }
 done
 exit 0
