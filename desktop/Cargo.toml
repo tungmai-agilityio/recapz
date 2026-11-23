@@ -1,0 +1,4 @@
+# Its own workspace: the server's Linux CI builds the root workspace only and never compiles WebKit.
+[workspace]
+members = ["src-tauri"]
+resolver = "2"

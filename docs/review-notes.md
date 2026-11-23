@@ -215,3 +215,14 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Docs and example-file comments only; no scripts, workflows or code changed. Hosting is a DigitalOcean Droplet in San Francisco (Debian 13, 2 vCPU / 4 GB, 79 GB disk), `tungmai.com` on Cloudflare with a DNS-only A record, Caddy for HTTPS, deploys through the `release-build` workflow `deploy` job.
 - Assumptions: recordings are on server disk (no bucket enabled) and the object storage provider is undecided; Droplet backups are not enabled; the Debian 13 run is as reported by the owner, not checked from this repo; `scripts/provision-host.sh` only requires `ID=debian`, so it may run on 13 but that is untested here.
 - Not changed: the 2026-11-18 history line and Singapore wording in the older sections above stay as a record of the earlier plan.
+
+## Tauri shell (#344)
+- `desktop/` is its own Cargo workspace; the root workspace lists `crates/*` only, so CI never builds it. `make desktop-check` (fmt + Clippy) is the only gate; the pre-push hook runs it when the pushed commits touch `desktop/`.
+- `base_url` is `RECAPZ_BASE_URL` at build time (default `http://localhost:8080`, trailing slash trimmed). `build.rs` bakes it in and writes the gitignored `capabilities/base-url.json` (`remote.urls = [base_url/*]`, no permissions yet; the capture tickets add the audio commands).
+- Sign-in: the shell cancels navigation to `/auth/google` and opens `/auth/desktop` in the system browser with `open` (macOS only, no opener plugin). The `recapz://signed-in?code=` handler runs the exchange `fetch` inside the page (same origin) and reloads.
+- Placeholder icon (generated flat PNG) serves Dock, tray and bundle; swap for the real mark later. The tray icon is not a template image, so it will not tint in dark menu bars.
+- Not verified: a real launch, the sign-in round trip and the deep link (they need a bundled `.app`; `cargo run` does not register `recapz://`). Only `cargo build` and Clippy ran. Unverified assumption: the webview's `fetch` carries the `Origin` header the exchange requires.
+- Spec status moved from draft to agreed (2026-11-23).
+- Review follow-ups: the exchange now waits for a page load on the app's own origin (a pending code, run by the page-load hook) and reloads only when the exchange succeeds; `build.rs` creates `capabilities/` itself (a fresh clone has none); the pre-push gate fails closed when it cannot diff the pushed range.
+- Open decision, not changed here: the deep link carries no app-side `state`, so a web page could open `recapz://signed-in?code=` with a code from the attacker's own sign-in and leave a member in that session (login CSRF). Fixing it needs a server change (bind the code to a value the app generated before opening the browser); suggest a follow-up ticket after #343.
+- Not done: a CSP for the remote webview, and handing links outside `base_url` to the system browser.
