@@ -12,10 +12,11 @@ beforeEach(() => {
   invoke = vi.fn(async (cmd: string) => (cmd === 'audio_permission' ? permission : undefined))
   vi.stubGlobal('WebSocket', Object.assign(
     class {
+      url: string
       sent: unknown[] = []
       readyState = 1
       binaryType = ''
-      constructor(public url: string) { sockets.push(this) }
+      constructor(url: string) { this.url = url; sockets.push(this) }
       send(d: unknown) { this.sent.push(d) }
       close() {}
     },
