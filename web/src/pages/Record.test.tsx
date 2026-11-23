@@ -130,3 +130,18 @@ test('another tab watching the same live view has no recorder bar', async () => 
   expect(await screen.findByRole('heading', { name: 'Client call' })).toBeTruthy()
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Recorder' })).toBeNull())
 })
+
+test('in the desktop app the dialog offers Meeting app and In-room, with the music hint, and no tab mode', async () => {
+  vi.stubGlobal('__TAURI__', {})
+  try {
+    const d = await openDialog()
+    expect(within(d).getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual([
+      expect.stringContaining('Meeting app'),
+      expect.stringContaining('In-room'),
+    ])
+    expect(within(d).getByText(/turn off other music and videos/)).toBeTruthy()
+    expect(within(d).queryByText(/Meeting tab/)).toBeNull()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

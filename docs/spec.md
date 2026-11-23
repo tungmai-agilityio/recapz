@@ -15,7 +15,7 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Ask | Question box over all accessible meetings, answers cite exact moments |
 | Live view | Running transcript and talk time during a call |
 | Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/specs/live-ask.md`) |
-| Browser recording | A member records a call from their own browser: the meeting tab's audio plus their microphone ("Meeting tab"), or the microphone only ("In-room"), streamed live to the server (`docs/specs/browser-recording.md`) |
+| Browser recording | A member records a call from their own browser: the meeting tab's audio plus their microphone ("Meeting tab"), or the microphone only ("In-room"), streamed live to the server (`docs/specs/browser-recording.md`). In the macOS desktop app the same dialog records the Mac's system audio plus the microphone ("Meeting app") through native capture (`docs/specs/desktop-app.md`) |
 | Recorder bar | In the live view of the tab that is recording: elapsed time, input levels, Stop, Stop and discard |
 | Upload | Process an audio or video file the notetaker did not record |
 | Members | Google sign-in; admins invite by email, remove people, change roles |

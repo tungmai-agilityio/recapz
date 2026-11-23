@@ -3,6 +3,7 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { startRecording, type MeetingLanguage } from '../api'
 import { CaptureError, startCapture, type Capture, type CaptureMode } from '../capture/capture'
+import { inDesktopApp } from '../capture/native'
 import { FrameSocket } from '../capture/socket'
 import { clock } from '../clock'
 import { Button } from '../ui/Button'
@@ -22,6 +23,11 @@ function canRecordTab() {
   return !!ua && !ua.mobile && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
 }
 
+const APP_MODES = [
+  { value: 'tab', label: 'Meeting app', hint: 'The call in Zoom, Teams, Meet or any app on this Mac, plus your microphone. Use headphones, and turn off other music and videos: everything the Mac plays is recorded.' },
+  { value: 'room', label: 'In-room', hint: 'Your microphone only, for people in the same room.' },
+]
+
 const MODES = [
   { value: 'tab', label: 'Meeting tab', hint: 'The call in another tab of this browser, plus your microphone. Share the tab with "Share tab audio" on.' },
   { value: 'room', label: 'In-room', hint: 'Your microphone only, for people in the same room.' },
@@ -37,7 +43,8 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   const [told, setTold] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const supported = canRecordTab()
+  const desktop = inDesktopApp()
+  const supported = desktop || canRecordTab()
   const notice = `This meeting is recorded with Recapz. The audio is transcribed to write the meeting report.`
 
   // While starting, closing would leave start() running on an unmounted dialog.
@@ -91,7 +98,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
                 </select>
               )}
             </Field>
-            <Choice label="What to record" options={MODES} value={mode} onChange={(v) => setMode(v as CaptureMode)} />
+            <Choice label="What to record" options={desktop ? APP_MODES : MODES} value={mode} onChange={(v) => setMode(v as CaptureMode)} />
             <label className="grid grid-cols-[18px_1fr] gap-2.5 text-sm">
               <input type="checkbox" checked={told} onChange={(e) => setTold(e.target.checked)} className="mt-1 accent-primary" />
               <span>I have told everyone in this meeting that it is recorded.</span>
@@ -145,7 +152,7 @@ export function RecorderBar({ id, ended }: { id: string; ended: boolean }) {
   }, [ended, capture])
 
   if (!rec || !capture || capture.state === 'stopped') return null
-  const meters: [string, number | undefined][] = [['Microphone', capture.levels.mic], ['Meeting tab', capture.levels.tab]]
+  const meters: [string, number | undefined][] = capture.native ? [['Audio', capture.levels.mic]] : [['Microphone', capture.levels.mic], ['Meeting tab', capture.levels.tab]]
   return (
     <div role="region" aria-label="Recorder" className="frame flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-4">
@@ -162,7 +169,7 @@ export function RecorderBar({ id, ended }: { id: string; ended: boolean }) {
       </div>
       {capture.state === 'reconnecting' && <p role="status" className="text-sm text-mute">Connection lost. Reconnecting; up to 60 s of audio is kept meanwhile.</p>}
       {capture.dropped > 0 && <p role="alert" className="text-sm text-bad">The connection was down for over 60 s, so {(capture.dropped / 10).toFixed(0)} s of audio was lost.</p>}
-      {capture.tabEnded && <p role="alert" className="text-sm text-bad">The meeting tab stopped sharing its audio. Only your microphone is recorded now.</p>}
+      {capture.tabEnded && <p role="alert" className="text-sm text-bad">{capture.native ? 'System audio stopped. Only your microphone is recorded now.' : 'The meeting tab stopped sharing its audio. Only your microphone is recorded now.'}</p>}
       {discarding && (
         <ConfirmDialog title="Stop and discard?" confirmLabel="Discard recording" onCancel={() => setDiscarding(false)}
           onConfirm={() => { finish(() => capture.discard()); toast('Recording discarded'); navigate('/') }}>
