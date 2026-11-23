@@ -254,3 +254,52 @@ async fn the_exchange_needs_this_sites_origin_and_the_csrf_token_of_a_stale_sess
         StatusCode::OK
     );
 }
+
+#[tokio::test]
+async fn an_abandoned_desktop_sign_in_does_not_hijack_the_next_web_sign_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path()).await;
+    // Starts /auth/desktop and never finishes; the browser keeps the flag cookie.
+    let abandoned = send(
+        &app,
+        Request::get("/auth/desktop").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let flag = abandoned
+        .cookies
+        .iter()
+        .find(|c| c.starts_with("recapz_desktop="))
+        .unwrap()
+        .clone();
+
+    let start = send(
+        &app,
+        Request::get("/auth/google")
+            .header(header::COOKIE, &flag)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let state = start
+        .cookies
+        .iter()
+        .find_map(|c| c.strip_prefix("recapz_oauth_state="))
+        .unwrap()
+        .to_owned();
+    // The browser applies the removal and keeps only the new state cookie.
+    let cb = send(
+        &app,
+        Request::get(format!("/auth/callback?code=boss&state={state}"))
+            .header(header::COOKIE, format!("recapz_oauth_state={state}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(cb.location.as_deref(), Some("/"));
+    assert!(cb.cookies.iter().any(|c| c.starts_with("recapz_session=")));
+    assert!(
+        start.cookies.iter().any(|c| c == "recapz_desktop="),
+        "google_start clears the flag: {:?}",
+        start.cookies
+    );
+}

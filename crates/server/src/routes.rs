@@ -352,6 +352,13 @@ async fn google_start(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar,
         .secure(app.secure())
         .same_site(SameSite::Lax)
         .build();
+    // A desktop sign-in that was abandoned must not turn this web sign-in into a desktop one;
+    // `desktop_auth::start` adds the flag again after calling this.
+    let jar = jar.remove(
+        Cookie::build(desktop_auth::FLAG_COOKIE)
+            .path("/auth")
+            .build(),
+    );
     Ok((jar.add(c), Redirect::to(&url)))
 }
 
