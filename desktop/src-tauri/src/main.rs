@@ -1,5 +1,7 @@
 //! Thin macOS shell: one window on the Recapz server. The page is the normal web app; Google sign-in runs in
 //! the system browser (Google blocks embedded webviews) and comes back as `recapz://signed-in?code=…`.
+mod audio;
+
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -91,6 +93,11 @@ fn signed_in(app: &AppHandle, urls: &[tauri::Url]) {
 
 fn main() {
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            audio::audio_start,
+            audio::audio_stop,
+            audio::audio_permission
+        ])
         // A second launch (or a deep link while running) reaches the running app, which handles the URL below.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_window(app)

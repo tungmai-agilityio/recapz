@@ -226,3 +226,12 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Review follow-ups: the exchange now waits for a page load on the app's own origin (a pending code, run by the page-load hook) and reloads only when the exchange succeeds; `build.rs` creates `capabilities/` itself (a fresh clone has none); the pre-push gate fails closed when it cannot diff the pushed range.
 - Open decision, not changed here: the deep link carries no app-side `state`, so a web page could open `recapz://signed-in?code=` with a code from the attacker's own sign-in and leave a member in that session (login CSRF). Fixing it needs a server change (bind the code to a value the app generated before opening the browser); suggest a follow-up ticket after #343.
 - Not done: a CSP for the remote webview, and handing links outside `base_url` to the system browser.
+
+## System audio tap (#345)
+- Global Core Audio process tap (`initStereoGlobalTapButExcludeProcesses([])`, unmuted, private) inside a private aggregate device with the tap as its only sub-device, no output device. Frames: downmix to mono, box-filter resample to 16 kHz, round to i16, cut into 1600-sample frames, sent as raw little-endian bytes (3200 per message) over a `Channel<InvokeResponseBody>`.
+- The resampler and framer live in `audio/frame.rs` (not `tap.rs`, as the ticket listed) so the pure logic is unit tested apart from the macOS calls and the mic ticket can reuse it. The tests assert exact sample counts (one second at 48 000, 44 100 and 16 000 Hz gives 10 frames).
+- `audio_permission` tries to create a tap and reports `"granted"` or the OSStatus error. Assumption: a denied grant fails the create or yields silence; macOS has no public preflight for audio capture, so a silent tap would not be caught here.
+- The audio callback locks a mutex and allocates; fine at 100 ms-scale buffers, revisit if the 30-minute hidden-window test shows drops.
+- Capability: `build.rs` now registers the three commands as an app manifest, and the generated `capabilities/base-url.json` grants only `allow-audio-start/stop/permission` to `base_url/*`.
+- Not verified (no mic/audio grant or call on this machine): a real tap, the permission prompt, a Zoom call, the AirPods switch (a gap over 2 s is untested; the tap has no output-device binding by design), App Nap with a covered window. Only `cargo build`, Clippy and the unit tests ran.
+- Open: the deep link carries no app-side `state` (filed as its own ticket).
