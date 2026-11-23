@@ -1,4 +1,4 @@
-.PHONY: dev local hooks notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
+.PHONY: dev local hooks desktop-check notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
 
 dev:
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -45,6 +45,10 @@ live-stop:
 pr-check:
 	./scripts/check-commits.sh origin/main..HEAD "$(or $(TITLE),$$(git log -1 --format=%s))" "$$(git branch --show-current)"
 	node scripts/pr-size.mjs origin/main
+
+# The macOS app (its own workspace, never built by CI). Build it with RECAPZ_BASE_URL=https://your.server.
+desktop-check:
+	cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings
 
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:

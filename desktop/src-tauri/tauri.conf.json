@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Recapz",
+  "version": "0.1.0",
+  "identifier": "com.recapz.desktop",
+  "build": { "frontendDist": "../ui" },
+  "app": { "windows": [], "security": { "csp": null } },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "icon": ["icons/icon.png"],
+    "macOS": { "minimumSystemVersion": "14.2" }
+  },
+  "plugins": { "deep-link": { "desktop": { "schemes": ["recapz"] } } }
+}
