@@ -247,3 +247,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - VoiceProcessingIO spike: not run. It cannot be judged without a live Zoom call, which this machine does not have, and the ticket adopts it only if it cancels Zoom's output. Not adopted, so the dialog keeps recommending headphones. Left for a hands-on check; adopting it would change the mic open path only.
 - Hardened runtime: the app is signed with a self-signed certificate and no entitlements file exists. If hardened runtime is ever enabled, `com.apple.security.device.audio-input` is needed for the mic.
 - Not verified (no mic grant, no call): a real mic capture, the permission prompts and the "which one is missing" answers, the device swap (AirPods, wired headset) and the rate listener, and the mixer on live audio. Only `cargo fmt`, Clippy and the unit tests ran.
+
+## #347 Record dialog in the desktop app
+
+- Detection is `window.__TAURI__`, which only exists with `withGlobalTauri`; it was not set, so `tauri.conf.json` now sets it (one line). The capability still limits IPC to `base_url` and the three audio commands.
+- `web/src/capture/native.ts` runs the native capture: permission check, `audio_start` with a `Channel`, frames to the existing `FrameSocket` (60 s buffer unchanged), `audio_stop` on stop or discard. "Meeting app" sends `meeting`, "In-room" `in_room` (the server `mode` stays `tab`/`room`).
+- Assumption: the native side sends no levels, so the page takes the peak of each 100 ms frame and shows one "Audio" meter.
+- Not done, needs Rust: the menu-bar red dot (no command to set it) and the "system audio stopped" signal (no native event for it). The warning text is wired to `tabEnded` and shows "System audio stopped" once a native event sets it. Both belong in a small follow-up.
+- Not verified: recording in the running app, a Zoom call and a Safari Meet call with headphones, and the 30-minute minimized-window run. Only `pnpm test`, lint and the type check ran.

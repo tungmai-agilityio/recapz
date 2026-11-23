@@ -1,5 +1,6 @@
 import { FrameSocket, type SocketState } from './socket'
 import type { Frame } from './framer'
+import { inDesktopApp, startNativeCapture } from './native'
 import workletUrl from './worklet.ts?worker&url'
 
 /** "tab": the shared meeting tab's audio plus the microphone. "room": the microphone only. */
@@ -13,10 +14,12 @@ export class CaptureError extends Error {}
 
 export type Capture = {
   readonly mode: CaptureMode
+  /** True when the desktop app captures the Mac's audio; `levels.mic` is then the mixed level. */
+  readonly native?: boolean
   state: CaptureState
   /** Latest peak per input, 0 to 1: the microphone, and the tab in "tab" mode. */
   levels: { mic: number; tab?: number }
-  /** True once the shared tab stopped sending audio (the member ended the share or closed the tab). */
+  /** True once the shared tab (or, in the desktop app, the system audio) stopped sending audio (the member ended the share or closed the tab). */
   tabEnded: boolean
   /** Frames lost because the network was down for over 60 s. */
   dropped: number
@@ -28,6 +31,7 @@ export type Capture = {
 
 /** Starts recording and streams 16 kHz frames to `socketUrl` (a path on this origin, or a ws(s) URL). */
 export async function startCapture(mode: CaptureMode, socketUrl: string): Promise<Capture> {
+  if (inDesktopApp()) return startNativeCapture(mode, wsUrl(socketUrl))
   const streams: MediaStream[] = []
   const release = () => streams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
   let tab: MediaStream | undefined
