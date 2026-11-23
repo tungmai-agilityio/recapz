@@ -72,6 +72,8 @@ export async function startNativeCapture(mode: CaptureMode, wsUrl: string): Prom
     socket.discard()
     throw new CaptureError(typeof e === 'string' ? e : 'The app could not start recording.')
   }
+  // The server may have ended the recording while the app was starting; then finish() already cleaned up.
+  if (capture.state === 'stopped') return capture
   void invoke('recording_state', { on: true })
   if (mode === 'tab') window.addEventListener(SYSTEM_STOPPED, onSystemStopped)
   return capture

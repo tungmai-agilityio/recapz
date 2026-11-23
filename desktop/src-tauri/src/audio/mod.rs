@@ -63,6 +63,8 @@ pub async fn audio_start(
                 tap_beat.beat();
                 tap_side(f)
             })?;
+            // Time spent starting the tap is not silence.
+            beat.beat();
             // The page cannot listen for app events (the capability allows commands only), so it gets a DOM event.
             let watch = watch::Watchdog::start(beat, move || {
                 let _ = window
