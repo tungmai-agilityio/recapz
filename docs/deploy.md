@@ -226,3 +226,23 @@ If the job fails: `DEPLOY_KEY is not set` (or another variable) means step 2 is 
 ## After a deploy
 
 `scripts/smoke-deploy.sh https://<domain>` checks health, the embedded web app, an asset's cache header, a client route, that the API refuses an unauthenticated call, and that http redirects to https. It needs only `curl`, no login and no provider calls. The Meet call check is separate: `scripts/smoke-join.sh`.
+
+## macOS app (desktop)
+
+The app is built on the maintainer's Mac, never in CI (macOS runners are billed 10x on the free plan), and attached to the GitHub release. It is signed with a self-signed "Recapz Local" certificate, so there is no notarization: members right-click the app → **Open** once. Keep signing with the same certificate: a new one counts as a different app and macOS asks again for the microphone and audio-capture grants.
+
+One time on the Mac:
+
+```bash
+cargo install tauri-cli --version '^2' --locked
+./scripts/desktop-cert.sh
+```
+
+Each release, after `gh release create`:
+
+```bash
+make desktop-dmg    # builds, signs with "Recapz Local" and writes ./Recapz.dmg
+gh release upload <tag> Recapz.dmg
+```
+
+`make desktop-dmg` bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).

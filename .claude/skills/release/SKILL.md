@@ -27,7 +27,10 @@ Never touch the production host, its config or secrets. The maintainer runs the 
 6. **Show the maintainer** the version, notes and checklist and ask for confirmation before creating anything. On a
    yes: `gh release create <version> --target main --title <version> --notes-file <file>`. This creates the tag on
    the server; do not push tags by hand. On a no or silence, create nothing.
-7. Print the checklist once more as the install commands to run, and stop. Do not run them.
+7. **Attach the macOS app** (maintainer's Mac only, see "macOS app" in `docs/deploy.md`): run `make desktop-dmg`, then
+   `gh release upload <version> Recapz.dmg`. Skip with a one-line note when not on the Mac or when `desktop/` did
+   not change and the last release already carries a `.dmg`.
+8. Print the checklist once more as the install commands to run, and stop. Do not run them.
 
 ## Escalate
 

@@ -1,4 +1,4 @@
-.PHONY: dev local hooks desktop-check notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
+.PHONY: dev local hooks desktop-check desktop-dmgnotetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
 
 dev:
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -49,6 +49,16 @@ pr-check:
 # The macOS app (its own workspace, never built by CI). Build it with RECAPZ_BASE_URL=https://your.server.
 desktop-check:
 	cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings
+
+# Signed Recapz.dmg for the release (macOS only; run scripts/desktop-cert.sh once first). The URL is baked in.
+# Needs `cargo install tauri-cli --version '^2' --locked`.
+DESKTOP_BASE_URL ?= https://recapz.tungmai.com
+desktop-dmg:
+	@security find-certificate -c "Recapz Local" >/dev/null 2>&1 || { echo "no 'Recapz Local' certificate: run scripts/desktop-cert.sh once"; exit 1; }
+	cd desktop/src-tauri && RECAPZ_BASE_URL=$(DESKTOP_BASE_URL) APPLE_SIGNING_IDENTITY="Recapz Local" cargo tauri build
+	cp "$$(ls -t desktop/target/release/bundle/dmg/*.dmg | head -1)" Recapz.dmg
+	codesign --verify --deep --strict --verbose=2 "$$(ls -d desktop/target/release/bundle/macos/*.app | head -1)"
+	@echo "Recapz.dmg ready: gh release upload <tag> Recapz.dmg"
 
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:
