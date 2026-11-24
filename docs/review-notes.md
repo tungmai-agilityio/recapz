@@ -277,3 +277,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## desktop-dmg checks for the Tauri CLI
 - `make desktop-dmg` now fails early with the install command when `cargo tauri` is missing (it used to fail with cargo's "no such command: `tauri`"). Assumption: a check with a clear message is enough; no separate `desktop-tools` target, since the install is one command already documented in `docs/deploy.md`. The version range `^2` matches the `tauri = "2"` line in `desktop/src-tauri/Cargo.toml`.
 - Not verified: the full build; the check was run with and without the CLI on PATH only.
+
+## desktop blank window and dmg check
+- Blank window: the window opened `RECAPZ_BASE_URL` directly, so an unreachable server (recapz.tungmai.com did not answer on ports 80 or 443 from the maintainer's Mac when checked) left a white window with no message. Assumption: that is the cause; nothing else in the config (CSP is null, the remote capability matches the baked URL, `frontendDist` exists) blocks the page, and PR 360 only touches the sign-in flow. The window now opens the bundled `ui/index.html`, which probes `/api/health` and then switches to the server, or shows "Can't reach" with a retry button.
+- `make desktop-dmg`: Tauri deletes `bundle/macos/Recapz.app` after making the DMG, so the build now passes `--bundles app,dmg`; the `.app` stays and `codesign --verify` has something to check. Verified: both `.app` and `.dmg` exist after that build.
+- Verified by the maintainer: a local build pointed at a plain-http test server showed that server's page, so the probe and the switch to the server work. Not verified: the "Can't reach" page on screen, a live https server, and the signed build with the "Recapz Local" identity.
