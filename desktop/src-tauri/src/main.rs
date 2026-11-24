@@ -75,9 +75,13 @@ fn show_window(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
-    let url = BASE_URL.parse().expect("RECAPZ_BASE_URL is not a URL");
     let google = format!("{BASE_URL}/auth/google");
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+    // Starts on the bundled page, which opens BASE_URL once the server answers (a dead server must not leave a blank window).
+    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .initialization_script(format!(
+            "window.RECAPZ_BASE_URL = {};",
+            serde_json::Value::String(BASE_URL.into())
+        ))
         .title("Recapz")
         .inner_size(1280.0, 840.0)
         // The sign-in button goes to the system browser, signed in as a desktop sign-in.

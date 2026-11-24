@@ -1,1 +1,26 @@
-<!doctype html><meta charset="utf-8"><title>Recapz</title><body style="font:14px system-ui;padding:2rem">Opening Recapz…
+<!doctype html>
+<meta charset="utf-8">
+<title>Recapz</title>
+<body style="font:14px system-ui;padding:2rem;max-width:32rem;margin:auto">
+<p id="msg">Opening Recapz…</p>
+<button id="retry" hidden>Try again</button>
+<script>
+  // The shell opens this page first, so a server that is down shows a message instead of a blank window.
+  const base = window.RECAPZ_BASE_URL;
+  const msg = document.getElementById("msg");
+  const retry = document.getElementById("retry");
+  async function open() {
+    retry.hidden = true;
+    msg.textContent = "Opening Recapz…";
+    try {
+      // no-cors: only reachability matters, and the answer is opaque from this origin.
+      await fetch(base + "/api/health", { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(8000) });
+      location.replace(base);
+    } catch {
+      msg.textContent = "Can't reach " + base + ". Check your connection or that the server is running.";
+      retry.hidden = false;
+    }
+  }
+  retry.onclick = open;
+  open();
+</script>
