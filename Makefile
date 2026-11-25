@@ -50,17 +50,25 @@ pr-check:
 desktop-check:
 	cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings
 
-# Signed Recapz.dmg for the release (macOS only; run scripts/desktop-cert.sh once first). The URL is baked in.
+# Signed Recapz.dmg plus the update files for one release (macOS only; run scripts/desktop-cert.sh once first).
+# `make desktop-dmg VERSION=0.1.3` (the release tag without the v). The URL is baked in. The updater key stays
+# on this Mac: export TAURI_SIGNING_PRIVATE_KEY_PASSWORD, and set UPDATER_KEY if it is not at the default path.
 # Needs `cargo install tauri-cli --version '^2' --locked`.
 DESKTOP_BASE_URL ?= https://recapz.tungmai.com
+UPDATER_KEY ?= $(HOME)/.tauri/recapz-updater.key
+BUNDLE = desktop/target/release/bundle
 desktop-dmg:
+	@test -n "$(VERSION)" || { echo "usage: make desktop-dmg VERSION=x.y.z (the release tag without the v)"; exit 1; }
+	@test -f "$(UPDATER_KEY)" || { echo "no updater key at $(UPDATER_KEY): run cargo tauri signer generate -w $(UPDATER_KEY) once"; exit 1; }
 	@cargo tauri --version >/dev/null 2>&1 || { echo "cargo tauri is missing: run cargo install tauri-cli --version \"^2\" --locked once"; exit 1; }
 	@security find-certificate -c "Recapz Local" >/dev/null 2>&1 || { echo "no 'Recapz Local' certificate: run scripts/desktop-cert.sh once"; exit 1; }
 	# CI=true makes the Tauri bundler pass --skip-jenkins, so create-dmg skips the Finder AppleScript (needs an Automation permission).
-	cd desktop/src-tauri && CI=true RECAPZ_BASE_URL=$(DESKTOP_BASE_URL) APPLE_SIGNING_IDENTITY="Recapz Local" cargo tauri build --bundles app,dmg
-	cp "$$(ls -t desktop/target/release/bundle/dmg/*.dmg | head -1)" Recapz.dmg
-	codesign --verify --deep --strict --verbose=2 "$$(ls -d desktop/target/release/bundle/macos/*.app | head -1)"
-	@echo "Recapz.dmg ready: gh release upload <tag> Recapz.dmg"
+	cd desktop/src-tauri && CI=true RECAPZ_BASE_URL=$(DESKTOP_BASE_URL) APPLE_SIGNING_IDENTITY="Recapz Local" TAURI_SIGNING_PRIVATE_KEY_PATH="$(UPDATER_KEY)" cargo tauri build --bundles app,dmg --config '{"version":"$(VERSION)"}'
+	cp "$$(ls -t $(BUNDLE)/dmg/*.dmg | head -1)" Recapz.dmg
+	cp $(BUNDLE)/macos/Recapz.app.tar.gz $(BUNDLE)/macos/Recapz.app.tar.gz.sig .
+	./scripts/desktop-latest.sh $(VERSION) Recapz.app.tar.gz.sig > latest.json
+	codesign --verify --deep --strict --verbose=2 "$$(ls -d $(BUNDLE)/macos/*.app | head -1)"
+	@echo "ready: gh release upload v$(VERSION) Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig latest.json (latest.json last)"
 
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:
@@ -68,6 +76,7 @@ hooks:
 
 test:
 	./scripts/test-push-guards.sh
+	./scripts/test-desktop-latest.sh
 	./scripts/test-automerge.sh
 	cargo test --workspace
 	pnpm -C web test

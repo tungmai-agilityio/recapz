@@ -1,5 +1,5 @@
 #!/bin/sh
-# Refuses a commit whose author or committer email is not a work address.
+# Refuses a commit whose author or committer email is not a work address, or that stages a signing key.
 # Enable once per clone with `make hooks`.
 for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
   email=$(git var "$who" | sed 's/.*<\(.*\)>.*/\1/')
@@ -11,4 +11,10 @@ for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
       ;;
   esac
 done
+# The updater signing key must never be committed (docs/deploy.md, "macOS app").
+if git diff --cached --name-only | grep -qE '\.key$' ||
+  git diff --cached -U0 | grep -qiE '^\+untrusted comment: .*secret key'; then
+  echo "pre-commit: a private signing key is staged; unstage it" >&2
+  exit 1
+fi
 exit 0

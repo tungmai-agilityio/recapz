@@ -8,4 +8,7 @@ web/dist
 .env*
 .claude/worktrees/
 Recapz.dmg
-Recapz.dmg
+Recapz.app.tar.gz
+Recapz.app.tar.gz.sig
+latest.json
+*.key

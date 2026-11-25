@@ -27,9 +27,14 @@ Never touch the production host, its config or secrets. The maintainer runs the 
 6. **Show the maintainer** the version, notes and checklist and ask for confirmation before creating anything. On a
    yes: `gh release create <version> --target main --title <version> --notes-file <file>`. This creates the tag on
    the server; do not push tags by hand. On a no or silence, create nothing.
-7. **Attach the macOS app** (maintainer's Mac only, see "macOS app" in `docs/deploy.md`): run `make desktop-dmg`, then
-   `gh release upload <version> Recapz.dmg`. Skip with a one-line note when not on the Mac or when `desktop/` did
-   not change and the last release already carries a `.dmg`.
+7. **Attach the macOS app** (maintainer's Mac only, see "macOS app" in `docs/deploy.md`). The newest release must
+   always carry a `latest.json`, or the app's update check gets a 404.
+   - `desktop/` changed since the last tag (or no `.dmg` yet): `make desktop-dmg VERSION=<version without the v>`
+     (needs the updater key on the Mac; never read or print it), then
+     `gh release upload <version> Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig` and `latest.json` last.
+   - `desktop/` unchanged: `gh release download <last tag> -p latest.json` and
+     `gh release upload <version> latest.json` (its absolute URLs still point at the older assets).
+   - Not on the Mac: say that the release has no `latest.json` yet and stop; do not skip silently.
 8. Print the checklist once more as the install commands to run, and stop. Do not run them.
 
 ## Escalate
