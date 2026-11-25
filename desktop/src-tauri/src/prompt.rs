@@ -119,6 +119,7 @@ pub fn on_event(app: &AppHandle, e: Event) {
         Event::Started(name) => {
             let recording = crate::RECORDING.load(Ordering::Relaxed);
             if with_prefs(app, |p| p.should_ask(recording, name), false) {
+                *ASKING.lock().unwrap() = Some(name.into());
                 let app2 = app.clone();
                 let _ = app.run_on_main_thread(move || open(&app2, name));
             }
@@ -127,14 +128,25 @@ pub fn on_event(app: &AppHandle, e: Event) {
             if ASKING.lock().unwrap().as_deref() == Some(name) {
                 close(app);
             }
+            // A Record answer still waiting for the page is about a call that is over now.
+            let mut pending = PENDING.lock().unwrap();
+            if pending.as_deref() == Some(name) {
+                *pending = None;
+            }
+            drop(pending);
             dispatch(app, "recapz-meeting-ended", name);
         }
     }
 }
 
 fn open(app: &AppHandle, name: &str) {
-    close(app);
-    *ASKING.lock().unwrap() = Some(name.into());
+    // The call may have ended, or a recording started, while this waited for the main thread.
+    if ASKING.lock().unwrap().as_deref() != Some(name) || crate::RECORDING.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Some(w) = app.get_webview_window(WINDOW) {
+        let _ = w.destroy();
+    }
     // Top right of the main screen, under the menu bar.
     let x = app
         .primary_monitor()
@@ -208,7 +220,15 @@ pub fn prompt_answer(app: AppHandle, answer: String) {
                 dispatch(&app, "recapz-meeting-detected", &name);
             }
         }
-        "never" => with_prefs(&app, |p| p.never.push(name), true),
+        "never" => with_prefs(
+            &app,
+            |p| {
+                if !p.never.contains(&name) {
+                    p.never.push(name)
+                }
+            },
+            true,
+        ),
         _ => {}
     }
 }
