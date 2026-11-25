@@ -2,6 +2,7 @@
 //! the system browser (Google blocks embedded webviews) and comes back as `recapz://signed-in?code=…`.
 mod audio;
 mod dot;
+mod update;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -209,6 +210,7 @@ fn main() {
                 app,
                 &[
                     &MenuItem::with_id(app, "open", "Open Recapz", true, None::<&str>)?,
+                    &MenuItem::with_id(app, "update", "Check for Updates…", true, None::<&str>)?,
                     &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
                 ],
             )?;
@@ -217,13 +219,16 @@ fn main() {
                 .menu(&menu)
                 .on_menu_event(|app, e| match e.id.as_ref() {
                     "open" => show_window(app),
+                    "update" => update::check_now(app.clone()),
                     _ => app.exit(0),
                 })
                 .build(app)?;
             show_window(app.handle());
+            update::start(app.handle().clone());
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // The red button closes the window (the app stays in the Dock and menu bar). While recording it asks first.
         .on_window_event(|w, e| {
             if let WindowEvent::Destroyed = e {

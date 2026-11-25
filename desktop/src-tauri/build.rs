@@ -6,6 +6,12 @@ fn main() {
     let base = env::var("RECAPZ_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".into());
     let base = base.trim_end_matches('/');
     println!("cargo:rustc-env=RECAPZ_BASE_URL={base}");
+    // Where the app looks for `latest.json`; a test build points it at a local server.
+    println!("cargo:rerun-if-env-changed=RECAPZ_UPDATE_URL");
+    let update = env::var("RECAPZ_UPDATE_URL").unwrap_or_else(|_| {
+        "https://github.com/tungmai-agilityio/recapz/releases/latest/download/latest.json".into()
+    });
+    println!("cargo:rustc-env=RECAPZ_UPDATE_URL={update}");
     // Remote IPC is allowed from this origin only, and only for the audio commands the menu-bar recording dot and the privacy settings link.
     let cap = serde_json::json!({
         "identifier": "base-url",
