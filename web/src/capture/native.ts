@@ -21,14 +21,19 @@ const MISSING: Record<string, string> = {
   audio_capture: 'System Audio Recording',
 }
 
+/** Opens the System Settings pane for a missing permission (desktop app only). */
+export const openPrivacySettings = (pane: string) =>
+  window.__TAURI__!.core.invoke('open_privacy_settings', { pane }).then(() => {}, () => {})
+
 /** Starts the app's native capture and streams its 16 kHz frames to `socketUrl` (a ws(s) URL). */
 export async function startNativeCapture(mode: CaptureMode, wsUrl: string): Promise<Capture> {
   const { invoke, Channel } = window.__TAURI__!.core
   const native = mode === 'tab' ? 'meeting' : 'in_room'
   const granted = String(await invoke('audio_permission', { mode: native }))
   if (granted !== 'granted') {
-    const names = granted.split(',').map((m) => MISSING[m] ?? m).join(' and ')
-    throw new CaptureError(`Recapz needs permission for ${names}. Open System Settings, Privacy & Security, turn on Recapz there, then try again.`)
+    const missing = granted.split(',')
+    const names = missing.map((m) => MISSING[m] ?? m).join(' and ')
+    throw new CaptureError(`Recapz needs permission for ${names}. Open System Settings, Privacy & Security, turn on Recapz there, then try again.`, missing[0])
   }
 
   const capture: Capture = {

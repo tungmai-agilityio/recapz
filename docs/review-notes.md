@@ -287,3 +287,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Cause: the window's close handler always called `prevent_close` and minimized, so the red button never closed anything. The spec said "Close minimizes", which is what Tung reported as broken, so the spec line now says close closes.
 - Assumption (spec was silent on recording): with no recording the window closes and the app stays in the Dock and menu bar (Dock click reopens it); while recording, a dialog asks "Stop and close" or "Keep recording". Quit (menu bar, Cmd+Q, tray Quit) always exits, and `RunEvent::Exit` stops the capture. New dependency `tauri-plugin-dialog` for that dialog.
 - Not verified: clicking the button in a running app and Cmd+Q; only fmt and Clippy ran (no test is feasible for window events).
+
+## Desktop permission link
+- The permission error in the app has an "Open System Settings" button. It runs `open x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone` (or `Privacy_AudioCapture` for the system audio). Assumption: `Privacy_AudioCapture` lands on the System Audio Recording section on macOS 14.4+; not clicked on a real Mac yet. If it opens the wrong page, switch to `Privacy_ScreenCapture`.
+- When both permissions are missing the button opens the microphone pane first; after the member grants it and tries again, the system audio error shows its own button.
