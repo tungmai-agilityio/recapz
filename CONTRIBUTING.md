@@ -37,6 +37,7 @@
 ## Pull requests
 - One concern per PR; keep it reviewable. Title uses the same `type(scope): summary` format.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.
+- Update the docs the change touches in the same PR (`docs/README.md` says which doc owns what).
 - CI runs `guards`, `rust` and `web` on every PR. Commit, title, branch and size rules are not checked in CI: before opening a PR run the scoped checks in
   `CLAUDE.md` (Testing & Verification), `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and
   `node scripts/pr-size.mjs origin/main`.

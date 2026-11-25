@@ -14,6 +14,7 @@ One Rust binary (axum) serves an embedded React + Vite + TypeScript + Tailwind a
 - `crates/llm`: `Provider`, per-task `Router`, cost accounting; OpenAI default, Anthropic and OpenAI-compatible adapters. Versioned prompts in `crates/llm/prompts`.
 - `crates/notetaker`: browser-free logic, opt-out detection, speaker matching.
 - `crates/eval`: speech/prompt evaluation (`cargo run -p eval`).
+- `desktop/`: macOS Tauri app, its own Cargo workspace (`make desktop-check`).
 - `web/`: pages in `src/pages`, primitives in `src/ui`, tokens in `src/index.css`.
 
 ## Engineering Rules
