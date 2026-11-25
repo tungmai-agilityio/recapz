@@ -3,13 +3,39 @@
   "productName": "Recapz",
   "version": "0.1.0",
   "identifier": "com.recapz.desktop",
-  "build": { "frontendDist": "../ui" },
-  "app": { "windows": [], "withGlobalTauri": true, "security": { "csp": null } },
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": ["dmg"],
-    "icon": ["icons/icon.png"],
-    "macOS": { "minimumSystemVersion": "14.2" }
+    "targets": [
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.2"
+    },
+    "createUpdaterArtifacts": true
   },
-  "plugins": { "deep-link": { "desktop": { "schemes": ["recapz"] } } }
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "recapz"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0RjY5NUQxRDdCNDMyNTAKUldSUU1yVFgwWlgyNUhqdzcvQVNFeTI0YVNsakc5ZlV4aVNXeXJpQzBjUEs2SU1qd1pWL1Q0SnoK"
+    }
+  }
 }
