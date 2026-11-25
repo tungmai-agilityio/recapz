@@ -22,6 +22,20 @@ make local
 
 Open http://localhost:5173. Without `[llm]` the app still transcribes but writes no reports.
 
+## Desktop app against your local server (macOS)
+
+With `make local` running, `make desktop-run` builds the macOS app for `http://localhost:5173`, quits a running Recapz, replaces `/Applications/Recapz.app` with the new build and opens it.
+
+```sh
+make desktop-run                  # local web app, http://localhost:5173
+make desktop-run TARGET=prod      # hosted server, https://recapz.tungmai.com (what make desktop-dmg bakes in)
+make desktop-run URL=http://localhost:8080   # any other server (DESKTOP_BASE_URL=... also works)
+make desktop-run SKIP_BUILD=1     # reuse the last build, only reinstall and relaunch
+make desktop-run HELP=1           # usage
+```
+
+The URL is baked in at build time; for a local server keep it equal to `base_url` in `config.toml`. It needs `cargo tauri` and the "Recapz Local" certificate (`docs/deploy.md`, "macOS app"), not the updater key. The build is version `0.0.0` and its update URL is a dead local port, so a published release never replaces it.
+
 ## Sign in (dev login)
 
 Open http://localhost:5173. On the sign-in screen the dev server shows a "Dev login (local only)" form: enter the `bootstrap_admin_email` and press Sign in. The form is not in production builds. If it says rejected, `dev_login = true` is missing from the `config.toml` the server loaded (restart `make local` after editing).
