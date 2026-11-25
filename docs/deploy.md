@@ -238,11 +238,21 @@ cargo install tauri-cli --version '^2' --locked
 ./scripts/desktop-cert.sh
 ```
 
-Each release, after `gh release create`:
+The app updates itself (spec: `docs/specs/desktop-app.md`, "Auto-update"). Updates are signed with a separate key, created once on this Mac and never copied anywhere else (no CI, no repository, no chat). Keep it and its password in a password manager: without the key, installed apps can no longer be updated. `*.key` is git-ignored and the pre-commit hook refuses to commit a private key. Only the public key (`plugins.updater.pubkey` in `tauri.conf.json`) is committed.
 
 ```bash
-make desktop-dmg    # builds, signs with "Recapz Local" and writes ./Recapz.dmg
-gh release upload <tag> Recapz.dmg
+cargo tauri signer generate -w ~/.tauri/recapz-updater.key
 ```
+
+Each release, after `gh release create` (the version is the tag without the `v`):
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='…'   # the key's password
+make desktop-dmg VERSION=0.1.3   # builds and signs; writes Recapz.dmg, Recapz.app.tar.gz, its .sig and latest.json
+gh release upload v0.1.3 Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig
+gh release upload v0.1.3 latest.json   # last: the app sees the update once this is up
+```
+
+Install the new build on your own Mac before uploading `latest.json`. The newest release must always have a `latest.json` (the app reads `releases/latest/download/latest.json`). When `desktop/` did not change, copy the previous one instead of building: `gh release download <previous tag> -p latest.json` then `gh release upload <tag> latest.json`; its URLs still point at the older assets. Members on a build from before the updater install the `.dmg` by hand once.
 
 `make desktop-dmg` stops with a message if `cargo tauri` is not installed (the first command above). It bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).
