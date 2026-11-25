@@ -1,5 +1,11 @@
 # Deploy (systemd)
 
+**Status (2026-11-25):** the Droplet was deleted to save cost (stated in `docs/review-notes.md`, "make desktop-run"; not
+verified from the repository). `https://recapz.tungmai.com/api/health` did not answer within 8 seconds when checked on
+2026-11-25, while the DNS name still resolved (to the old host, unverified). Nothing is deployed now, so "today" and "current Droplet" below
+describe the last host. To run again, follow "Destroy and rebuild the Droplet", "Rebuild from scratch". Also: the
+repository has no GitHub release yet (tags `v0.1.0` to `v0.1.2` only, checked 2026-11-25).
+
 On a fresh Debian 12 or 13 host, `sudo scripts/provision-host.sh` does the packages, user, directories, unit files, firewall and key-only SSH below; then continue from the config and env files. Debian, not Ubuntu: Ubuntu's `chromium` is a snap that breaks under the service's hardening *(unverified here)*.
 
 ## Destroy and rebuild the Droplet
@@ -68,8 +74,8 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
 ```
 
-- **Cloud:** a DigitalOcean Droplet in San Francisco, billed hourly (destroy it when unused). It is a plain Linux VM, so everything below applies unchanged. DigitalOcean's optional Droplet backups are not enabled, so copy `/var/backups/recapz` off the host. Debian 13 is what runs today and what the rebuild steps assume; `scripts/provision-host.sh` was first written against Debian 12 (it only checks for Debian, not the version). A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
-- **Target host (hosted speech, `docs/decisions/hosted-speech.md`):** 2 vCPU, 4 GB RAM (the current Droplet has a 79 GB disk; about 40 GB is enough), `max_concurrent_calls = 2`, no GPU. Chromium (about 1 GB per call) drives memory; WAV audio (about 115 MB per hour) drives disk. On 2 GB RAM use `max_concurrent_calls = 1`. The speech and LLM keys go in `/etc/recapz/recapz.env` with `RECAPZ_SECRET_KEY`, never in `config.toml`.
+- **Cloud:** a DigitalOcean Droplet in San Francisco, billed hourly (destroy it when unused; none exists now, see Status above). It is a plain Linux VM, so everything below applies unchanged. DigitalOcean's optional Droplet backups are not enabled, so copy `/var/backups/recapz` off the host. Debian 13 is what the last host ran and what the rebuild steps assume; `scripts/provision-host.sh` was first written against Debian 12 (it only checks for Debian, not the version). A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
+- **Target host (hosted speech, `docs/decisions/hosted-speech.md`):** 2 vCPU, 4 GB RAM (the last Droplet had a 79 GB disk; about 40 GB is enough), `max_concurrent_calls = 2`, no GPU. Chromium (about 1 GB per call) drives memory; WAV audio (about 115 MB per hour) drives disk. On 2 GB RAM use `max_concurrent_calls = 1`. The speech and LLM keys go in `/etc/recapz/recapz.env` with `RECAPZ_SECRET_KEY`, never in `config.toml`.
 - `make release` is a plain `cargo build --release`: no GPU or CUDA toolkit is needed to build or run (a C compiler is, for the TLS library).
 - `bind` stays `127.0.0.1:8080`; Caddy terminates TLS in front of it: `sudo apt install caddy`, put `deploy/Caddyfile` at `/etc/caddy/Caddyfile` (the host is `recapz.tungmai.com`; change it if the domain changes; its DNS record must already point at the host), `sudo systemctl reload caddy`. Set `base_url` to the public https URL. Allow only ports 22, 80 and 443 in the host and cloud firewall. DNS: `tungmai.com` is on Cloudflare with a DNS-only (not proxied) A record pointing at the Droplet; the IP is not recorded here.
 - Set `dev_login = false` in production.
@@ -259,4 +265,7 @@ To try the updater without a release, run `make desktop-update-test`. It builds 
 
 Install the new build on your own Mac before uploading `latest.json`. The newest release must always have a `latest.json` (the app reads `releases/latest/download/latest.json`). When `desktop/` did not change, copy the previous one instead of building: `gh release download <previous tag> -p latest.json` then `gh release upload <tag> latest.json`; its URLs still point at the older assets. Members on a build from before the updater install the `.dmg` by hand once.
 
-`make desktop-dmg` stops with a message if `cargo tauri` is not installed (the first command above). It bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).
+`make desktop-dmg` stops with a message if `cargo tauri` is not installed (the first command above). It bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. The updater reads `releases/latest/download/latest.json`, which does not exist until the first GitHub release carries desktop
+assets, so until then the app's update check fails (logged only, nothing shown). A production build also needs the hosted
+server back; with none running the app shows its "Can't reach" page (`TARGET=prod` builds were only checked with `make -n`).
+Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).
