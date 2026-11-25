@@ -331,3 +331,11 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Verified on the maintainer's Mac: listing process objects and reading their bundle ids needs no permission prompt (from `cargo test`), and running Chrome and Slack helpers (`com.google.Chrome.helper`, `com.tinyspeck.slackmacgap.helper`) map to their apps.
 - Assumptions: the bundle ids for Zoom, Teams, Webex, FaceTime, Discord, Edge and Arc are from general knowledge; Safari's microphone shows up on `com.apple.WebKit.GPU`; 5 s to start and 15 s to end are guesses to tune after real calls; polling is cheap enough (not measured).
 - Not verified: `IsRunningInput` turning on during a real Zoom, Teams or Meet call, whether muting releases the microphone, and the inside of the running app (only the unit tests ran, the app was not launched).
+
+## Meeting detection, ticket 2
+- A detected call opens a borderless, always-on-top window (bundled `ui/prompt.html`, 360×128, top right) with Record / Ignore / Never for <app>. It closes on any answer, after 30 s, or when the call ends. Only that window may call `prompt_answer` (its own capability, no remote URL); the remote page gets no new command.
+- Record shows the main window and dispatches `recapz-meeting-detected` (`detail.app`) to the page; if the page is not on `base_url` yet, it is sent when it loads. A call's end dispatches `recapz-meeting-ended`. Nothing listens yet: the page side is ticket 3.
+- Settings live in `detect.json` in the app's config folder (`detect`, default on; `never`, app names). A missing or broken file means the defaults. With "Detect Meetings" off the thread stops polling.
+- Window events now act on the main window only, so the prompt closing never stops a recording or clears the red dot.
+- Assumptions: Ignore needs no state, because the detector fires again only after the app released the microphone for 15 s; a call already running when the switch is turned on is noticed after 5 s like a new one; English copy, like the rest of the app.
+- Not verified: the app was not launched. Not checked: that the prompt window does not take focus from Zoom (`focused(false)`), shows above full-screen apps, sits under the menu bar on a second screen, and that the events reach the page.

@@ -3,6 +3,7 @@
 //! needs no permission and never opens the microphone itself.
 use objc2_core_audio::*;
 use objc2_core_foundation::{CFRetained, CFString};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::BTreeMap, ffi::c_void, ptr::NonNull, thread, time::Duration, time::Instant,
 };
@@ -187,12 +188,18 @@ pub fn mic_holders() -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// Polls the microphone holders on its own thread and hands each start and end to `on_event`.
-pub fn start(on_event: impl Fn(Event) + Send + 'static) {
+/// Polls the microphone holders on its own thread and hands each start and end to `on_event`. While `enabled`
+/// is off it does not poll, and a call in progress is forgotten (no end event for it).
+pub fn start(enabled: &'static AtomicBool, on_event: impl Fn(Event) + Send + 'static) {
     thread::spawn(move || {
         let t0 = Instant::now();
         let mut detector = Detector::default();
         loop {
+            if !enabled.load(Ordering::Relaxed) {
+                detector = Detector::default();
+                thread::sleep(POLL);
+                continue;
+            }
             // ponytail: polling every 2 s; switch to Core Audio property listeners if it shows up in CPU use.
             // A failed read is not a release: skip the sample instead of ending a call.
             match mic_holders() {

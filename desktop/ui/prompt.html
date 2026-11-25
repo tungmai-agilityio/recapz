@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Record this meeting?</title>
+<body style="font:13px system-ui;margin:0;padding:14px 16px;-webkit-user-select:none;cursor:default">
+<p style="margin:0 0 12px"><b id="app"></b> is on a call. Record this meeting?</p>
+<div style="display:flex;gap:8px">
+  <button data-answer="record" autofocus>Record</button>
+  <button data-answer="ignore">Ignore</button>
+  <button data-answer="never" id="never"></button>
+</div>
+<script>
+  // Shown by the shell when a meeting app holds the microphone (docs/specs/meeting-detection.md).
+  const app = window.RECAPZ_PROMPT_APP || "An app";
+  document.getElementById("app").textContent = app;
+  document.getElementById("never").textContent = "Never for " + app;
+  const answer = (a) => window.__TAURI__.core.invoke("prompt_answer", { answer: a });
+  for (const b of document.querySelectorAll("button")) b.onclick = () => answer(b.dataset.answer);
+  // Unanswered, it goes away like Ignore.
+  setTimeout(() => answer("ignore"), 30000);
+</script>

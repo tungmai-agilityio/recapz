@@ -21,6 +21,13 @@ fn main() {
     });
     fs::create_dir_all("capabilities").unwrap();
     fs::write("capabilities/base-url.json", cap.to_string()).unwrap();
+    // The bundled meeting prompt window may only answer itself; it has no remote URL.
+    let prompt = serde_json::json!({
+        "identifier": "prompt",
+        "windows": ["prompt"],
+        "permissions": ["allow-prompt-answer"]
+    });
+    fs::write("capabilities/prompt.json", prompt.to_string()).unwrap();
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "audio_start",
@@ -28,6 +35,7 @@ fn main() {
             "audio_permission",
             "recording_state",
             "open_privacy_settings",
+            "prompt_answer",
         ]),
     ))
     .unwrap();
