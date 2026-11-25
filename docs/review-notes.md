@@ -3,10 +3,25 @@
 Running record for the maintainer: assumptions made while building, open issues, blockers and questions.
 Add a line when you decide something non-obvious. Newest entries at the bottom of each section.
 
+## Status as of 2026-11-25 (docs refresh)
+
+Older entries below are history and stay as written; entries marked **Superseded** say what replaced them. Where
+several old lines disagree with the code, trust `docs/README.md` for which doc owns the topic.
+
+- CI exists (`.github/workflows/ci.yml`, #162 to #165). The last `ci` run on GitHub was 2026-11-23, and the latest
+  run that day failed on `push`; why no run appears for PRs since then is *unverified*.
+- The repository is public (checked with `gh` on 2026-11-25).
+- No Droplet is running (see `docs/deploy.md`, Status) and the repository has no GitHub release.
+- The Meet notetaker driver is built (#105 to #119); only the live check with the maintainer (row 16 of
+  `docs/specs/meet-notetaker.md`) is open. Zoom has no join path.
+- Provider names are not shown to members since 2026-11-20 (#323 to #326).
+- Docs refresh assumptions: the macOS app's acceptance rows are left unticked because no PR records a real-machine
+  test; the Droplet's deletion date is not known; "Detect Meetings" behavior on real calls is unverified.
+
 ## Assumptions
-- Repo is the private `tungmai-agilityio/recapz`; commits use the `tungmai-agilityio` account via `GH_TOKEN`.
+- Repo is the private `tungmai-agilityio/recapz`; commits use the `tungmai-agilityio` account via `GH_TOKEN`. **Superseded:** the repository is public (2026-11-25).
 - Branches are `<type>/<name>`, commits and PR titles are Conventional Commits, PRs are squash-merged (CONTRIBUTING.md).
-- CI is removed for now (#6). Checks run locally: `make lint test`, `scripts/check-commits.sh`, `scripts/pr-size.mjs`.
+- CI is removed for now (#6). Checks run locally: `make lint test`, `scripts/check-commits.sh`, `scripts/pr-size.mjs`. **Superseded:** `ci.yml` runs `guards`, `rust` and `web` (#162 to #165); the local checks still apply before a PR.
 - License: proprietary, all rights reserved; no LICENSE file.
 - Rust is pinned to 1.99.1 (`rust-toolchain.toml`); web uses pnpm 12.15.0 and Node LTS.
 - Week 1 was split into small PRs; PR #1 is the original single-PR version and is closed unmerged.
@@ -19,7 +34,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Meeting detail, transcript and audio reads share one access rule and answer 404 (not 403) for meetings the member cannot see.
 - Audio is streamed with single-range support; multi-range requests get 416.
 - The `eval` crate is the speech/WER tool; prompt evaluation (`cargo run -p eval` in CLAUDE.md) will need a subcommand of its own when prompts land.
-- Zoom v1 join path: Meeting SDK bot, proposed in `docs/decisions/zoom-join-path.md`; needs the maintainer's confirmation and a Zoom developer account.
+- Zoom v1 join path: Meeting SDK bot, proposed in `docs/decisions/zoom-join-path.md`; needs the maintainer's confirmation and a Zoom developer account. **Still open:** never confirmed, nothing built.
 - LLM adapters (#42-#45): `crates/llm` has a `Provider` trait with one non-streaming `complete`; streaming is added with Ask. Prices are micro-USD per million tokens, set per route. One `[llm]` route serves all report tasks (see the report job note).
 - Report prompts are version 1 and written without an eval set; replies are checked by shape only (no ISO-date or range checks).
 - Report job (#48): the model sits behind a `ReportModel` trait in core so core has no network code; `LlmReportModel` in the server runs the four tasks in turn on one `[llm]` route (per-task routing is deferred). A transcribe job queues the report job only when `[llm]` is configured; otherwise a meeting goes straight to `ready` as before.
@@ -81,7 +96,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Streaming and the calendar caps have not been run against live provider or Google responses (no keys here).
 - #73 (titled as a notes PR) had the Ask branch as its head, so it carried no notes of its own and nothing was lost by not merging it; the week 8-10 notes were never committed anywhere and still need writing.
 - Weeks 2-5 merge orders and the `gh pr merge` denial are history: every stack through #82 and the deploy PRs #76, #78 are squash-merged into `main` (see below).
-- The Chromium notetaker driver is not built: join flow, platform selectors, audio capture script and the join notice in call chat. It needs a real Meet call and the notetaker's Google account to verify, so it is a live-call blocker, not a code gap I could close here. The pieces that need no browser (session rules, WAV writer, opt-out, speaker matching, purge) are built and tested.
+- **Superseded (#105 to #119):** the Chromium notetaker driver is built; only the live check is open. Original text: the Chromium notetaker driver is not built: join flow, platform selectors, audio capture script and the join notice in call chat. It needs a real Meet call and the notetaker's Google account to verify, so it is a live-call blocker, not a code gap I could close here. The pieces that need no browser (session rules, WAV writer, opt-out, speaker matching, purge) are built and tested.
 - Zoom Meeting SDK bot needs Zoom app review and an account owner for the app; nothing can join a Zoom call until then.
 - Google Calendar needs an OAuth scope for calendar read-only and somewhere to store refresh tokens per member; sync parsing is tested, the live calls are not.
 - Real Meet and Zoom calls (and so `scripts/smoke-join.sh`) need test calls kept open and a member cookie; the live join path has not run.
@@ -155,6 +170,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Not verified: starting the real binary with a real key, and a real transcription. The start check and the `/api/me` field are covered by unit and router tests only.
 
 ## Speech provider on upload and privacy
+**Superseded 2026-11-20 (#324, #326): provider names and the "Where audio goes" card were removed from the web and `/api/me`.**
 - Upload's lede ("Processed on your server" was no longer true) now reads "The audio is sent to {provider} to be transcribed." Recording & privacy gets a "Where audio goes" card. Both read `speech_provider` from the Shell's existing `/api/me` query and fall back to "the speech provider" while it loads or if the server does not send it.
 - The card says only that audio goes to the provider live and from the recorded file. It does not claim no-training or no-retention, because those account settings are still unverified (`docs/decisions/hosted-speech.md`).
 - Checked in a real browser (Chrome, Vite dev server with the API mocked) at 1280 and 390 px, Daylight light only; not Ink or dark, not against the real server, no prototype side-by-side.

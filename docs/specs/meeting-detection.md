@@ -1,6 +1,8 @@
 # Meeting detection
 
-Status: **agreed with the maintainer (2026-11-25)**
+Status: **agreed with the maintainer (2026-11-25); tickets 1 to 3 merged (#378, #379, #392).** Only unit tests and jsdom
+tests ran. No real Zoom, Teams or Meet call has been checked, so every acceptance row below is *unverified*. The
+optional ticket to read the Meet link from the browser (#384) is backlog and not part of v1.
 
 ## Problem
 
@@ -48,9 +50,9 @@ call, or a Meet call in a browser, has to remember to start Recapz, and often do
 
 | # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|
-| 1 | feat(desktop): notice which app holds the microphone | desktop | none | `desktop/src-tauri/src/detect.rs`, `main.rs`, this spec | small | unit tests on the detector, manual call |
-| 2 | feat(desktop): ask "Record this meeting?" | desktop | 1 | `detect.rs`, a bundled prompt window, menu bar, local settings file | medium | unit tests, manual call |
-| 3 | feat(web): open the Record dialog from a detected meeting | web | 2 | `web/src/pages/Record.tsx`, `web/src/capture/native.ts`, `docs/ui-parity.md` | small | `pnpm -C web test`, lint |
+| 1 (#378) | feat(desktop): notice which app holds the microphone | desktop | none | `desktop/src-tauri/src/detect.rs`, `main.rs`, this spec | small | unit tests on the detector, manual call |
+| 2 (#379) | feat(desktop): ask "Record this meeting?" | desktop | 1 | `detect.rs`, a bundled prompt window, menu bar, local settings file | medium | unit tests, manual call |
+| 3 (#392) | feat(web): open the Record dialog from a detected meeting | web | 2 | `web/src/pages/Record.tsx`, `web/src/capture/native.ts`, `docs/ui-parity.md` | small | `pnpm -C web test`, lint |
 
 1. Lists the meeting apps holding the microphone and turns the samples into start and end events. Logs the app
    name only; nothing is shown yet.
