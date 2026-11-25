@@ -118,6 +118,7 @@ pub fn router_with_llm(
                 .patch(rename_meeting)
                 .delete(delete_meeting),
         )
+        .route("/api/meetings/{id}/language", patch(set_meeting_language))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/audio", get(meeting_audio))
@@ -831,6 +832,53 @@ async fn rename_meeting(
     })
     .await??;
     Ok(Json(serde_json::json!({ "title": saved })))
+}
+
+#[derive(Deserialize)]
+struct SetLanguage {
+    language: String,
+}
+
+/// Owner or admin only. The notetaker reads the language when it is let into the call, so it can
+/// change only while the meeting is still `scheduled`; after that the answer is a conflict.
+async fn set_meeting_language(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    Json(body): Json<SetLanguage>,
+) -> Res<Json<serde_json::Value>> {
+    let language = match body.language.trim() {
+        "" => return Err(ApiError::BadRequest("language must be vi, en or multi")),
+        l => meeting_language(Some(l))?,
+    };
+    let u = app.current_user(&jar).await?;
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        let Some(m) = visible_meeting(c, &u.id, &id)? else {
+            return Ok(Err(ApiError::NotFound));
+        };
+        let owner: Option<String> =
+            c.query_row("SELECT owner_id FROM meetings WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })?;
+        if owner.as_deref() != Some(u.id.as_str()) && u.role != "admin" {
+            return Ok(Err(ApiError::Denied(
+                "only the owner or an admin can change the language",
+            )));
+        }
+        if m.status != "scheduled" {
+            return Ok(Err(ApiError::Conflict(
+                "the language can only change before the notetaker joins",
+            )));
+        }
+        c.execute(
+            "UPDATE meetings SET language = ?1 WHERE id = ?2 AND status = 'scheduled'",
+            params![language, id],
+        )?;
+        Ok(Ok(()))
+    })
+    .await??;
+    Ok(Json(serde_json::json!({ "language": language })))
 }
 
 /// Hard delete. Owner or admin only, and not while the meeting is still being captured or processed.

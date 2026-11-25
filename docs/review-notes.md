@@ -305,3 +305,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Desktop updater key variable
 - The Tauri CLI did not honour `TAURI_SIGNING_PRIVATE_KEY_PATH` ("A public key has been found, but no private key", seen on the maintainer's Mac). `make desktop-dmg` and `desktop-update-test.sh` now set `TAURI_SIGNING_PRIVATE_KEY` to the content of the key file for the build command only. The content is never echoed: make prints the recipe unexpanded, and it is not on a command line.
 - Not verified: a full build with the new variable; the other two PR 3 doubts (the `--config` merge and the `bundle/macos/` file names) are still open.
+
+## Meeting language choice
+- A calendar meeting is still created with `vi`; the owner or an admin changes it on the meeting page (a "Spoken language" select, shown only while the meeting is `scheduled`) via `PATCH /api/meetings/{id}/language`. It locks once the notetaker claims the meeting (`joining`), because the live stream reads the column when the call is admitted.
+- Assumption: no tenant-level default language. It needs a settings column, an admin control and a migration for a value few members would change; add it if members keep switching every meeting.
+- Not verified: `multi` on real mixed Vietnamese and English calls (only sample audio, WER about 7.6%); no live Meet call was made. The select was checked in jsdom only, not against the prototype (the prototype has no such control).

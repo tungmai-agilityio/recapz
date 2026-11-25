@@ -149,6 +149,10 @@ assumes.
   `recording` gets its WAV header repaired (the samples are on disk), moves to `transcribing` and is
   marked with a note that the recording may be cut short. No automatic rejoin in v1.
 - Hard cap: leave after `max_call_minutes` (default 240, counted from the join attempt) with `LeaveReason::MaxDuration`.
+- Spoken language: a calendar meeting is created with `vi`. The owner or an admin can set `vi`, `en` or
+  `multi` with `PATCH /api/meetings/{id}/language` while the meeting is `scheduled` (409 after the loop
+  claims it as `joining`). The live stream and the batch transcript both read the column once the call is
+  admitted, so the choice applies to both. There is no tenant-wide default yet.
 - Cross-member dedupe (two members booking the same call) stays an open issue; the loop joins once per
   meeting row.
 

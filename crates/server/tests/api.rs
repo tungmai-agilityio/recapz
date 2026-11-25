@@ -1150,3 +1150,78 @@ async fn a_meeting_language_defaults_to_vietnamese_and_only_vi_en_multi_are_acce
         "{langs:?}"
     );
 }
+
+#[tokio::test]
+async fn the_language_changes_only_before_the_notetaker_joins_and_only_by_owner_or_admin() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let amy_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email = 'amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    t.execute_batch(&format!(
+        "INSERT INTO meetings (id, title, platform, status, owner_id, share, language) VALUES
+           ('soon','t','meet','scheduled','{amy_id}','workspace','vi'),
+           ('live','t','meet','recording','{amy_id}','attendees','vi');"
+    ))
+    .unwrap();
+    let lang = |id: &str| -> String {
+        t.query_row("SELECT language FROM meetings WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+    let patch = |id: &str, c: &str, b: &str| {
+        json_req("PATCH", &format!("/api/meetings/{id}/language"), c, b)
+    };
+
+    // Bad input, a stranger, and a non-owner who can see the meeting change nothing.
+    for body in [r#"{"language":"fr"}"#, r#"{"language":""}"#] {
+        let (s, ..) = send(&app, patch("soon", &amy, body)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{body}");
+    }
+    let (s, ..) = send(&app, patch("live", &bob, r#"{"language":"en"}"#)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(&app, patch("soon", &bob, r#"{"language":"en"}"#)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(lang("soon"), "vi");
+
+    // Once recording, the language is locked.
+    let (s, ..) = send(&app, patch("live", &amy, r#"{"language":"multi"}"#)).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(lang("live"), "vi");
+
+    // The owner, then an admin, change a scheduled meeting; the detail agrees.
+    let (s, _, body) = send(&app, patch("soon", &amy, r#"{"language":" multi "}"#)).await;
+    assert_eq!(
+        (s, body.as_str(), lang("soon").as_str()),
+        (StatusCode::OK, r#"{"language":"multi"}"#, "multi")
+    );
+    let (s, ..) = send(&app, patch("soon", &boss, r#"{"language":"en"}"#)).await;
+    assert_eq!((s, lang("soon").as_str()), (StatusCode::OK, "en"));
+    let (_, _, detail) = send(&app, get("/api/meetings/soon", &amy)).await;
+    assert!(detail.contains(r#""language":"en""#), "{detail}");
+}

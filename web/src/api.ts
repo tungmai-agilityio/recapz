@@ -104,6 +104,10 @@ export const getReport = async (id: string): Promise<ReportData | null> =>
 export const renameMeeting = async (id: string, title: string): Promise<{ title: string }> =>
   (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ title }) }))).json()
 
+/** Only before the notetaker joins; the server answers 409 afterwards and 403 for a non-owner. */
+export const setMeetingLanguage = async (id: string, language: MeetingLanguage): Promise<{ language: MeetingLanguage }> =>
+  (await check(await fetch(`/api/meetings/${id}/language`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ language }) }))).json()
+
 export const deleteMeeting = async (id: string) => { await check(await fetch(`/api/meetings/${id}`, { method: 'DELETE', headers: csrf() })) }
 
 /** Sends the notetaker to a Meet or Zoom link; the server answers 400 for any other link. */
