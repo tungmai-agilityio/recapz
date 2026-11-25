@@ -1,4 +1,4 @@
-.PHONY: dev local hooks desktop-check desktop-dmgnotetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
+.PHONY: dev local hooks desktop-check desktop-dmg desktop-run desktop-update-test notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
 
 dev:
 	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -69,6 +69,29 @@ desktop-dmg:
 	./scripts/desktop-latest.sh $(VERSION) Recapz.app.tar.gz.sig > latest.json
 	codesign --verify --deep --strict --verbose=2 "$$(ls -d $(BUNDLE)/macos/*.app | head -1)"
 	@echo "ready: gh release upload v$(VERSION) Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig latest.json (latest.json last)"
+
+# Build the app, install it over /Applications/Recapz.app and open it (macOS only). Same "Recapz Local" certificate as
+# desktop-dmg, so the microphone and audio grants stay. No updater key needed: the update files are skipped and the update URL
+# is a dead local port, so a published release never replaces this build. The URL is baked in at build time.
+#   make desktop-run                    the local web app, http://localhost:5173 (`make local`)
+#   make desktop-run TARGET=prod        the hosted server, https://recapz.tungmai.com
+#   make desktop-run URL=https://...    any other server (DESKTOP_BASE_URL=... works too)
+#   make desktop-run SKIP_BUILD=1       reuse the last build and only reinstall and relaunch
+#   make desktop-run HELP=1             print this usage
+DESKTOP_RUN_URL = $(or $(URL),$(if $(filter environment command line,$(origin DESKTOP_BASE_URL)),$(DESKTOP_BASE_URL)),$(if $(filter prod,$(TARGET)),https://recapz.tungmai.com),http://localhost:5173)
+DESKTOP_RUN_BUILD = cd desktop/src-tauri && CI=true RECAPZ_BASE_URL=$(DESKTOP_RUN_URL) RECAPZ_UPDATE_URL=http://localhost:1/latest.json APPLE_SIGNING_IDENTITY="Recapz Local" cargo tauri build --bundles app --config '{"version":"0.0.0","bundle":{"createUpdaterArtifacts":false}}'
+desktop-run:
+	@test -z "$(HELP)" || { echo "usage: make desktop-run [TARGET=prod | URL=https://...] [SKIP_BUILD=1]  (default: http://localhost:5173)"; exit 1; }
+	@cargo tauri --version >/dev/null 2>&1 || { echo "cargo tauri is missing: run cargo install tauri-cli --version \"^2\" --locked once"; exit 1; }
+	@security find-certificate -c "Recapz Local" >/dev/null 2>&1 || { echo "no 'Recapz Local' certificate: run scripts/desktop-cert.sh once"; exit 1; }
+	$(if $(SKIP_BUILD),@echo "reusing the last build",$(DESKTOP_RUN_BUILD))
+	-osascript -e 'tell application "Recapz" to quit'
+	@sleep 2
+	rm -rf /Applications/Recapz.app
+	cp -R $(BUNDLE)/macos/Recapz.app /Applications/Recapz.app
+	codesign --verify --deep --strict /Applications/Recapz.app
+	open /Applications/Recapz.app
+	@echo "Recapz now talks to $(if $(SKIP_BUILD),the URL of the last build,$(DESKTOP_RUN_URL))"
 
 # Local end-to-end test of the updater: builds 0.0.1 and 0.0.2 and serves 0.0.2 on localhost:8765.
 desktop-update-test:
