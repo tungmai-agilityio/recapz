@@ -68,7 +68,7 @@ What already exists:
 
 ## Out of scope
 
-- Meeting detection (mic in use by Zoom or Teams → "Record this meeting?"): next spec.
+- Meeting detection (mic in use by Zoom or Teams → "Record this meeting?"): `docs/specs/meeting-detection.md`.
 - Speaker names from the Zoom or Teams UI via Accessibility, and typing the notice into the call chat.
 - Separate "me" and "others" channels, and local diarization (the speech provider already labels speakers).
 - Spooling to disk for outages longer than 60 s, and offline recording.
