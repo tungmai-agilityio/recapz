@@ -3,7 +3,10 @@
 mod audio;
 mod dot;
 
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -12,6 +15,7 @@ use tauri::{
     AppHandle, Manager, RunEvent, WebviewUrl, WindowEvent,
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 /// A sign-in code waiting for the page to finish loading on our own origin.
 static PENDING_CODE: Mutex<Option<(String, String)>> = Mutex::new(None);
@@ -41,8 +45,12 @@ fn new_state() -> String {
 
 const TRAY: &str = "recapz";
 
+/// Whether the page is recording; the close button asks before it ends one.
+static RECORDING: AtomicBool = AtomicBool::new(false);
+
 /// Shows or hides the red recording dot on the menu-bar icon.
 fn set_dot(app: &AppHandle, on: bool) {
+    RECORDING.store(on, Ordering::Relaxed);
     let (Some(tray), Some(icon)) = (app.tray_by_id(TRAY), app.default_window_icon()) else {
         return;
     };
@@ -196,24 +204,44 @@ fn main() {
             show_window(app.handle());
             Ok(())
         })
-        // Closing minimizes: a recording window must stay alive.
+        .plugin(tauri_plugin_dialog::init())
+        // The red button closes the window (the app stays in the Dock and menu bar). While recording it asks first.
         .on_window_event(|w, e| {
             if let WindowEvent::Destroyed = e {
                 audio::stop();
                 set_dot(w.app_handle(), false);
             }
             if let WindowEvent::CloseRequested { api, .. } = e {
-                api.prevent_close();
-                let _ = w.minimize();
+                if RECORDING.load(Ordering::Relaxed) {
+                    api.prevent_close();
+                    let w = w.clone();
+                    w.dialog()
+                        .message("Closing the window stops the recording.")
+                        .title("Stop recording?")
+                        .buttons(MessageDialogButtons::OkCancelCustom(
+                            "Stop and close".into(),
+                            "Keep recording".into(),
+                        ))
+                        .show(move |stop| {
+                            if stop {
+                                let _ = w.destroy();
+                            }
+                        });
+                }
             }
         })
         .build(tauri::generate_context!())
         .expect("cannot start Recapz");
-    app.run(|app, e| {
+    app.run(|app, e| match e {
         // Dock click with the window gone.
-        if let RunEvent::Reopen { .. } = e {
-            show_window(app);
-        }
+        RunEvent::Reopen { .. } => show_window(app),
+        // Closing the last window is not quitting: the Dock and menu-bar icons stay. Quit (menu bar, Cmd+Q) has a code.
+        RunEvent::ExitRequested {
+            api, code: None, ..
+        } => api.prevent_exit(),
+        // Whatever ends the app, the capture ends with it.
+        RunEvent::Exit => audio::stop(),
+        _ => {}
     });
 }
 

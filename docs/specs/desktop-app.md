@@ -109,7 +109,7 @@ What already exists:
    usual session cookie. Codes are hashed, single use and expire after 60 s. Critical by `CLAUDE.md`:
    `human-merge`.
 2. Tauri 2 app: one window on `base_url`, the deep-link and single-instance plugins (reason: the sign-in
-   redirect), a Dock icon, and a menu-bar icon with Open and Quit. Close minimizes. `make desktop-check` runs fmt
+   redirect), a Dock icon, and a menu-bar icon with Open and Quit. Close closes the window (the app stays in the Dock and menu bar; while recording it asks first). Quit always exits and stops capture. `make desktop-check` runs fmt
    and Clippy, and the pre-push hook calls it when `desktop/**` changed.
 3a. Global Core Audio process tap → 16 kHz mono i16 frames of 1600 samples → a `tauri::ipc::Channel`. Commands
    `audio_start`, `audio_stop`, `audio_permission`. Holds the App Nap opt-out while recording. The capability
