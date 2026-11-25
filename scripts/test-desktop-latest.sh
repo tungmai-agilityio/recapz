@@ -9,6 +9,11 @@ printf 'c2lnLWJhc2U2NA==\n' >"$dir/x.sig"
 got=$(PUB_DATE=2026-01-02T03:04:05Z scripts/desktop-latest.sh 0.1.3 "$dir/x.sig" arm64)
 want='{"version":"0.1.3","notes":"Recapz 0.1.3","pub_date":"2026-01-02T03:04:05Z","platforms":{"darwin-aarch64":{"signature":"c2lnLWJhc2U2NA==","url":"https://github.com/tungmai-agilityio/recapz/releases/download/v0.1.3/Recapz.app.tar.gz"}}}'
 [ "$got" = "$want" ] || { echo "latest.json differs: $got"; fail=1; }
+got=$(ASSET_URL=http://localhost:8765/Recapz.app.tar.gz scripts/desktop-latest.sh 0.0.2 "$dir/x.sig" x86_64)
+case "$got" in
+  *'"darwin-x86_64":{"signature":"c2lnLWJhc2U2NA==","url":"http://localhost:8765/Recapz.app.tar.gz"}'*) ;;
+  *) echo "ASSET_URL ignored: $got"; fail=1 ;;
+esac
 : >"$dir/empty.sig"
 scripts/desktop-latest.sh 0.1.3 "$dir/empty.sig" arm64 2>/dev/null && { echo "empty signature accepted"; fail=1; }
 

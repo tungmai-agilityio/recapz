@@ -70,6 +70,10 @@ desktop-dmg:
 	codesign --verify --deep --strict --verbose=2 "$$(ls -d $(BUNDLE)/macos/*.app | head -1)"
 	@echo "ready: gh release upload v$(VERSION) Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig latest.json (latest.json last)"
 
+# Local end-to-end test of the updater: builds 0.0.1 and 0.0.2 and serves 0.0.2 on localhost:8765.
+desktop-update-test:
+	./scripts/desktop-update-test.sh
+
 # Once per clone: the pre-push hook refuses pushes to main.
 hooks:
 	git config core.hooksPath scripts/git-hooks
