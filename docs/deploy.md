@@ -253,6 +253,10 @@ gh release upload v0.1.3 Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig
 gh release upload v0.1.3 latest.json   # last: the app sees the update once this is up
 ```
 
+**Which `VERSION`:** the tag of the release you just created, without the `v` (tag `v0.1.3` → `VERSION=0.1.3`). The release skill picks that number (step 3); `git tag --list 'v0.*' | sort -V | tail -1` shows the latest. The app only offers a build with a higher version than the installed one, and tags only go up, so every release qualifies. `tauri.conf.json` keeps `0.1.0` as a placeholder; the build overrides it. The first build with the updater is installed by hand once, and is just the next release's number, not a special one.
+
+To try the updater without a release, run `make desktop-update-test`. It builds a 0.0.1 and a 0.0.2 (with plain http allowed in those two builds only), serves 0.0.2 on `localhost:8765` and prints what to check: the prompt, the restart as 0.0.2, the microphone and system-audio grants kept, and no `com.apple.quarantine` (`xattr -l`). It uses `~/recapz-update-test` and never touches `/Applications`. Testing a non-admin overwrite of `/Applications/Recapz.app` is a separate manual step.
+
 Install the new build on your own Mac before uploading `latest.json`. The newest release must always have a `latest.json` (the app reads `releases/latest/download/latest.json`). When `desktop/` did not change, copy the previous one instead of building: `gh release download <previous tag> -p latest.json` then `gh release upload <tag> latest.json`; its URLs still point at the older assets. Members on a build from before the updater install the `.dmg` by hand once.
 
 `make desktop-dmg` stops with a message if `cargo tauri` is not installed (the first command above). It bakes in `https://recapz.tungmai.com`; use `make desktop-dmg DESKTOP_BASE_URL=https://other.example` for another server. Members install from the release page: open the `.dmg`, drag Recapz to Applications, then right-click → Open the first time (macOS 14.2 or later).

@@ -28,7 +28,8 @@ Never touch the production host, its config or secrets. The maintainer runs the 
    yes: `gh release create <version> --target main --title <version> --notes-file <file>`. This creates the tag on
    the server; do not push tags by hand. On a no or silence, create nothing.
 7. **Attach the macOS app** (maintainer's Mac only, see "macOS app" in `docs/deploy.md`). The newest release must
-   always carry a `latest.json`, or the app's update check gets a 404.
+   always carry a `latest.json`, or the app's update check gets a 404. `<version without the v>` is the number from
+   step 3 (the new tag); it is always higher than any installed build, which the updater needs.
    - `desktop/` changed since the last tag (or no `.dmg` yet): `make desktop-dmg VERSION=<version without the v>`
      (needs the updater key on the Mac; never read or print it), then
      `gh release upload <version> Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig` and `latest.json` last.
