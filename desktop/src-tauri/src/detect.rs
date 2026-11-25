@@ -107,6 +107,8 @@ fn address(selector: u32) -> AudioObjectPropertyAddress {
     }
 }
 
+/// # Safety
+/// `T` must be the property's own type (a `u32`, an `i32`, or a CFString pointer the caller releases).
 unsafe fn read<T>(object: AudioObjectID, selector: u32, out: &mut T) -> Result<(), String> {
     let addr = address(selector);
     let mut size = size_of::<T>() as u32;
@@ -192,15 +194,15 @@ pub fn start(on_event: impl Fn(Event) + Send + 'static) {
         let mut detector = Detector::default();
         loop {
             // ponytail: polling every 2 s; switch to Core Audio property listeners if it shows up in CPU use.
-            let holding: Vec<&'static str> = match mic_holders() {
-                Ok(b) => b.iter().filter_map(|b| app_of(b)).collect(),
-                Err(e) => {
-                    eprintln!("meeting detection: {e}");
-                    Vec::new()
+            // A failed read is not a release: skip the sample instead of ending a call.
+            match mic_holders() {
+                Ok(b) => {
+                    let holding: Vec<&'static str> = b.iter().filter_map(|b| app_of(b)).collect();
+                    for e in detector.tick(t0.elapsed().as_millis() as u64, &holding) {
+                        on_event(e);
+                    }
                 }
-            };
-            for e in detector.tick(t0.elapsed().as_millis() as u64, &holding) {
-                on_event(e);
+                Err(e) => eprintln!("meeting detection: {e}"),
             }
             thread::sleep(POLL);
         }
