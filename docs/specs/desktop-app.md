@@ -22,8 +22,8 @@ What already exists:
 
 ## Decisions
 
-- **Team only:** one build per server. `base_url` is fixed at build time, and there is no auto-update. Members
-  install new versions from the GitHub release.
+- **Team only:** one build per server. `base_url` is fixed at build time. The app updates itself (see
+  "Auto-update"); the first build with the updater is installed by hand once.
 - **Tauri 2, macOS 14.2+ only:** a thin shell in `desktop/`, in its own Cargo workspace so the server's Linux CI
   never builds WebKit. There is no ScreenCaptureKit fallback, so a member on macOS 13 upgrades. Windows is a later
   spec.
@@ -73,7 +73,7 @@ What already exists:
 - Separate "me" and "others" channels, and local diarization (the speech provider already labels speakers).
 - Spooling to disk for outages longer than 60 s, and offline recording.
 - Developer ID signing, notarization and macOS CI (until an Apple account is bought).
-- Windows, Linux, mobile, macOS 13, auto-update, a Mac App Store build, and other teams' servers.
+- Windows, Linux, mobile, macOS 13, a Mac App Store build, and other teams' servers.
 
 ## Acceptance
 
@@ -125,6 +125,78 @@ What already exists:
    recording state.
 5. A one-time script or doc step creates the "Recapz Local" self-signed certificate. `make desktop-dmg` builds and
    signs with it. The release skill's checklist gains `gh release upload <tag> Recapz.dmg`.
+
+## Auto-update
+
+Decided 2026-11-25. This replaces the earlier "no auto-update" decision. Web changes never need it: the window opens
+the bundled `ui/index.html`, which probes `/api/health` and then switches to the server, so a server deploy shows
+the new UI on the next page load. Only changes to the Rust shell, the bundled `ui/index.html`, the IPC permissions or
+`base_url` need a new app build.
+
+- **Mechanism:** the Tauri 2 updater plugin (`tauri-plugin-updater`) with `bundle.createUpdaterArtifacts: true`. The
+  check, download and install run in Rust only (`check`, `download_and_install`, then restart). No `updater:*`
+  permission is added to any capability, so the remote page cannot reach the updater and the `base-url` capability
+  stays as it is.
+- **Manifest:** a static `latest.json` (`version`, `notes`, `pub_date`, `platforms.darwin-aarch64`, and
+  `darwin-x86_64` only if the build is universal; each with `signature` = the `.sig` file content and `url` = the
+  release asset). It is hosted as a GitHub release asset and read from
+  `https://github.com/tungmai-agilityio/recapz/releases/latest/download/latest.json`. The repository is public, so
+  no token is needed or ever embedded in the app. If the repository becomes private, move the endpoint to the
+  Recapz server rather than shipping a GitHub token.
+- **Endpoint override:** the endpoint comes from a build variable (like `RECAPZ_BASE_URL`) with the URL above as the
+  default, so a test build can point at a local server.
+- **Versions:** the updater compares semver, so each build gets its version from the release tag instead of the fixed
+  `0.1.0` in `tauri.conf.json`. A build without a higher version is never offered.
+- **Release artifacts:** `Recapz.dmg` (first install), `Recapz.app.tar.gz`, `Recapz.app.tar.gz.sig` and `latest.json`.
+  The newest release must always carry a `latest.json`, because `releases/latest` follows the newest release. When
+  `desktop/` did not change, the release step copies the previous `latest.json` (its absolute URLs still point at
+  the older assets); otherwise the updater gets a 404 until the next desktop release.
+- **Signing key:** `cargo tauri signer generate -w ~/.tauri/recapz-updater.key`. The private key and its password
+  live only on the maintainer's Mac and in a password manager. They never enter the repository, chat, logs or CI
+  (there is no macOS CI). `plugins.updater.pubkey` holds the public key and is committed. The build reads
+  `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from the environment and stops with a clear
+  message when the key is missing. Losing the key means installed apps can no longer be updated and every member
+  installs again by hand with a new key. The update signature is independent of the "Recapz Local" code signature,
+  so no Developer ID is needed.
+- **When it checks:** at launch, then every 6 hours while the app runs, and from a "Check for Updates…" item in the
+  menu bar. A network error is logged and shows nothing.
+- **What the member sees:** with no newer version, nothing (the menu item says "up to date"). With one, the app
+  downloads it in the background and asks "Recapz x.y.z is ready. Restart now / Later". "Later" installs it on the
+  next launch.
+- **Never during a recording:** while `RECORDING` is on, the app neither asks nor restarts. The prompt waits until
+  the recording stops. A restart must never cut a recording.
+- **No rollback:** a broken update is not rolled back. The maintainer updates their own Mac first and uploads
+  `latest.json` last; a build that cannot open is fixed by a new release and, if needed, a manual install.
+
+### Unverified assumptions
+
+Each of these is checked in the end-to-end test (PR 4); none is verified yet.
+
+- An update downloaded by the app's own HTTP client is not quarantined (`com.apple.quarantine` absent per
+  `xattr -l`), so Gatekeeper does not ask again. The first install still needs right-click → Open (macOS 15 may
+  need Privacy & Security → Open Anyway); the updater does not change that.
+- Microphone and system-audio grants survive an update because every build is signed with the same "Recapz Local"
+  certificate (also the open acceptance row above).
+- The updater can replace `/Applications/Recapz.app` for a member who is not an admin. The Tauri docs are silent;
+  if it fails the app must show an error and the dmg install remains the fallback.
+- The `darwin-aarch64` key is enough because the maintainer's Mac is Apple silicon; add `darwin-x86_64` only for a
+  universal build.
+
+### Acceptance (auto-update)
+
+- [ ] **PR 2, shell:** `make desktop-check` is clean. With no newer version, nothing is shown. A newer version is
+      downloaded and offered with Restart now / Later. While recording, no prompt appears until the recording
+      stops. The remote capability has no `updater:*` permission (test or config check). A missing or invalid
+      signature is rejected.
+- [ ] **PR 3, release:** `make desktop-dmg VERSION=x.y.z` writes that version into the build and produces
+      `.app.tar.gz`, `.sig` and `latest.json`, and stops with a clear message without
+      `TAURI_SIGNING_PRIVATE_KEY`. The release step uploads all four files, or copies the previous `latest.json` when
+      `desktop/` is unchanged. The `latest.json` of the newest release downloads, and its `signature` equals the `.sig`
+      file.
+- [ ] **PR 4, end to end:** `make desktop-update-test` builds 0.0.1 (endpoint `http://localhost:8765/latest.json`,
+      insecure transport allowed in that test build only) and 0.0.2, and serves them locally. Opening 0.0.1 prompts,
+      Restart now lands on 0.0.2, the microphone and system-audio grants remain, and `xattr -l` shows no quarantine.
+      The unverified assumptions above are each marked confirmed or refuted.
 
 ## Open questions
 
