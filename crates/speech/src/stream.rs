@@ -41,7 +41,7 @@ impl DeepgramStream {
             return (Self { frames: ftx }, erx);
         };
         let url = format!(
-            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&mip_opt_out=true"
+            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&punctuate=true&smart_format=true&endpointing=400&utterance_end_ms=1000&mip_opt_out=true"
         );
         let key = api_key.to_string();
         thread::spawn(move || {
@@ -73,6 +73,7 @@ fn run(
         format!("Token {key}").parse().map_err(|_| ())?,
     );
     let (mut ws, _) = tungstenite::connect(req).map_err(|_| ())?;
+    let mut pending = String::new();
     match ws.get_mut() {
         MaybeTlsStream::Plain(s) => set_poll(s),
         MaybeTlsStream::Rustls(s) => set_poll(s.get_mut()),
@@ -94,9 +95,7 @@ fn run(
                     while Instant::now() < end {
                         match ws.read() {
                             Ok(Message::Text(t)) => {
-                                if let Some(ev) = parse(&t) {
-                                    let _ = events.send(ev);
-                                }
+                                handle(&t, &mut pending, events);
                             }
                             Ok(Message::Close(_)) | Err(tungstenite::Error::ConnectionClosed) => {
                                 break
@@ -110,6 +109,7 @@ fn run(
                             Err(_) => break,
                         }
                     }
+                    flush(&mut pending, events);
                     let _ = ws.close(None);
                     return Ok(());
                 }
@@ -117,9 +117,7 @@ fn run(
         }
         match ws.read() {
             Ok(Message::Text(t)) => {
-                if let Some(ev) = parse(&t) {
-                    let _ = events.send(ev);
-                }
+                handle(&t, &mut pending, events);
             }
             Ok(Message::Close(_)) => return Err(()),
             Ok(_) => {}
@@ -134,24 +132,51 @@ fn set_poll(s: &TcpStream) -> Result<(), ()> {
     s.set_read_timeout(Some(POLL)).map_err(|_| ())
 }
 
-/// A `Results` message with non-empty text; everything else (metadata, empty audio) is ignored.
-fn parse(msg: &str) -> Option<LiveEvent> {
-    let v: serde_json::Value = serde_json::from_str(msg).ok()?;
-    if v["type"] != "Results" {
-        return None;
+/// Sends the buffered finished pieces as one `Final` line.
+fn flush(pending: &mut String, events: &Sender<LiveEvent>) {
+    if !pending.is_empty() {
+        let _ = events.send(LiveEvent::Final(std::mem::take(pending)));
     }
-    let text = v["channel"]["alternatives"][0]["transcript"]
-        .as_str()?
-        .trim();
-    if text.is_empty() {
-        return None;
+}
+
+/// Turns one provider message into events. The provider finalises many short pieces per sentence;
+/// they are held in `pending` and sent as one `Final` when it reports the speaker paused
+/// (`speech_final`) or the utterance ended, so a line is a whole sentence, not a fragment.
+/// Everything else (metadata, empty audio) is ignored.
+fn handle(msg: &str, pending: &mut String, events: &Sender<LiveEvent>) {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else {
+        return;
+    };
+    match v["type"].as_str() {
+        Some("UtteranceEnd") => flush(pending, events),
+        Some("Results") => {
+            let text = v["channel"]["alternatives"][0]["transcript"]
+                .as_str()
+                .unwrap_or("")
+                .trim();
+            if v["is_final"].as_bool() == Some(true) {
+                if !text.is_empty() {
+                    if !pending.is_empty() {
+                        pending.push(' ');
+                    }
+                    pending.push_str(text);
+                }
+                if v["speech_final"].as_bool() == Some(true) {
+                    flush(pending, events);
+                } else if !pending.is_empty() {
+                    let _ = events.send(LiveEvent::Partial(pending.clone()));
+                }
+            } else if !text.is_empty() {
+                let shown = if pending.is_empty() {
+                    text.to_string()
+                } else {
+                    format!("{pending} {text}")
+                };
+                let _ = events.send(LiveEvent::Partial(shown));
+            }
+        }
+        _ => {}
     }
-    let text = text.to_string();
-    Some(if v["is_final"].as_bool() == Some(true) {
-        LiveEvent::Final(text)
-    } else {
-        LiveEvent::Partial(text)
-    })
 }
 
 #[cfg(test)]
@@ -164,7 +189,7 @@ mod tests {
     const WAIT: Duration = Duration::from_secs(5);
 
     fn results(text: &str, fin: bool) -> Message {
-        format!(r#"{{"type":"Results","is_final":{fin},"channel":{{"alternatives":[{{"transcript":"{text}"}}]}}}}"#).into()
+        format!(r#"{{"type":"Results","is_final":{fin},"speech_final":{fin},"channel":{{"alternatives":[{{"transcript":"{text}"}}]}}}}"#).into()
     }
 
     /// Mock provider on localhost. `script` gets the accepted socket and the Authorization header.
@@ -216,6 +241,14 @@ mod tests {
             uri.contains("mip_opt_out=true"),
             "opted out of model improvement: {uri}"
         );
+        for p in [
+            "punctuate=true",
+            "smart_format=true",
+            "endpointing=400",
+            "utterance_end_ms=1000",
+        ] {
+            assert!(uri.contains(p), "{p} missing: {uri}");
+        }
         assert_eq!(bytes, vec![1, 0, 254, 255, 0, 1]);
         assert_eq!(
             events.recv_timeout(WAIT).unwrap(),
@@ -235,6 +268,43 @@ mod tests {
             events.recv_timeout(WAIT),
             Err(RecvTimeoutError::Disconnected)
         );
+    }
+
+    fn msg(text: &str, fin: bool, speech_final: bool) -> String {
+        format!(
+            r#"{{"type":"Results","is_final":{fin},"speech_final":{speech_final},"channel":{{"alternatives":[{{"transcript":"{text}"}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn finalised_pieces_make_one_line_until_the_speaker_pauses() {
+        let (tx, rx) = mpsc::channel();
+        let mut pending = String::new();
+        for m in [
+            msg("Xin chào", false, false),
+            msg("Xin chào,", true, false),
+            msg("mọi người", false, false),
+            msg("mọi người.", true, true),
+            msg("Tiếp", true, false),
+            r#"{"type":"UtteranceEnd"}"#.to_string(),
+            r#"{"type":"UtteranceEnd"}"#.to_string(), // nothing left to flush
+        ] {
+            handle(&m, &mut pending, &tx);
+        }
+        drop(tx);
+        let got: Vec<_> = rx.iter().collect();
+        assert_eq!(
+            got,
+            vec![
+                LiveEvent::Partial("Xin chào".into()),
+                LiveEvent::Partial("Xin chào,".into()),
+                LiveEvent::Partial("Xin chào, mọi người".into()),
+                LiveEvent::Final("Xin chào, mọi người.".into()),
+                LiveEvent::Partial("Tiếp".into()),
+                LiveEvent::Final("Tiếp".into()),
+            ]
+        );
+        assert!(pending.is_empty());
     }
 
     #[test]
