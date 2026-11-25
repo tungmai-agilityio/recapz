@@ -4,6 +4,7 @@ import { Ask } from './pages/Ask'
 import { Documents } from './pages/Documents'
 import { Live } from './pages/Live'
 import { Meetings } from './pages/Meetings'
+import { DetectedMeeting } from './pages/Record'
 import { Recording } from './pages/Recording'
 import { Report } from './pages/Report'
 import { Upload } from './pages/Upload'
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/meetings/:id" element={<Report />} />
         <Route path="/meetings/:id/live" element={<Live />} />
       </Routes>
+      <DetectedMeeting />
     </Shell>
   )
 }

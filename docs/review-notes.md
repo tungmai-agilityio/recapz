@@ -339,3 +339,10 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Window events now act on the main window only, so the prompt closing never stops a recording or clears the red dot.
 - Assumptions: Ignore needs no state, because the detector fires again only after the app released the microphone for 15 s; a call already running when the switch is turned on is noticed after 5 s like a new one; English copy, like the rest of the app.
 - Not verified: the app was not launched. Not checked: that the prompt window does not take focus from Zoom (`focused(false)`), shows above full-screen apps, sits under the menu bar on a second screen, and that the events reach the page.
+
+## Meeting detection, ticket 3
+- `DetectedMeeting` (mounted once in `App`) opens the Record dialog on `recapz-meeting-detected`, unless this tab is already recording. The title is "<app> call HH:MM", replaced by the calendar event on now (`/api/meetings/upcoming` returns events that have not ended) unless the member already typed one. Consent stays unticked.
+- Notetaker overlap: any meeting the member can see whose platform is not `browser` and status is `joining` or `recording` shows a warning with its title. The desktop app cannot tell which call it is, so this warns and never blocks; a notetaker in another call also warns.
+- Auto-stop: only a recording started from the prompt carries the app name. `recapz-meeting-ended` for that app starts a 10 s countdown in the recorder bar with Keep recording, then stops as Stop does. The timer lives outside React, so it fires on any page; the countdown text is shown only on the live view. Keep recording also turns off auto-stop for the rest of that recording.
+- `pnpm exec tsc -b` reports `capture.ts(15,32)` (erasableSyntaxOnly), which is on `main` already and not from this change.
+- Not verified: the flow in the real app (prompt → dialog → record → call end → stop), and a browser test; jsdom only.

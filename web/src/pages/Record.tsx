@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { startRecording, type MeetingLanguage } from '../api'
+import { getMeetings, getUpcoming, startRecording, type MeetingLanguage } from '../api'
 import { CaptureError, startCapture, type Capture, type CaptureMode } from '../capture/capture'
 import { inDesktopApp, openPrivacySettings } from '../capture/native'
 import { FrameSocket } from '../capture/socket'
@@ -12,8 +12,35 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Field, inputClass } from '../ui/Field'
 import { useToast } from '../ui/toast-context'
 
-/** The recording this tab is making. It lives outside React so it survives moving between pages, and only this tab has it. */
-let active: { id: string; capture: Capture; since: number } | null = null
+/**
+ * The recording this tab is making. It lives outside React so it survives moving between pages, and only this tab has it.
+ * `app` is set when it was started from the desktop app's meeting prompt; only such a recording stops on its own.
+ */
+let active: { id: string; capture: Capture; since: number; app?: string; stopAt?: number; timer?: ReturnType<typeof setTimeout> } | null = null
+
+const AUTO_STOP_MS = 10_000
+const DETECTED = 'recapz-meeting-detected'
+const ENDED = 'recapz-meeting-ended'
+const appOf = (e: Event) => (e as CustomEvent<{ app?: string }>).detail?.app
+
+// The desktop app says the call ended: a recording started for that app stops after a countdown the member can cancel.
+window.addEventListener(ENDED, (e) => {
+  const rec = active
+  if (!rec?.app || rec.app !== appOf(e) || rec.stopAt) return
+  rec.stopAt = Date.now() + AUTO_STOP_MS
+  rec.timer = setTimeout(() => {
+    if (active !== rec) return
+    rec.capture.stop()
+    active = null
+    rec.capture.onChange?.()
+  }, AUTO_STOP_MS)
+  rec.capture.onChange?.()
+})
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** Whether a Record dialog is open anywhere in this tab; the meeting prompt never opens a second one. */
+let dialogOpen = false
 
 const socketPath = (id: string) => `/api/meetings/${id}/record`
 
@@ -33,11 +60,33 @@ const MODES = [
   { value: 'room', label: 'In-room', hint: 'Your microphone only, for people in the same room.' },
 ]
 
-export function RecordDialog({ onClose }: { onClose: () => void }) {
+/** Opens the Record dialog when the desktop app's prompt says Record, unless this tab is already recording. */
+export function DetectedMeeting() {
+  const [app, setApp] = useState<string>()
+  useEffect(() => {
+    const open = (e: Event) => { if (!active && !dialogOpen && appOf(e)) setApp(appOf(e)) }
+    window.addEventListener(DETECTED, open)
+    return () => window.removeEventListener(DETECTED, open)
+  }, [])
+  return app ? <RecordDialog app={app} onClose={() => setApp(undefined)} /> : null
+}
+
+/** `app` is the meeting app the desktop app noticed: the title is prefilled and a notetaker overlap is checked. */
+export function RecordDialog({ onClose, app }: { onClose: () => void; app?: string }) {
   const toast = useToast()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(() => {
+    if (!app) return ''
+    const d = new Date()
+    return `${app} call ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })
+  const typed = useRef(false)
+  useEffect(() => {
+    dialogOpen = true
+    return () => { dialogOpen = false }
+  }, [])
+  const [notetaker, setNotetaker] = useState<string>()
   const [language, setLanguage] = useState<MeetingLanguage>('vi')
   const [mode, setMode] = useState<CaptureMode>('tab')
   const [told, setTold] = useState(false)
@@ -47,6 +96,23 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   const desktop = inDesktopApp()
   const supported = desktop || canRecordTab()
   const notice = `This meeting is recorded with Recapz. The audio is transcribed to write the meeting report.`
+
+  useEffect(() => {
+    if (!app) return
+    let live = true
+    const now = Date.now()
+    // The calendar event on now names the meeting, unless the member already typed a title.
+    getUpcoming().then((events) => {
+      const on = events.find((e) => e.starts_at <= now && e.ends_at > now)
+      if (live && on && !typed.current) setTitle(on.title)
+    }, () => {})
+    // Matched by time only: the desktop app cannot see which call it is, so this warns and does not block.
+    getMeetings().then((ms) => {
+      const bot = ms.find((m) => m.platform !== 'browser' && (m.status === 'joining' || m.status === 'recording'))
+      if (live && bot) setNotetaker(bot.title)
+    }, () => {})
+    return () => { live = false }
+  }, [app])
 
   // While starting, closing would leave start() running on an unmounted dialog.
   const close = useRef(onClose)
@@ -65,9 +131,10 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
     try {
       id = (await startRecording(title.trim(), language, mode)).id
       const capture = await startCapture(mode, socketPath(id))
-      active = { id, capture, since: Date.now() }
+      active = { id, capture, since: Date.now(), app }
       void qc.invalidateQueries({ queryKey: ['meetings'] })
       navigate(`/meetings/${id}/live`)
+      onClose()
     } catch (e) {
       // The meeting exists and is recording: discard it so no empty meeting is left behind.
       if (id) new FrameSocket(new URL(socketPath(id), location.href).href.replace(/^http/, 'ws')).discard()
@@ -90,7 +157,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <Field label="Title">
-              {(p) => <input {...p} required autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />}
+              {(p) => <input {...p} required autoFocus maxLength={200} value={title} onChange={(e) => { typed.current = true; setTitle(e.target.value) }} className={inputClass} />}
             </Field>
             <Field label="Language" hint="Mixed is for calls that switch between Vietnamese and English.">
               {(p) => (
@@ -112,6 +179,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
                 Copy for the call chat
               </Button>
             </div>
+            {notetaker && <p role="alert" className="text-sm text-bad">The notetaker is already recording “{notetaker}”. Record only if this is a different call.</p>}
             {error && <p role="alert" className="text-sm text-bad">{error}</p>}
             {pane && <Button className="self-start" onClick={() => void openPrivacySettings(pane)}>Open System Settings</Button>}
           </>
@@ -137,6 +205,7 @@ export function RecorderBar({ id, ended }: { id: string; ended: boolean }) {
   const rec = active?.id === id ? active : null
   const capture = rec?.capture
   const finish = (end: () => void) => {
+    clearTimeout(rec?.timer)
     end()
     active = null
     render()
@@ -171,6 +240,12 @@ export function RecorderBar({ id, ended }: { id: string; ended: boolean }) {
           <Button variant="danger" onClick={() => setDiscarding(true)}>Stop and discard</Button>
         </span>
       </div>
+      {rec.stopAt && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p role="status" className="text-sm text-mute">The call in {rec.app} ended. Recording stops in {Math.max(0, Math.floor(Math.min(AUTO_STOP_MS, rec.stopAt - now) / 1000))} s.</p>
+          <Button onClick={() => { clearTimeout(rec.timer); rec.stopAt = undefined; rec.app = undefined; render() }}>Keep recording</Button>
+        </div>
+      )}
       {capture.state === 'reconnecting' && <p role="status" className="text-sm text-mute">Connection lost. Reconnecting; up to 60 s of audio is kept meanwhile.</p>}
       {capture.dropped > 0 && <p role="alert" className="text-sm text-bad">The connection was down for over 60 s, so {(capture.dropped / 10).toFixed(0)} s of audio was lost.</p>}
       {capture.tabEnded && <p role="alert" className="text-sm text-bad">{capture.native ? 'System audio stopped. Only your microphone is recorded now.' : 'The meeting tab stopped sharing its audio. Only your microphone is recorded now.'}</p>}
