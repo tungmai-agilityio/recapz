@@ -32,7 +32,7 @@
 - Every ticket carries one `kind:`, `status:`, `type:` and `priority:` label (default `priority:p2`) and at least
   one `area:` label. `type:` matches the branch prefix and commit type; the first `area:` is the commit scope.
 - Planning: read existing issues, PRs, milestones and docs first; create one issue per planned PR before coding, with
-  acceptance, dependencies, a `type:*` label and an `M<n> <name>` milestone set at creation; confirm with the
+  acceptance, dependencies, a `type:*` label and a milestone set at creation (each new plan gets a new `M<n> <name>`, never an old or finished one; close a milestone with its last issue); confirm with the
   maintainer before creating more than about 10 at once. Docs (spec, decision record, README index) are part of done.
   Never name competitors in issues, PRs, commits or files. Details: the `plan-tickets` skill.
 - `Closes #N` in a PR only when it delivers the whole ticket; otherwise `Refs #N`.

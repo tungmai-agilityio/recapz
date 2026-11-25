@@ -16,6 +16,9 @@ issue closed. Never invent tickets that are not in the table; if the table is wr
 - **Issue before code.** One issue per planned PR, created before implementation starts, with acceptance criteria,
   dependencies (`Blocked by`), a `type:*` label and a milestone set at creation. Milestones are `M<n> <name>` in
   shipping order; a new one continues the numbering. An umbrella (intent) issue links the children.
+- **New plan, new milestone.** Each new plan gets its own new milestone `M<next number> <name>`, numbered in
+  creation/shipping order, even when the topic relates to an older milestone. Never add new tasks to an older or
+  finished milestone. Close a milestone when its last issue closes, and say so in that PR.
 - **Close on merge.** Each PR says `Closes #N`; the issue is closed when it merges.
 - **Docs are done.** The spec, the decision record (`docs/decisions/`), the architecture notes and the README or
   docs index are updated in the same PR or in a linked docs issue.
