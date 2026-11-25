@@ -291,3 +291,8 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 ## Desktop permission link
 - The permission error in the app has an "Open System Settings" button. It runs `open x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone` (or `Privacy_AudioCapture` for the system audio). Assumption: `Privacy_AudioCapture` lands on the System Audio Recording section on macOS 14.4+; not clicked on a real Mac yet. If it opens the wrong page, switch to `Privacy_ScreenCapture`.
 - When both permissions are missing the button opens the microphone pane first; after the member grants it and tries again, the system audio error shows its own button.
+
+## Desktop auto-update spec
+- The spec now reverses "no auto-update": Tauri 2 updater, `latest.json` on GitHub Releases (public repo, no token), private signing key only on the maintainer's Mac, never in the repository or CI (there is no macOS CI). The prompt never appears during a recording. Docs only; nothing is built yet.
+- Assumptions, none verified: no quarantine attribute on an update the app downloads itself; the "Recapz Local" certificate keeps the microphone and system-audio grants across updates; the updater can overwrite `/Applications/Recapz.app` for a non-admin member; one `darwin-aarch64` entry is enough while the build is not universal. The end-to-end test in the last auto-update PR checks each one.
+- Open: the endpoint and key handling assume the repository stays public. A private repository needs the endpoint moved to the Recapz server.
