@@ -1,6 +1,10 @@
 # Desktop app
 
-Status: **agreed with the maintainer (2026-11-23)**
+Status: **agreed with the maintainer (2026-11-23); merged to `main` by 2026-11-25** (tickets 1 to 5: #350, #352, #354,
+#356, #357, #359; follow-ups #360, #361, #364, #367; auto-update #369 to #372; meeting detection in
+`docs/specs/meeting-detection.md`). The acceptance rows below stay unticked: the PRs record unit tests, lint and type
+checks only, and no real Zoom or Meet call, 30-minute run, AirPods switch, clean-machine install or update test is
+recorded in the repository. Treat every row as *unverified* until the maintainer ticks it.
 Intent: #340
 
 ## Problem
@@ -41,8 +45,9 @@ What already exists:
   twice, so the dialog recommends headphones, as in browser recording. Ticket 3b runs a timeboxed spike on whether
   macOS VoiceProcessingIO on the mic cancels system output, and it is adopted only if it does.
 - **Streaming while hidden:** the page keeps owning the socket. While recording, Rust holds an App Nap opt-out
-  (`NSProcessInfo.beginActivity`), and closing the window minimizes it instead of hiding it. If a minimized,
-  covered window drops audio, the socket moves to Rust in a follow-up.
+  (`NSProcessInfo.beginActivity`). The Close button closes the window (#364; while recording it asks "Stop and close"
+  or "Keep recording"), and the app stays in the Dock and menu bar, so a hidden window is not the normal case. Whether
+  a minimized or covered window drops audio is *unverified*; if it does, the socket moves to Rust in a follow-up.
 - **Record dialog modes in the app:** "Meeting app" (system audio + mic) and "In-room" (mic only, native). The
   tab mode is hidden because the webview has no tab picker and system audio covers browser calls too.
 - **Everything the Mac plays is recorded:** the global tap also captures music, videos and notification sounds,
@@ -68,7 +73,8 @@ What already exists:
 
 ## Out of scope
 
-- Meeting detection (mic in use by Zoom or Teams → "Record this meeting?"): `docs/specs/meeting-detection.md`.
+- Meeting detection (mic in use by Zoom or Teams → "Record this meeting?"): now specified and merged, see
+  `docs/specs/meeting-detection.md`.
 - Speaker names from the Zoom or Teams UI via Accessibility, and typing the notice into the call chat.
 - Separate "me" and "others" channels, and local diarization (the speech provider already labels speakers).
 - Spooling to disk for outages longer than 60 s, and offline recording.
