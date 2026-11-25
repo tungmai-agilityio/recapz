@@ -57,9 +57,17 @@ test('in-room mode asks only for the in-room capture; stop ends the socket and t
 
 test('a missing permission names what to grant and does not start', async () => {
   permission = 'microphone,audio_capture'
-  await expect(startCapture('tab', '/x')).rejects.toThrow(/Microphone and System Audio Recording/)
+  await expect(startCapture('tab', '/x')).rejects.toMatchObject({
+    message: expect.stringMatching(/Microphone and System Audio Recording/),
+    pane: 'microphone',
+  })
   expect(invoke).not.toHaveBeenCalledWith('audio_start', expect.anything())
   expect(sockets).toHaveLength(0)
+})
+
+test('only the system audio missing points at the system audio pane', async () => {
+  permission = 'audio_capture'
+  await expect(startCapture('tab', '/x')).rejects.toMatchObject({ pane: 'audio_capture' })
 })
 
 test('the menu-bar dot goes on when a recording starts and off when it ends', async () => {

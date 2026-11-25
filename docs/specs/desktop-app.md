@@ -83,7 +83,8 @@ What already exists:
       headphones and "turn off other sounds" hints. A Zoom desktop call and a Meet call in Safari, each recorded
       with headphones, have both sides audible, and the live view and meeting report work as for a browser
       recording.
-- [ ] Without the mic or audio-capture permission, the dialog says how to grant it and does not start.
+- [ ] Without the mic or audio-capture permission, the dialog says how to grant it, offers "Open System Settings"
+      (opens the Microphone or System Audio Recording pane), and does not start.
 - [ ] A recording with the window minimized and fully covered for 30 minutes has no gaps.
 - [ ] Switching output to AirPods mid-call leaves no gap over 2 s.
 - [ ] The menu bar shows a recording indicator for the whole recording.
@@ -112,7 +113,8 @@ What already exists:
    redirect), a Dock icon, and a menu-bar icon with Open and Quit. Close closes the window (the app stays in the Dock and menu bar; while recording it asks first). Quit always exits and stops capture. `make desktop-check` runs fmt
    and Clippy, and the pre-push hook calls it when `desktop/**` changed.
 3a. Global Core Audio process tap → 16 kHz mono i16 frames of 1600 samples → a `tauri::ipc::Channel`. Commands
-   `audio_start`, `audio_stop`, `audio_permission`. Holds the App Nap opt-out while recording. The capability
+   `audio_start`, `audio_stop`, `audio_permission`, `open_privacy_settings` (opens only the microphone or audio-capture
+   Privacy pane). Holds the App Nap opt-out while recording. The capability
    scope is `remote.urls = [base_url]`.
 3b. Mic capture on the default input, reopened when the default changes, plus a sum-and-clamp mixer with the
    tap. `audio_start` takes `mode: meeting | in_room`. Timeboxed VoiceProcessingIO spike, with the result

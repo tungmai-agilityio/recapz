@@ -10,7 +10,10 @@ export type CaptureState = 'recording' | 'reconnecting' | 'stopped'
 export const NO_TAB_AUDIO = 'Share a browser tab with "Share tab audio" turned on. A window, a screen or a tab without its audio cannot be recorded.'
 
 /** A refusal or a failure before recording starts; `message` is meant for the member. */
-export class CaptureError extends Error {}
+export class CaptureError extends Error {
+  /** Desktop app only: the missing permission ("microphone" or "audio_capture") whose System Settings pane can be opened. */
+  constructor(message: string, readonly pane?: string) { super(message) }
+}
 
 export type Capture = {
   readonly mode: CaptureMode

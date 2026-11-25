@@ -3,7 +3,7 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { startRecording, type MeetingLanguage } from '../api'
 import { CaptureError, startCapture, type Capture, type CaptureMode } from '../capture/capture'
-import { inDesktopApp } from '../capture/native'
+import { inDesktopApp, openPrivacySettings } from '../capture/native'
 import { FrameSocket } from '../capture/socket'
 import { clock } from '../clock'
 import { Button } from '../ui/Button'
@@ -43,6 +43,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   const [told, setTold] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [pane, setPane] = useState<string>()
   const desktop = inDesktopApp()
   const supported = desktop || canRecordTab()
   const notice = `This meeting is recorded with Recapz. The audio is transcribed to write the meeting report.`
@@ -59,6 +60,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
   async function start() {
     setBusy(true)
     setError('')
+    setPane(undefined)
     let id = ''
     try {
       id = (await startRecording(title.trim(), language, mode)).id
@@ -70,6 +72,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
       // The meeting exists and is recording: discard it so no empty meeting is left behind.
       if (id) new FrameSocket(new URL(socketPath(id), location.href).href.replace(/^http/, 'ws')).discard()
       setError(e instanceof CaptureError ? e.message : 'The recording could not start. Try again.')
+      setPane(e instanceof CaptureError ? e.pane : undefined)
       setBusy(false)
     }
   }
@@ -110,6 +113,7 @@ export function RecordDialog({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
             {error && <p role="alert" className="text-sm text-bad">{error}</p>}
+            {pane && <Button className="self-start" onClick={() => void openPrivacySettings(pane)}>Open System Settings</Button>}
           </>
         )}
         <div className="flex justify-end gap-2">

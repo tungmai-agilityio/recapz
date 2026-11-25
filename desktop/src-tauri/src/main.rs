@@ -73,6 +73,24 @@ fn recording_state(app: AppHandle, on: bool) {
     set_dot(&app, on);
 }
 
+/// Opens the macOS Privacy pane for a missing permission. Only these two panes can be opened, so the page cannot
+/// make the shell open anything else.
+#[tauri::command]
+fn open_privacy_settings(pane: String) -> Result<(), String> {
+    let pane = match pane.as_str() {
+        "microphone" => "Privacy_Microphone",
+        "audio_capture" => "Privacy_AudioCapture",
+        _ => return Err("unknown pane".into()),
+    };
+    std::process::Command::new("open")
+        .arg(format!(
+            "x-apple.systempreferences:com.apple.preference.security?{pane}"
+        ))
+        .status() // `open` returns at once; waiting reaps it
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 const BASE_URL: &str = env!("RECAPZ_BASE_URL");
 
 /// Brings the window back, creating it on first use.
@@ -175,7 +193,8 @@ fn main() {
             audio::audio_start,
             audio::audio_stop,
             audio::audio_permission,
-            recording_state
+            recording_state,
+            open_privacy_settings
         ])
         // A second launch (or a deep link while running) reaches the running app, which handles the URL below.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
