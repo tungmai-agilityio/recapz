@@ -56,3 +56,7 @@ test('speech-band tones pass and content above 8 kHz is removed, not folded back
     for (const hz of [10000, 12000, 20000]) expect(rms(rate, hz)).toBeLessThan(0.0035)
   }
 })
+
+test('a rate of 0 yields no frames and does not hang', () => {
+  expect(run(0, [[constant(0.5, 3200)]])).toHaveLength(0)
+})

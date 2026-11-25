@@ -281,9 +281,9 @@ mod tests {
     fn constant_signal_keeps_level_and_clamps() {
         let mut f = Framer::new(48_000);
         let mut got = Vec::new();
-        f.push(&vec![0.5; 4900], |fr| got.extend_from_slice(fr));
+        f.push(&vec![0.25; 4900], |fr| got.extend_from_slice(fr));
         assert_eq!(got.len(), 1600);
-        assert!(got.iter().all(|&s| s == 16384)); // 0.5 * 32767 = 16383.5, rounds to 16384
+        assert!(got.iter().all(|&s| s == 8192)); // 0.25 * 32767 = 8191.75; 0.5 sits on a rounding boundary
         let mut loud = Vec::new();
         Framer::new(16_000).push(&vec![2.0; 1600], |fr| loud.extend_from_slice(fr));
         assert!(loud.iter().all(|&s| s == 32767));

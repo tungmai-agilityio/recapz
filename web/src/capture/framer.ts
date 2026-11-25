@@ -80,8 +80,12 @@ export class Framer {
   private peaks: number[] = []
   private readonly emitOut = (y: number) => this.emit(y)
 
+  private readonly inputRate: number
+
   constructor(inputRate: number, onFrame: (frame: Frame) => void) {
-    if (Math.round(inputRate) !== TARGET_RATE) this.resampler = new Resampler(Math.round(inputRate), TARGET_RATE)
+    // A rate of 0 would never advance the filter; it yields no frames instead of hanging.
+    if (Math.round(inputRate) !== TARGET_RATE && inputRate >= 1) this.resampler = new Resampler(Math.round(inputRate), TARGET_RATE)
+    this.inputRate = inputRate
     this.onFrame = onFrame
   }
 
@@ -97,7 +101,7 @@ export class Framer {
       let x = 0
       for (const c of inputs) x += c?.[n] ?? 0
       if (this.resampler) this.resampler.push(x, this.emitOut)
-      else this.emit(x)
+      else if (this.inputRate >= 1) this.emit(x)
     }
   }
 
