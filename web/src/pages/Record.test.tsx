@@ -145,3 +145,20 @@ test('in the desktop app the dialog offers Meeting app and In-room, with the mus
     vi.unstubAllGlobals()
   }
 })
+
+test('a missing permission in the desktop app offers a button that opens its System Settings pane', async () => {
+  const invoke = vi.fn(async () => undefined)
+  vi.stubGlobal('__TAURI__', { core: { invoke } })
+  try {
+    vi.mocked(startCapture).mockRejectedValue(new CaptureError('Recapz needs permission for Microphone.', 'microphone'))
+    const d = await openDialog()
+    fireEvent.change(within(d).getByLabelText('Title'), { target: { value: 'Client call' } })
+    fireEvent.click(within(d).getByRole('checkbox'))
+    fireEvent.click(within(d).getByRole('button', { name: 'Start recording' }))
+    expect((await within(d).findByRole('alert')).textContent).toBe('Recapz needs permission for Microphone.')
+    fireEvent.click(within(d).getByRole('button', { name: 'Open System Settings' }))
+    expect(invoke.mock.calls).toEqual([['open_privacy_settings', { pane: 'microphone' }]])
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
