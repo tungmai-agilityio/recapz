@@ -3,6 +3,7 @@
 mod audio;
 mod detect;
 mod dot;
+mod prompt;
 mod update;
 
 use std::sync::{
@@ -11,7 +12,7 @@ use std::sync::{
 };
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     webview::{PageLoadEvent, WebviewWindowBuilder},
     AppHandle, Manager, RunEvent, WebviewUrl, WindowEvent,
@@ -135,6 +136,10 @@ fn show_window(app: &AppHandle) {
                 if let Some((code, state)) = PENDING_CODE.lock().unwrap().take() {
                     exchange(&w, &code, &state);
                 }
+                // A Record answer from the meeting prompt that came before the page was ready.
+                if let Some(name) = prompt::PENDING.lock().unwrap().take() {
+                    let _ = w.eval(prompt::script("recapz-meeting-detected", &name));
+                }
             }
         })
         .build()
@@ -196,7 +201,8 @@ fn main() {
             audio::audio_stop,
             audio::audio_permission,
             recording_state,
-            open_privacy_settings
+            open_privacy_settings,
+            prompt::prompt_answer
         ])
         // A second launch (or a deep link while running) reaches the running app, which handles the URL below.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -207,10 +213,26 @@ fn main() {
             let handle = app.handle().clone();
             app.deep_link()
                 .on_open_url(move |e| signed_in(&handle, &e.urls()));
+            let detect = CheckMenuItem::with_id(
+                app,
+                "detect",
+                "Detect Meetings",
+                true,
+                prompt::init(app.handle()),
+                None::<&str>,
+            )?;
             let menu = Menu::with_items(
                 app,
                 &[
                     &MenuItem::with_id(app, "open", "Open Recapz", true, None::<&str>)?,
+                    &detect,
+                    &MenuItem::with_id(
+                        app,
+                        "ask-again",
+                        "Ask Again for All Apps",
+                        true,
+                        None::<&str>,
+                    )?,
                     &MenuItem::with_id(app, "update", "Check for Updates…", true, None::<&str>)?,
                     &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
                 ],
@@ -218,22 +240,29 @@ fn main() {
             TrayIconBuilder::with_id(TRAY)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .on_menu_event(|app, e| match e.id.as_ref() {
+                .on_menu_event(move |app, e| match e.id.as_ref() {
                     "open" => show_window(app),
                     "update" => update::check_now(app.clone()),
+                    "ask-again" => prompt::forget_never(app),
+                    // The menu ticks the item itself; its new state is the setting.
+                    "detect" => prompt::set_enabled(app, detect.is_checked().unwrap_or(true)),
                     _ => app.exit(0),
                 })
                 .build(app)?;
             show_window(app.handle());
             update::start(app.handle().clone());
-            // Logs only for now; the "Record this meeting?" prompt is the next step of the spec.
-            detect::start(|e| eprintln!("meeting detection: {e:?}"));
+            let handle = app.handle().clone();
+            detect::start(&prompt::ENABLED, move |e| prompt::on_event(&handle, e));
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         // The red button closes the window (the app stays in the Dock and menu bar). While recording it asks first.
         .on_window_event(|w, e| {
+            // Only the main window records; the meeting prompt comes and goes on its own.
+            if w.label() != "main" {
+                return;
+            }
             if let WindowEvent::Destroyed = e {
                 audio::stop();
                 set_dot(w.app_handle(), false);

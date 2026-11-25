@@ -1,3 +1,4 @@
 target
 src-tauri/gen
 src-tauri/capabilities/base-url.json
+src-tauri/capabilities/prompt.json

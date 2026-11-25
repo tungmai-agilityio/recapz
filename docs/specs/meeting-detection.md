@@ -21,7 +21,8 @@ call, or a Meet call in a browser, has to remember to start Recapz, and often do
 - **Always ask:** "Record this meeting?" with Record / Ignore / Never ask again for this app. Record opens the
   Record dialog prefilled ("Meeting app" mode, a title); the consent tick stays required. No auto-record in v1.
 - **Never interrupt:** no prompt while a recording runs.
-- **On by default:** a "Detect meetings" switch in the menu bar, stored on the Mac.
+- **On by default:** a "Detect Meetings" switch in the menu bar, stored on the Mac. "Ask Again for All Apps" in
+  the same menu clears the never list.
 - **Auto-stop:** only a recording started from the prompt; when its app releases the microphone, the recorder bar
   counts down 10 s with "Keep recording".
 - **Notetaker overlap:** when a calendar meeting is on now and the notetaker is joining or recording it, the
