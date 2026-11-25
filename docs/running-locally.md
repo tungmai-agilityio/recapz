@@ -36,6 +36,11 @@ make desktop-run HELP=1           # usage
 
 The URL is baked in at build time; for a local server keep it equal to `base_url` in `config.toml`. It needs `cargo tauri` and the "Recapz Local" certificate (`docs/deploy.md`, "macOS app"), not the updater key. The build is version `0.0.0` and its update URL is a dead local port, so a published release never replaces it.
 
+The app also notices when Zoom, Teams, Slack, Webex, FaceTime, Discord or a browser starts using the microphone and
+asks "Record this meeting?" (`docs/specs/meeting-detection.md`). The menu-bar item "Detect Meetings" turns it off; the
+switch and the "never ask" list are stored in `detect.json` in the app's config folder. This was only unit-tested; it is
+*unverified* on a real call.
+
 ## Sign in (dev login)
 
 Open http://localhost:5173. On the sign-in screen the dev server shows a "Dev login (local only)" form: enter the `bootstrap_admin_email` and press Sign in. The form is not in production builds. If it says rejected, `dev_login = true` is missing from the `config.toml` the server loaded (restart `make local` after editing).
