@@ -39,6 +39,9 @@ window.addEventListener(ENDED, (e) => {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+/** Whether a Record dialog is open anywhere in this tab; the meeting prompt never opens a second one. */
+let dialogOpen = false
+
 const socketPath = (id: string) => `/api/meetings/${id}/record`
 
 /** Desktop Chrome and Edge share a tab's audio; `userAgentData` exists only in Chromium browsers. */
@@ -61,7 +64,7 @@ const MODES = [
 export function DetectedMeeting() {
   const [app, setApp] = useState<string>()
   useEffect(() => {
-    const open = (e: Event) => { if (!active && appOf(e)) setApp(appOf(e)) }
+    const open = (e: Event) => { if (!active && !dialogOpen && appOf(e)) setApp(appOf(e)) }
     window.addEventListener(DETECTED, open)
     return () => window.removeEventListener(DETECTED, open)
   }, [])
@@ -79,6 +82,10 @@ export function RecordDialog({ onClose, app }: { onClose: () => void; app?: stri
     return `${app} call ${pad(d.getHours())}:${pad(d.getMinutes())}`
   })
   const typed = useRef(false)
+  useEffect(() => {
+    dialogOpen = true
+    return () => { dialogOpen = false }
+  }, [])
   const [notetaker, setNotetaker] = useState<string>()
   const [language, setLanguage] = useState<MeetingLanguage>('vi')
   const [mode, setMode] = useState<CaptureMode>('tab')
@@ -127,6 +134,7 @@ export function RecordDialog({ onClose, app }: { onClose: () => void; app?: stri
       active = { id, capture, since: Date.now(), app }
       void qc.invalidateQueries({ queryKey: ['meetings'] })
       navigate(`/meetings/${id}/live`)
+      onClose()
     } catch (e) {
       // The meeting exists and is recording: discard it so no empty meeting is left behind.
       if (id) new FrameSocket(new URL(socketPath(id), location.href).href.replace(/^http/, 'ws')).discard()

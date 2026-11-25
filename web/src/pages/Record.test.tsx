@@ -207,8 +207,31 @@ async function startFromPrompt(app: string, capture = fakeCapture()) {
   fireEvent.click(within(d).getByRole('checkbox'))
   fireEvent.click(within(d).getByRole('button', { name: 'Start recording' }))
   await screen.findByRole('region', { name: 'Recorder' })
+  expect(screen.queryByRole('dialog')).toBeNull()
   return capture
 }
+
+test('a second prompt while the dialog is open is ignored', async () => {
+  const d = await fromPrompt('Zoom')
+  const title = (within(d).getByLabelText('Title') as HTMLInputElement).value
+  detected('Slack')
+  expect(screen.getAllByRole('dialog').length).toBe(1)
+  expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toBe(title)
+  expect(title).toMatch(/^Zoom call /)
+})
+
+test('Stop during the countdown stops once and the timer does nothing after', async () => {
+  const capture = await startFromPrompt('Zoom')
+  vi.useFakeTimers()
+  try {
+    ended('Zoom')
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    act(() => { vi.advanceTimersByTime(20_000) })
+    expect(vi.mocked(capture.stop).mock.calls.length).toBe(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
 
 test('a recording started from the prompt stops 10 s after its call ends', async () => {
   const capture = await startFromPrompt('Zoom')
