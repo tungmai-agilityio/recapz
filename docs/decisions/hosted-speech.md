@@ -12,14 +12,14 @@ and a hosted provider was an opt-in. Provider facts were read from provider docs
 | Modes | Batch on the recorded file after the call gives the stored transcript and speaker labels. A streaming WebSocket feeds the live view and Live Ask |
 | Speaker labels | Deepgram diarization on the batch pass. The live view shows text without speakers |
 | LLM and embeddings | Provider-agnostic adapters, OpenAI as the default, per-task `Router` kept so reports and live answers can use different models. Anthropic and any OpenAI-compatible server stay as adapters |
-| Privacy rule | Audio goes only to the configured speech provider; transcript, question and marked-document text only to the configured LLM and embedding providers; providers are named to members. See `docs/spec.md`, "Data sent to providers" |
+| Privacy rule | **Superseded 2026-11-20 (#323 to #326).** The original rule (audio only to the speech provider, providers named to members, a "Data sent to providers" section in `docs/spec.md`) is gone: members are no longer told which provider handles their data, and sending meeting text to the configured LLM is allowed. What stays: keys in the env file, local hard deletes, the per-document toggle |
 | Documents | The per-document "May be sent to the language model" toggle stays, default off |
 | Retention | Accounts run with no-training and no-retention settings (*unverified*: exact Deepgram and OpenAI settings). Deletes stay local hard deletes. No provider-side delete calls |
 | Keys | One key per provider for the deployment, in `/etc/recapz/recapz.env`, never `config.toml`, logs or the database |
 | Cost | Per-meeting usage (audio seconds, tokens) stored; estimated cost shown to admins; a monthly cap in config pauses new jobs |
 | Failure | Audio stays on disk, jobs retry with backoff, streaming failure never blocks recording and the live view says "live transcript unavailable". Auth and quota errors fail fast with an admin alert. No automatic second provider |
 | Local whisper | Dropped: `whisper-rs`, the CUDA build and model files leave the build and docs. The `Transcriber` trait stays so a local engine can return. Upload decoding (symphonia) stays |
-| Recording storage | Object storage provider is open (undecided); recordings are on server disk for now (no bucket enabled). The 2026-11-18 Hetzner choice is superseded: hosting moved to DigitalOcean. With a private S3-compatible bucket configured, the notetaker still writes WAV to local disk during the call; after a successful batch transcript the file is uploaded to the bucket and the local copy removed. Playback streams from the bucket with range requests. Deleting a meeting, opt-out or participant purge hard-deletes the objects. The bucket is private, one deployment key in the env file, and is named on the privacy screen as a place audio is kept |
+| Recording storage | Object storage provider is open (undecided); recordings are on server disk for now (no bucket enabled). The 2026-11-18 Hetzner choice is superseded: hosting moved to DigitalOcean. With a private S3-compatible bucket configured, the notetaker still writes WAV to local disk during the call; after a successful batch transcript the file is uploaded to the bucket and the local copy removed. Playback streams from the bucket with range requests. Deleting a meeting, opt-out or participant purge hard-deletes the objects. The bucket is private, one deployment key in the env file, and was to be named on the privacy screen as a place audio is kept (wording from before #326; not checked against the current screen) |
 | Deploy | 2 vCPU, 4 GB RAM, 40 GB disk or more (the last Droplet had 79 GB; it has since been deleted, see `docs/deploy.md`), `max_concurrent_calls = 2`. Chromium per call is the memory driver and in-call WAV (about 115 MB per hour, local only until uploaded) the disk driver; recordings stay on server disk until a storage provider is chosen |
 
 ## Why Deepgram
@@ -45,7 +45,7 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 - Errors and logs never hold transcript text or the key.
 - Long audio: no chunking in v1. If a 2 hour file hits the provider's processing limit, split into 60 minute chunks;
   speaker labels may not line up across chunks.
-- `/api/me` reports the speech provider so the upload screen and Recording & privacy can name it.
+- `/api/me` no longer reports the speech provider (removed with #324 and #326, 2026-11-20); no screen names it.
 
 ## PRs, in order
 
@@ -57,7 +57,7 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 | 4 | #227 `feat(core): store speaker labels from segments` | Rows match segments; retried job does not duplicate; full workspace tests |
 | 5 | #237 `feat(speech): add the Deepgram batch transcriber` | Mock-server tests for parsing, speaker mapping, retry on 429, no retry on 401, no key or text in errors |
 | 6 | #238 `feat(server): add speech provider config and disclosure` | Missing key fails at start; `/api/me` reports the provider |
-| 7 | #241 `feat(web): name the speech provider on upload and privacy` | jsdom test; matches the prototype per `docs/ui-parity.md` |
+| 7 | #241 `feat(web): name the speech provider on upload and privacy` | Merged, then reverted in effect by #326 (provider names removed from the web) |
 | 8a | #243 `feat(core): keep recordings in object storage` | Upload after transcript, ranged playback, hard delete of objects on delete, opt-out and purge; mock S3 tests; one new dependency with its reason |
 | 8 | #248 `feat(core): record usage and enforce the monthly cap` | Usage rows per meeting; cap pauses new jobs; admin sees estimated cost |
 | 9 | #228 `feat(speech): add the Deepgram streaming client` | Mock WebSocket test; failure never stops recording (Live Ask ticket #191 uses it) |
@@ -66,6 +66,17 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 | follow-up | #261 `fix(speech): build the Deepgram client off the async thread` | Merged |
 | follow-up | #268 `fix(server): install the TLS crypto provider at start` | Merged; live streaming works on main |
 | 11 | Manual check, no PR | A 2 hour file and a live call on a real key confirm limits, Vietnamese quality and the 6 s Live Ask bar |
+
+## Live stream details (added 2026-11-25)
+
+- Streaming request (`crates/speech/src/stream.rs`, #365): `model=nova-3`, `punctuate=true`, `smart_format=true`,
+  `endpointing=400`, `utterance_end_ms=1000`, `interim_results=true`, `mip_opt_out=true`. Final pieces are held until
+  `speech_final` or `UtteranceEnd` and sent as one line. 400 ms and 1000 ms are starting values, not tuned; no real call
+  has compared them (*unverified*).
+- Audio sent is 16 kHz mono i16. Desktop and browser fallback low-pass before decimating from 48 kHz (#377, Blackman
+  sinc, 7.2 kHz cutoff); the cutoff is an assumption, not tuned against word error rate (*unverified*).
+- The language is chosen per meeting (`vi`, `en`, `multi`); for a calendar meeting it can change while `scheduled`
+  (#375, `docs/specs/meet-notetaker.md`).
 
 ## Open questions
 

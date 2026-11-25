@@ -4,7 +4,7 @@ Status: **superseded by `docs/decisions/hosted-speech.md` (2026-11-18): local wh
 
 ## Assumption (logged, not measured)
 
-Until the numbers below exist, the default is `large-v3-turbo` (`speech_model` in `config.example.toml`). Reason: it is the cheapest to run on one GPU and fast enough for the live view. This is an assumption to confirm.
+Until the numbers below exist, the default was `large-v3-turbo` (the `speech_model` setting left the config in #220). Reason: it is the cheapest to run on one GPU and fast enough for the live view. This is an assumption to confirm.
 
 ## Shortlist
 
