@@ -162,3 +162,100 @@ test('a missing permission in the desktop app offers a button that opens its Sys
     vi.unstubAllGlobals()
   }
 })
+
+const detected = (app: string) => act(() => { window.dispatchEvent(new CustomEvent('recapz-meeting-detected', { detail: { app } })) })
+const ended = (app: string) => act(() => { window.dispatchEvent(new CustomEvent('recapz-meeting-ended', { detail: { app } })) })
+
+/** The desktop app's prompt opens the dialog; `upcoming` and `meetings` are what the server returns meanwhile. */
+async function fromPrompt(app: string, upcoming: unknown[] = [], meetings: unknown[] = []) {
+  const real = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (url === '/api/meetings/upcoming') return new Response(JSON.stringify(upcoming))
+    if (url === '/api/meetings') return new Response(JSON.stringify(meetings))
+    return real(url, init)
+  })
+  show()
+  await screen.findByRole('button', { name: 'Record from this browser' })
+  detected(app)
+  return screen.getByRole('dialog', { name: 'Record from this browser' })
+}
+
+test('the meeting prompt opens the dialog titled after the calendar event on now, with consent still unticked', async () => {
+  vi.stubGlobal('__TAURI__', {})
+  const now = Date.now()
+  const event = (title: string, starts_at: number, ends_at: number) => ({ id: title, title, starts_at, ends_at, platform: null, join_url: null, auto_join: false, attendees: [] })
+  const d = await fromPrompt('Zoom', [event('Weekly sync', now - 60_000, now + 60_000), event('Later', now + 3_600_000, now + 7_200_000)])
+  await waitFor(() => expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toBe('Weekly sync'))
+  expect((within(d).getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
+  expect((within(d).getByRole('radio', { name: /Meeting app/ }) as HTMLInputElement).checked).toBe(true)
+  expect(within(d).queryByRole('alert')).toBeNull()
+  vi.unstubAllGlobals()
+})
+
+test('without a calendar event the title names the app and the time, and a busy notetaker is warned about', async () => {
+  const d = await fromPrompt('Slack', [], [
+    { id: 'b1', title: 'Board review', platform: 'meet', status: 'recording', started_at: 1, created_at: 1 },
+    { id: 'b2', title: 'Old', platform: 'meet', status: 'done', started_at: 1, created_at: 1 },
+  ])
+  expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toMatch(/^Slack call \d\d:\d\d$/)
+  expect((await within(d).findByRole('alert')).textContent).toBe('The notetaker is already recording “Board review”. Record only if this is a different call.')
+})
+
+async function startFromPrompt(app: string, capture = fakeCapture()) {
+  vi.mocked(startCapture).mockResolvedValue(capture)
+  const d = await fromPrompt(app)
+  fireEvent.click(within(d).getByRole('checkbox'))
+  fireEvent.click(within(d).getByRole('button', { name: 'Start recording' }))
+  await screen.findByRole('region', { name: 'Recorder' })
+  return capture
+}
+
+test('a recording started from the prompt stops 10 s after its call ends', async () => {
+  const capture = await startFromPrompt('Zoom')
+  vi.useFakeTimers()
+  try {
+    ended('Teams')
+    expect(screen.queryByRole('button', { name: 'Keep recording' })).toBeNull()
+    ended('Zoom')
+    expect(screen.getByText('The call in Zoom ended. Recording stops in 10 s.')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(9_999) })
+    expect(capture.stop).not.toHaveBeenCalled()
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(vi.mocked(capture.stop).mock.calls.length).toBe(1)
+    act(() => { vi.advanceTimersByTime(1_000) })
+    expect(screen.queryByRole('region', { name: 'Recorder' })).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('Keep recording cancels the stop, and a later end does nothing', async () => {
+  const capture = await startFromPrompt('Zoom')
+  vi.useFakeTimers()
+  try {
+    ended('Zoom')
+    fireEvent.click(screen.getByRole('button', { name: 'Keep recording' }))
+    ended('Zoom')
+    act(() => { vi.advanceTimersByTime(20_000) })
+    expect(capture.stop).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Recording stops in/)).toBeNull()
+  } finally {
+    vi.useRealTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+  }
+})
+
+test('a recording started by hand never stops when a call ends, and no prompt dialog opens over it', async () => {
+  const capture = await startTab()
+  vi.useFakeTimers()
+  try {
+    ended('Zoom')
+    act(() => { vi.advanceTimersByTime(20_000) })
+    expect(capture.stop).not.toHaveBeenCalled()
+    detected('Zoom')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  } finally {
+    vi.useRealTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+  }
+})
