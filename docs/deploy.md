@@ -247,7 +247,7 @@ cargo tauri signer generate -w ~/.tauri/recapz-updater.key
 Each release, after `gh release create` (the version is the tag without the `v`):
 
 ```bash
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='…'   # the key's password
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='…'   # the key's password; the key itself is read from the file (UPDATER_KEY), nothing to paste
 make desktop-dmg VERSION=0.1.3   # builds and signs; writes Recapz.dmg, Recapz.app.tar.gz, its .sig and latest.json
 gh release upload v0.1.3 Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig
 gh release upload v0.1.3 latest.json   # last: the app sees the update once this is up
