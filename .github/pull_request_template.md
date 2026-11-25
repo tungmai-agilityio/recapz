@@ -21,6 +21,6 @@ code depends on). Otherwise write "None". -->
 ## Checklist
 - [ ] Branch is `<type>/<name>`; title is `type(scope): summary`
 - [ ] About 300 (small) or 600 (medium) source lines, at most 800 (`node scripts/pr-size.mjs origin/main`)
-- [ ] No AI mentions or tool trailers
-- [ ] Docs updated (spec status, running-locally, deploy, decisions) or "no doc change" stated
+- [ ] No AI or competitor mentions, no tool trailers
+- [ ] Issue exists with a milestone; docs (spec status, running-locally, deploy, decisions, README index) updated or "no doc change" stated
 - [ ] Meeting reads check the member's access; migrations are additive

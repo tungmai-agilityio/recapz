@@ -1,7 +1,7 @@
 # Recapz spec
 
-Recapz is a private meeting notetaker for one team on one server. A notetaker joins Google Meet and Zoom,
-transcribes mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team
+Recapz is a private meeting notetaker for one team on one server. A notetaker joins Google Meet (Zoom has no
+join path yet; Zoom calls are recorded from the macOS app or uploaded), transcribes mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team
 search every meeting with cited answers. Everything ships as one Rust binary.
 
 ## Vocabulary
@@ -17,6 +17,7 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/specs/live-ask.md`) |
 | Browser recording | A member records a call from their own browser: the meeting tab's audio plus their microphone ("Meeting tab"), or the microphone only ("In-room"), streamed live to the server (`docs/specs/browser-recording.md`). In the macOS desktop app the same dialog records the Mac's system audio plus the microphone ("Meeting app") through native capture (`docs/specs/desktop-app.md`) |
 | Recorder bar | In the live view of the tab that is recording: elapsed time, input levels, Stop, Stop and discard |
+| Desktop app | macOS app (Tauri) that opens the web app and records the Mac's system audio plus microphone; asks "Record this meeting?" when a call app starts using the microphone (`docs/specs/desktop-app.md`, `docs/specs/meeting-detection.md`) |
 | Upload | Process an audio or video file the notetaker did not record |
 | Members | Google sign-in; admins invite by email, remove people, change roles |
 | Recording & privacy | Join rules, notetaker name/message, retention, purge one participant |
@@ -48,9 +49,13 @@ Uploads start at `uploaded` and enter the pipeline at `transcribing`.
 Cookie session; tenant comes from the session. Every handler checks the member can see the meeting.
 
 - `GET /auth/google`, `GET /auth/callback`, `POST /auth/logout` — Google sign-in, invite-only
-- `GET /api/me`, `GET /api/meetings`, `POST /api/uploads`, `GET /api/health`
-- Later: meeting detail/transcript/ribbon/audio, `POST /api/ask`, `GET /api/events`, members, invites,
-  settings, participant purge.
+- `GET /auth/desktop`, `POST /auth/desktop/exchange` — sign-in for the macOS app through the system browser
+- `GET /api/me`, `GET /api/meetings`, `GET /api/meetings/upcoming`, `POST /api/meetings/join`, `POST /api/uploads`,
+  `POST /api/recordings`, `GET /api/health`
+- Per meeting: `/transcript`, `/report`, `/audio`, `/live`, `/record` (WebSocket), `/live-ask`, `PATCH /language`
+- `POST /api/ask`, documents, settings, usage, calendar connect. The list above is a guide, not exhaustive: the
+  router is `crates/server/src/routes.rs`. Not found there on 2026-11-25: `GET /api/events`, members and invites
+  endpoints, participant purge (*unverified*: only a text search of `routes.rs`).
 
 ## Language models
 

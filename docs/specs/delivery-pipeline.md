@@ -203,7 +203,7 @@ Then run the pipeline on the next real feature.
 |---|---|---|
 | 0 test-runner and `cargo` | #155, #157 (hook fixes) | yes; `cargo` was found, shared `CARGO_TARGET_DIR` not set |
 | 1 templates, labels, CONTRIBUTING | #156, #159 | labels created; forms not yet filed through the UI |
-| 2 CI | #162, #164, #165 | yes, on every PR |
+| 2 CI | #162, #164, #165 | yes through 2026-11-23; no `ci` run is listed after that date, cause *unverified* |
 | 3 spec template | #166 (its `grill-spec` skill was removed later) | template not yet used |
 | 4 `plan-tickets` | #167 | no |
 | 5 `ship-ticket`, merge rule | #169 | first run on ticket #174 |

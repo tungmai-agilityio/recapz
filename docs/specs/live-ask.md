@@ -1,7 +1,6 @@
 # Live Ask
 
-Status: **design agreed with the maintainer (2026-11-17), speech changed to hosted streaming (2026-11-18); nothing is built.** Starts after the Meet live
-check passes (`docs/specs/meet-notetaker.md` row 16), before Zoom. Meet only until the Zoom notetaker exists.
+Status: **design agreed with the maintainer (2026-11-17), speech changed to hosted streaming (2026-11-18); built and merged (#206 to #208, #254 to #257, #259, #265 to #266).** Ticket 9 (#192) is still open on GitHub although the prompt merged in #208. The 6 s bar, the 80% eval and the real-call checks are *unverified*: no real key or live Meet call has run them. Meet only until the Zoom notetaker exists.
 Intent: #184
 
 ## What it is
@@ -27,13 +26,13 @@ answer they can say back to the client. Answers are private to the member who as
 | Embeddings | Hosted, through an embeddings call on the existing OpenAI-compatible adapter (`POST /v1/embeddings`), configured under `[llm]`. Replaces `hash-256`; meetings re-index through `enqueue_stale` |
 | API | `POST /api/meetings/{id}/live-ask` with its own prompt `live_answer.v1`. Reuses `search`, the Ask rate limit, the SSE event names and the citation shape, with citations that point at a document or a meeting |
 | Consent | The join notice says the call is transcribed live. Chat opt-out stops live transcription at once, clears the in-memory transcript and ends running answers, on top of the existing hard delete |
-| Audio | Goes only to the configured speech provider, named in the join notice (`docs/spec.md`, "Data sent to providers") |
+| Audio | Goes only to the configured speech provider. The join notice no longer names it (rule dropped 2026-11-20, #323 to #326) |
 
 ## Rule change
 
-`CLAUDE.md` and `docs/spec.md` already say that audio goes only to the speech provider, and that only transcript text, questions and text of documents the uploader marked "May be sent to the language model" go to LLM and embedding providers.
+The per-document toggle stays: only transcript text, questions and text of documents the uploader marked "May be sent to the language model" go to the LLM and embedding providers. The earlier rule that providers are named to members was dropped on 2026-11-20 (#323 to #326), and `docs/spec.md` no longer has a "Data sent to providers" section.
 
-## What exists today
+## What existed when this was written (history)
 
 - Call audio reaches the server while the call is live: 100 ms frames of 16 kHz mono i16 from
   `crates/notetaker/src/meet/capture.js` through `DriverEvent::Audio`. Only the WAV writer in
