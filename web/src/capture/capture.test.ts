@@ -39,6 +39,8 @@ let links: Link[]
 let node: { port: { onmessage: ((e: { data: unknown }) => void) | null }; options: unknown }
 let sockets: { url: string; sent: unknown[]; readyState: number; onopen?: () => void }[]
 let ctxClosed: boolean
+let ctxOptions: unknown[]
+let refuse16k: boolean
 let display: ReturnType<typeof vi.fn>
 let user: ReturnType<typeof vi.fn>
 let addModule: ReturnType<typeof vi.fn>
@@ -47,12 +49,18 @@ beforeEach(() => {
   links = []
   sockets = []
   ctxClosed = false
+  ctxOptions = []
+  refuse16k = false
   addModule = vi.fn(async () => {})
   vi.stubGlobal('MediaStream', FakeStream)
   vi.stubGlobal(
     'AudioContext',
     class {
       audioWorklet = { addModule: addModule }
+      constructor(options?: { sampleRate?: number }) {
+        ctxOptions.push(options)
+        if (options?.sampleRate && refuse16k) throw new DOMException('rate', 'NotSupportedError')
+      }
       async resume() {}
       createMediaStreamSource(from: FakeStream) {
         return { connect: (_n: unknown, _o: number, input: number) => links.push({ from, input }) }
@@ -122,6 +130,18 @@ test('tab mode mixes tab audio with the echo-cancelled microphone and streams fr
   expect(c.tabEnded).toBe(true)
 })
 
+test('the context runs at 16 kHz so the browser does the resampling', async () => {
+  await startCapture('room', 'ws://x/rec')
+  expect(ctxOptions).toEqual([{ sampleRate: 16000 }])
+})
+
+test('a browser that refuses a 16 kHz context falls back to its own rate', async () => {
+  refuse16k = true
+  await startCapture('room', 'ws://x/rec')
+  expect(ctxOptions).toEqual([{ sampleRate: 16000 }, undefined])
+  expect(links).toHaveLength(1)
+})
+
 test('room mode records only the microphone', async () => {
   const c = await startCapture('room', 'ws://x/rec')
   expect(display).not.toHaveBeenCalled()
@@ -179,6 +199,7 @@ test('a failed audio setup closes the context and releases the microphone', asyn
   user.mockResolvedValue(mic)
   addModule.mockRejectedValue(new Error('no worklet'))
   await expect(startCapture('room', 'ws://x/rec')).rejects.toThrow('no worklet')
+  expect(ctxOptions).toEqual([{ sampleRate: 16000 }, undefined]) // one retry at the default rate, then give up
   expect(ctxClosed).toBe(true)
   expect(mic.tracks[0].stopped).toBe(true)
   expect(sockets).toHaveLength(0)

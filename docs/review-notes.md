@@ -311,6 +311,13 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - Assumption: no tenant-level default language. It needs a settings column, an admin control and a migration for a value few members would change; add it if members keep switching every meeting.
 - Not verified: `multi` on real mixed Vietnamese and English calls (only sample audio, WER about 7.6%); no live Meet call was made. The select was checked in jsdom only, not against the prototype (the prototype has no such control).
 
+## 16 kHz resampling
+- The desktop app (`audio/frame.rs`) and the web fallback (`framer.ts`) averaged every 3 samples to get 16 kHz from 48 kHz. That folds 8 to 16 kHz content (fricatives, noise) into the speech band. Both now low-pass with a Blackman-windowed sinc (cutoff 7.2 kHz, 24 output samples each side, polyphase, DC gain exactly 1) before decimating. Tests: a 10, 12 and 20 kHz tone drops below 1% amplitude, 0.3 to 6 kHz tones keep their level within 2%.
+- The web recorder now asks for `new AudioContext({ sampleRate: 16000 })` so the browser resamples with its own filter; the Meet bot path already did this. If the browser refuses (Firefox rejects streams of another rate) it retries at the default rate and the framer filter takes over.
+- Frames stay 100 ms, mono, i16. The filter adds about 1.5 ms of delay at 48 kHz; the tail of that is dropped when a recording stops. Tests that fed exactly one second now feed a little more.
+- Assumption: 7.2 kHz cutoff (0.45 of the output rate) is a good trade between keeping 6 to 7 kHz detail and blocking alias; not tuned against Deepgram word error rate.
+- Not verified: a real call. No live transcript was compared before and after, the Chrome 16 kHz context was only tested with a fake `AudioContext`, and CPU cost of the fallback filter in an AudioWorklet was not measured.
+
 ## make desktop-run
 - Builds with `--bundles app` and `createUpdaterArtifacts: false`, so no updater key is needed; signs with the same "Recapz Local" identity as `desktop-dmg`. Installing over `/Applications/Recapz.app` keeps the same signature, so the microphone and audio grants should stay (not verified).
 - Assumptions: the default URL is `http://localhost:5173` (the web app of `make local`, and the `base_url` the server checks Origin against). `DESKTOP_BASE_URL` from the environment or the command line overrides it; `desktop-dmg` keeps its production default. The base URL is baked in at build time (`build.rs`), so "local" means a rebuild, not a runtime variable.
