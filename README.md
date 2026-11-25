@@ -1,15 +1,17 @@
 # Recapz
 
-Private meeting notetaker for one team on one server. A notetaker joins Google Meet and Zoom, transcribes
+Private meeting notetaker for one team on one server. A notetaker joins Google Meet (Zoom calls are recorded from the macOS app or uploaded), transcribes
 mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team search every
 meeting with cited answers. One Rust binary (axum) with an embedded React + Vite + TypeScript + Tailwind app.
 
 Status: early development, building toward v1. See `docs/spec.md` for the feature spec.
 
 ## Layout
-- `crates/` — Rust workspace (server and core crates; more are added as features land)
+- `crates/` — Rust workspace: `server`, `core`, `speech`, `llm`, `notetaker`, `eval`
 - `web/` — React app
-- `docs/` — spec and decisions
+- `desktop/` — macOS app (Tauri), its own Cargo workspace; `make desktop-run` to try it against `make local`
+- `docs/` — start at `docs/README.md` (index, architecture, specs, decisions)
+- `deploy/` — systemd units and Caddyfile
 - `scripts/` — local checks (`check-commits.sh`, `pr-size.mjs`)
 - `.claude/` — agents, hooks and skills for coding sessions
 
