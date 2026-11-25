@@ -14,7 +14,7 @@ mkdir -p "$OUT/0.0.1" "$OUT/serve"
 
 build() { # version
   (cd desktop/src-tauri && CI=true RECAPZ_UPDATE_URL="http://localhost:$PORT/latest.json" APPLE_SIGNING_IDENTITY="Recapz Local" \
-    TAURI_SIGNING_PRIVATE_KEY_PATH="$KEY" cargo tauri build --bundles app \
+    TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY")" cargo tauri build --bundles app \
     --config "{\"version\":\"$1\",\"plugins\":{\"updater\":{\"dangerousInsecureTransportProtocol\":true}}}")
 }
 

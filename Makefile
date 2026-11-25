@@ -63,7 +63,7 @@ desktop-dmg:
 	@cargo tauri --version >/dev/null 2>&1 || { echo "cargo tauri is missing: run cargo install tauri-cli --version \"^2\" --locked once"; exit 1; }
 	@security find-certificate -c "Recapz Local" >/dev/null 2>&1 || { echo "no 'Recapz Local' certificate: run scripts/desktop-cert.sh once"; exit 1; }
 	# CI=true makes the Tauri bundler pass --skip-jenkins, so create-dmg skips the Finder AppleScript (needs an Automation permission).
-	cd desktop/src-tauri && CI=true RECAPZ_BASE_URL=$(DESKTOP_BASE_URL) APPLE_SIGNING_IDENTITY="Recapz Local" TAURI_SIGNING_PRIVATE_KEY_PATH="$(UPDATER_KEY)" cargo tauri build --bundles app,dmg --config '{"version":"$(VERSION)"}'
+	cd desktop/src-tauri && CI=true RECAPZ_BASE_URL=$(DESKTOP_BASE_URL) APPLE_SIGNING_IDENTITY="Recapz Local" TAURI_SIGNING_PRIVATE_KEY="$$(cat "$(UPDATER_KEY)")" cargo tauri build --bundles app,dmg --config '{"version":"$(VERSION)"}'
 	cp "$$(ls -t $(BUNDLE)/dmg/*.dmg | head -1)" Recapz.dmg
 	cp $(BUNDLE)/macos/Recapz.app.tar.gz $(BUNDLE)/macos/Recapz.app.tar.gz.sig .
 	./scripts/desktop-latest.sh $(VERSION) Recapz.app.tar.gz.sig > latest.json

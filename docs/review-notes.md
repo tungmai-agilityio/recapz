@@ -301,3 +301,7 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - `make desktop-dmg VERSION=x.y.z` signs the update with the key at `~/.tauri/recapz-updater.key` (override with `UPDATER_KEY`), passed as `TAURI_SIGNING_PRIVATE_KEY_PATH`; the password comes from `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. It writes `latest.json` with one `darwin-<arch>` entry for the build Mac (`desktop-latest.sh`, covered by `scripts/test-desktop-latest.sh`).
 - The pre-commit hook refuses a staged `*.key` file or a minisign secret key body, and `*.key` is git-ignored. A test builds a scratch repo for each case.
 - Not verified: that the Tauri CLI honours `TAURI_SIGNING_PRIVATE_KEY_PATH` (if not, switch to `TAURI_SIGNING_PRIVATE_KEY` with the file content), that `--config` with only `version` merges into `tauri.conf.json`, that the `.app.tar.gz` and `.sig` land in `bundle/macos/` when `--bundles app,dmg`, and a real build. Nothing here was built (no key use, no release made).
+
+## Desktop updater key variable
+- The Tauri CLI did not honour `TAURI_SIGNING_PRIVATE_KEY_PATH` ("A public key has been found, but no private key", seen on the maintainer's Mac). `make desktop-dmg` and `desktop-update-test.sh` now set `TAURI_SIGNING_PRIVATE_KEY` to the content of the key file for the build command only. The content is never echoed: make prints the recipe unexpanded, and it is not on a command line.
+- Not verified: a full build with the new variable; the other two PR 3 doubts (the `--config` merge and the `bundle/macos/` file names) are still open.
