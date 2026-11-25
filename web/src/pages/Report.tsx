@@ -12,7 +12,7 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, Unauthorized, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, Unauthorized, type MeetingLanguage, type MeetingDetail, type ReportData } from '../api'
 
 export function Report() {
   const { id = '' } = useParams()
@@ -35,6 +35,10 @@ export function Report() {
       void qc.invalidateQueries({ queryKey: ['meetings'] })
       nav('/')
     },
+  })
+  const setLanguage = useMutation({
+    mutationFn: (language: MeetingLanguage) => setMeetingLanguage(id, language),
+    onSuccess: ({ language }) => qc.setQueryData(['meeting', id], (m: MeetingDetail | undefined) => m && { ...m, language }),
   })
   const [draft, setDraft] = useState<string | null>(null) // non-null while the title is being edited
   const rename = useMutation({
@@ -140,6 +144,19 @@ export function Report() {
           </span>
         )}
       </p>
+      {m.status === 'scheduled' && (
+        <div className="mt-3 text-sm">
+          <label className="text-mute">Spoken language{' '}
+            <select aria-label="Spoken language" className={inputClass} disabled={setLanguage.isPending}
+              value={m.language} onChange={(e) => setLanguage.mutate(e.target.value as MeetingLanguage)}>
+              <option value="vi">Vietnamese</option>
+              <option value="en">English</option>
+              <option value="multi">Mixed Vietnamese and English</option>
+            </select>
+          </label>
+          {setLanguage.error && <p role="alert" className="mt-1 text-xs text-bad">{setLanguage.error.message.replace(/^\d+ /, '')}</p>}
+        </div>
+      )}
       {m.status === 'failed' && <p role="alert" className="mt-3 text-sm text-bad">{m.error ?? 'Processing failed.'}</p>}
 
       {confirming && (

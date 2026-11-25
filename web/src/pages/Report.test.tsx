@@ -317,3 +317,24 @@ test('colours a speaker missing from the meeting speakers grey', async () => {
   await screen.findByText('Plan agreed')
   expect(screen.getByRole('img', { name: 'Zed' }).className).toContain('bg-hair')
 })
+
+test('a scheduled meeting lets the member pick the spoken language, a recorded one does not', async () => {
+  const calls: { u: string; body?: string }[] = []
+  const scheduled = { ...meeting, status: 'scheduled', platform: 'meet', language: 'vi' }
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    calls.push({ u, body: init?.body as string | undefined })
+    if (init?.method === 'PATCH') return new Response(JSON.stringify({ language: 'multi' }))
+    return new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : scheduled))
+  }))
+  show()
+  const pick = (await screen.findByLabelText('Spoken language')) as HTMLSelectElement
+  expect(pick.value).toBe('vi')
+  fireEvent.change(pick, { target: { value: 'multi' } })
+  await vi.waitFor(() => expect(pick.value).toBe('multi'))
+  expect(calls.find((c) => c.body)).toEqual({ u: '/api/meetings/m1/language', body: '{"language":"multi"}' })
+  cleanup()
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : meeting))))
+  show()
+  await screen.findByText('Weekly sync')
+  expect(screen.queryByLabelText('Spoken language')).toBeNull()
+})
