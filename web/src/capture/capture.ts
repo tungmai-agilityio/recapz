@@ -1,5 +1,5 @@
 import { FrameSocket, type SocketState } from './socket'
-import type { Frame } from './framer'
+import { TARGET_RATE, type Frame } from './framer'
 import { inDesktopApp, startNativeCapture } from './native'
 import workletUrl from './worklet.ts?worker&url'
 
@@ -57,24 +57,7 @@ export async function startCapture(mode: CaptureMode, socketUrl: string): Promis
 }
 
 async function wire(mode: CaptureMode, socketUrl: string, mic: MediaStream, tab: MediaStream | undefined, release: () => void) {
-  const ctx = new AudioContext()
-  let node: AudioWorkletNode
-  try {
-    await ctx.audioWorklet.addModule(workletUrl)
-    node = new AudioWorkletNode(ctx, 'recapz-pcm', {
-      numberOfInputs: 2,
-      numberOfOutputs: 0,
-      channelCount: 1,
-      channelCountMode: 'explicit',
-    })
-    ctx.createMediaStreamSource(mic).connect(node, 0, 0)
-    if (tab) ctx.createMediaStreamSource(new MediaStream(tab.getAudioTracks())).connect(node, 0, 1)
-    // Created after awaited prompts, so it may start suspended.
-    await ctx.resume()
-  } catch (e) {
-    void ctx.close()
-    throw e
-  }
+  const { ctx, node } = await audioGraph(mic, tab)
 
   const capture: Capture = {
     mode,
@@ -114,6 +97,36 @@ async function wire(mode: CaptureMode, socketUrl: string, mic: MediaStream, tab:
     changed()
   })
   return capture
+}
+
+/**
+ * Builds the context and the worklet node feeding the framer. A 16 kHz context makes the browser resample with
+ * its own filter; where that is refused (Firefox rejects streams of another rate) the default-rate context is
+ * used and the framer low-pass filters and decimates instead.
+ */
+async function audioGraph(mic: MediaStream, tab: MediaStream | undefined) {
+  for (const rate of [TARGET_RATE, undefined]) {
+    let ctx: AudioContext | undefined
+    try {
+      ctx = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext()
+      await ctx.audioWorklet.addModule(workletUrl)
+      const node = new AudioWorkletNode(ctx, 'recapz-pcm', {
+        numberOfInputs: 2,
+        numberOfOutputs: 0,
+        channelCount: 1,
+        channelCountMode: 'explicit',
+      })
+      ctx.createMediaStreamSource(mic).connect(node, 0, 0)
+      if (tab) ctx.createMediaStreamSource(new MediaStream(tab.getAudioTracks())).connect(node, 0, 1)
+      // Created after awaited prompts, so it may start suspended.
+      await ctx.resume()
+      return { ctx, node }
+    } catch (e) {
+      void ctx?.close()
+      if (!rate) throw e
+    }
+  }
+  throw new Error('unreachable')
 }
 
 /** Runs a media prompt, turning a refusal into a message for the member. */
