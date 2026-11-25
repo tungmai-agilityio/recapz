@@ -325,3 +325,9 @@ Add a line when you decide something non-obvious. Newest entries at the bottom o
 - The running app is quit with `osascript` (a failed quit is ignored); an app that ignores it keeps running and the copy then fails loudly.
 - `TARGET=prod` selects `https://recapz.tungmai.com` (the `desktop-dmg` default; `build.rs` alone would default to `http://localhost:8080`). `DESKTOP_BASE_URL` still wins over `TARGET`. Not verified: the hosted server is down (droplet deleted), so a prod build was only checked with `make -n`.
 - Knobs are Make variables (Make has no flags): `TARGET=prod`, `URL=`, `SKIP_BUILD=1`, `HELP=1`. Precedence: `URL`, then `DESKTOP_BASE_URL`, then `TARGET`, then local. `SKIP_BUILD=1` reuses `bundle/macos/Recapz.app` and fails at the copy if there is none; it does not know which URL that build has. `HELP=1` exits 1 so the install steps never run.
+
+## Meeting detection, ticket 1
+- `detect.rs` polls the Core Audio process list every 2 s and logs "Started"/"Ended" per meeting app (app name only, never a window title or URL). Nothing is shown to the member yet; the prompt is ticket 2.
+- Verified on the maintainer's Mac: listing process objects and reading their bundle ids needs no permission prompt (from `cargo test`), and running Chrome and Slack helpers (`com.google.Chrome.helper`, `com.tinyspeck.slackmacgap.helper`) map to their apps.
+- Assumptions: the bundle ids for Zoom, Teams, Webex, FaceTime, Discord, Edge and Arc are from general knowledge; Safari's microphone shows up on `com.apple.WebKit.GPU`; 5 s to start and 15 s to end are guesses to tune after real calls; polling is cheap enough (not measured).
+- Not verified: `IsRunningInput` turning on during a real Zoom, Teams or Meet call, whether muting releases the microphone, and the inside of the running app (only the unit tests ran, the app was not launched).

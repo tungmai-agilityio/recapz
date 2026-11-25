@@ -1,6 +1,7 @@
 //! Thin macOS shell: one window on the Recapz server. The page is the normal web app; Google sign-in runs in
 //! the system browser (Google blocks embedded webviews) and comes back as `recapz://signed-in?code=…`.
 mod audio;
+mod detect;
 mod dot;
 mod update;
 
@@ -225,6 +226,8 @@ fn main() {
                 .build(app)?;
             show_window(app.handle());
             update::start(app.handle().clone());
+            // Logs only for now; the "Record this meeting?" prompt is the next step of the spec.
+            detect::start(|e| eprintln!("meeting detection: {e:?}"));
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
