@@ -52,7 +52,7 @@ docs-only PR (Markdown and `CLAUDE.md` only) skips this step and uses `--reviewe
 
 ## 4. Open the PR
 
-With the `pull-request` skill: title `type(scope): summary`, body ending `Closes #<n>` only if the PR delivers the
+With the `pull-request` skill: title `T-<NNN> type(scope): summary`, body ending `Closes #<n>` only if the PR delivers the
 whole ticket, otherwise `Refs #<n>` (and create a ticket for the missing part first). Fill "Decisions made" with
 each choice you settled, and "Decisions needing the maintainer" with only a choice the spec does not settle that is
 costly to undo, or exactly `None`. The ticket stays `status:in-progress`.

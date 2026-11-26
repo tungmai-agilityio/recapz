@@ -19,6 +19,9 @@ issue closed. Never invent tickets that are not in the table; if the table is wr
 - **New plan, new milestone.** Each new plan gets its own new milestone `M<next number> <name>`, numbered in
   creation/shipping order, even when the topic relates to an older milestone. Never add new tasks to an older or
   finished milestone. Close a milestone when its last issue closes, and say so in that PR.
+- **Ticket code in titles.** Right after creating an issue, rename it to `T-<NNN> <title>` (NNN = the issue number,
+  3 digits). PR titles are `T-<NNN> type(scope): summary` and branches `<type>/T-<NNN>-<slug>`; with no ticket use
+  `type: description` and `<type>/<slug>`.
 - **Close on merge.** Each PR says `Closes #N`; the issue is closed when it merges.
 - **Docs are done.** The spec, the decision record (`docs/decisions/`), the architecture notes and the README or
   docs index are updated in the same PR or in a linked docs issue.
