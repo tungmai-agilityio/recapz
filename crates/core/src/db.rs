@@ -86,7 +86,7 @@ pub struct User {
     pub role: String,
 }
 
-const INVITE_TTL_MS: i64 = 14 * 24 * 60 * 60 * 1000;
+pub(crate) const INVITE_TTL_MS: i64 = 14 * 24 * 60 * 60 * 1000;
 
 /// The workspace a person lands in: `users.tenant_id` while it is still a membership, else the oldest one.
 fn pick_tenant(control: &Connection, user_id: &str) -> Result<Option<String>> {
