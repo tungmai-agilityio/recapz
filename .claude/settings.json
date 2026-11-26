@@ -7,7 +7,10 @@
       "Bash(gh issue *)",
       "Bash(gh run *)",
       "Bash(scripts/automerge-check.sh *)",
+      "Bash(./scripts/automerge-check.sh *)",
       "Bash(scripts/automerge-pause.sh *)",
+      "Bash(./scripts/automerge-pause.sh *)",
+      "Bash(scripts/check-commits.sh *)",
       "Bash(./scripts/check-commits.sh *)",
       "Bash(node scripts/pr-size.mjs *)"
     ],
