@@ -16,7 +16,8 @@ critical-change rules live in the delivery pipeline doc. This skill adds only th
    scripts is code. If HEAD moved since the gate, stop. This skill never runs tests.
 3. Run the size and commit checks `CONTRIBUTING.md` lists. Over 800 source lines: split, or ask for `size-exception`.
 4. Push and open the PR ready for review (not draft). Body in bullets: Summary (one per change), Testing (what ran
-   and what did not), a one-line reason per new dependency.
+   and what did not), a one-line reason per new dependency, and "Decisions needing the maintainer" (exactly `None`
+   unless one is open; the auto-merge check refuses a PR without it).
 5. Any code change after the gate re-runs `test-runner` and the reviewer.
 
 ## Merge
