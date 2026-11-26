@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
-import { getMe, getMeetings, logout, Unauthorized } from './api'
+import { getMe, getMeetings, getWorkspaces, logout, switchWorkspace, Unauthorized } from './api'
 import { ThemeSwitch } from './ThemeSwitch'
 import { Badge } from './ui/Badge'
 import { Face } from './ui/Face'
@@ -46,6 +46,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const live = meetings.data?.filter((m) => m.status === 'recording') ?? []
   const navigate = useNavigate()
   const out = useMutation({ mutationFn: logout, onSuccess: () => qc.resetQueries() })
+  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: getWorkspaces, enabled: !!me.data })
+  // Every cached answer belongs to the old workspace: drop them all and start again on the meetings list.
+  const swap = useMutation({ mutationFn: switchWorkspace, onSuccess: () => { navigate('/'); qc.resetQueries() } })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,6 +74,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
+        {me.data?.workspace && <div title={me.data.workspace.name} data-testid="workspace-name" className="-mt-3 truncate px-2 text-xs opacity-80 max-[900px]:hidden">{me.data.workspace.name}</div>}
         <div className="contents max-[900px]:flex max-[900px]:min-w-0 max-[900px]:flex-1 max-[900px]:gap-1 max-[900px]:overflow-x-auto">
         {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting', icon: 'live' as const }))] as typeof g.items : admin ? [...g.items, { to: '/members', label: 'Members', icon: 'members' as const }] : g.items })).map((g) => (
           <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
@@ -100,11 +104,23 @@ export function Shell({ children }: { children: ReactNode }) {
                 {me.data.name && <small className="break-all text-mute">{me.data.email}</small>}
                 <span className="mt-1.5 self-start"><Badge>{me.data.role.charAt(0).toUpperCase() + me.data.role.slice(1)}</Badge></span>
               </div>
+              {(workspaces.data?.length ?? 0) > 1 && (
+                <div role="group" aria-label="Workspaces" className="mb-1 flex flex-col border-b border-hair pb-1">
+                  <small className="px-2.5 py-1 text-mute">Workspaces</small>
+                  {workspaces.data!.map((w) => (
+                    <MenuItem key={w.id} role="menuitemradio" aria-checked={w.current} className="flex items-center gap-2"
+                      onClick={() => { if (!w.current) swap.mutate(w.id) }}>
+                      <span className="min-w-0 flex-1 truncate">{w.name}</span>{w.current && <span aria-hidden>✓</span>}
+                    </MenuItem>
+                  ))}
+                </div>
+              )}
               {admin && <MenuItem onClick={() => navigate('/members')}>Manage members</MenuItem>}
               <MenuItem onClick={() => navigate('/recording')}>Recording & privacy</MenuItem>
               <MenuItem onClick={() => out.mutate()}>Sign out</MenuItem>
             </Menu>
             {out.isError && <span role="alert" className="block pt-1 text-xs text-bad">Could not sign out.</span>}
+            {swap.isError && <span role="alert" className="block pt-1 text-xs text-bad">Could not switch workspace.</span>}
           </div>
         )}
       </nav>
