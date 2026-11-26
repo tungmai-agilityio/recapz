@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react'
 
-export const inputClass = 'rounded-md border border-hair bg-sheet px-2.5 py-2 text-sm'
+/** Same height as `Button` (py-1.5, text-sm) so a control and a button on one row line up. */
+export const inputClass = 'rounded-md border border-hair bg-sheet px-2.5 py-1.5 text-sm disabled:opacity-50'
 
 type Control = { id: string; 'aria-describedby'?: string; 'aria-invalid'?: true }
 
