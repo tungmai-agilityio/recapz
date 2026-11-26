@@ -157,10 +157,13 @@ non-owners once the list returns the owner.
       but no meeting in that state to screenshot.
 
 ## S4 Ask
-- [ ] Question line, answer with numbered markers, three citation cards (number, time, meeting title, two-line
-      quote, ribbon with pin). Unticked: markers sit after the answer, not inline, because the server returns the
-      answer and its citation list separately; cards have no ribbon or pin because citations carry no speaker or
-      offset data and `web/src/ui/Ribbon.tsx` does not exist yet. Rest done in #136.
+- [x] Question line, answer with inline numbered markers, three citation cards (number, time, meeting title, speaker,
+      two-line quote, ribbon with pin). Done in #136 (rest), #636 (server data) and #624 (web). Markers are
+      superscript links to the matching card (mapped by the citation's `n`); while streaming they are plain numbers
+      because the cards arrive last, and a marker with no card is dropped, never shown raw. A document card has no
+      ribbon. Checked by eye on 2026-11-26 at 1280 and 390 px, Daylight light and Ink dark, with the page served by
+      Vite and the Ask and `/api/me` replies mocked (synthetic text, no server). Not compared side by side with the
+      prototype Ask state; Daylight dark and Ink light were not shot.
 - [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 

@@ -4,13 +4,45 @@ import { Link } from 'react-router'
 import { ask, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
 import { clock } from '../clock'
 import { Button } from '../ui/Button'
+import { Ribbon } from '../ui/Ribbon'
 
-// ponytail: the server's citations carry no speaker or offset data, so cards have no ribbon or pin.
 const SUGGESTIONS = ['What decisions were made recently?', 'What are the open action items?', 'What was said about deadlines?']
 
 /** A citation card: a link into the meeting, or a plain card for a document. */
 function Cite({ to, ...p }: { to: string | null; id: string; className: string; children: ReactNode }) {
   return to ? <Link to={to} {...p} /> : <div {...p} />
+}
+
+/** The answer with each `[n]` as a superscript. While streaming the cards are not known yet, so markers are plain
+ *  numbers (an unfinished `[1` waits); once done a marker links to the card that cites it and is dropped without one. */
+function AnswerText({ text, cites, ti, streaming }: { text: string; cites: Citation[]; ti: number; streaming: boolean }) {
+  const t = streaming ? text.replace(/\[\d*$/, '') : text
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of t.matchAll(/\[(\d+)\]/g)) {
+    out.push(t.slice(last, m.index))
+    last = m.index + m[0].length
+    const n = Number(m[1])
+    const card = cites.slice(0, 3).findIndex((c) => c.n === n)
+    if (streaming) out.push(<sup key={m.index} className="ml-0.5 text-[0.68rem]">{n}</sup>)
+    else if (card >= 0) out.push(
+      <sup key={m.index} className="ml-0.5 text-[0.68rem]">
+        <a href={`#cite-${ti}-${card}`} className="rounded-sm bg-hair-2 px-1 font-mono no-underline">{n}</a>
+      </sup>)
+  }
+  return <>{out}{t.slice(last)}</>
+}
+
+/** Where the cited moment sits in the meeting, as a pin on the speaker ribbon. */
+function CardRibbon({ c }: { c: Citation }) {
+  if (!c.ribbon?.length || !c.duration_ms || c.start_ms == null) return null
+  const at = Math.min(100, Math.max(0, (c.start_ms / c.duration_ms) * 100))
+  return (
+    <span className="relative block py-1" role="img" aria-label={`Speaker ribbon, moment at ${clock(c.start_ms)}`}>
+      <Ribbon segments={c.ribbon} variant="card" />
+      <span data-testid="pin" style={{ left: `${at}%` }} className="absolute inset-y-0 w-0.5 bg-signal" />
+    </span>
+  )
 }
 
 interface Turn { q: string; a: string; cites: Citation[]; state: 'streaming' | 'done' | 'error'; error: string }
@@ -58,12 +90,7 @@ export function Ask() {
           <p className="text-xl font-semibold leading-snug tracking-tight">{t.q}</p>
           {(t.state !== 'error' || t.a) && (
             <p className="whitespace-pre-wrap leading-7" aria-live="polite">
-              {t.a || <span className="text-mute">Searching your meetings…</span>}
-              {t.cites.slice(0, 3).map((_, i) => (
-                <sup key={i} className="ml-0.5 text-[0.68rem]">
-                  <a href={`#cite-${ti}-${i}`} className="rounded-sm bg-hair-2 px-1 font-mono no-underline">{i + 1}</a>
-                </sup>
-              ))}
+              {t.a ? <AnswerText text={t.a} cites={t.cites} ti={ti} streaming={t.state === 'streaming'} /> : <span className="text-mute">Searching your meetings…</span>}
             </p>
           )}
           {t.state === 'error' && <p role="alert" className="text-sm text-bad">{t.error}</p>}
@@ -77,8 +104,10 @@ export function Ask() {
                   to={c.meeting_id ? `/meetings/${c.meeting_id}?t=${c.start_ms ?? 0}` : null}
                   className="flex min-w-0 flex-col gap-2 rounded-lg border border-hair bg-inset p-3 hover:border-ink-2"
                 >
-                  <span className="flex justify-between font-mono text-xs"><span>{i + 1}</span><time className="text-mute">{c.start_ms === null ? (c.answered ? 'Document' : 'Document, not sent to the model') : clock(c.start_ms)}</time></span>
+                  <span className="flex justify-between font-mono text-xs"><span>{c.n ?? ''}</span><time className="text-mute">{c.start_ms === null ? (c.answered ? 'Document' : 'Document, not sent to the model') : clock(c.start_ms)}</time></span>
                   <b className="text-sm font-semibold">{c.title}</b>
+                  <CardRibbon c={c} />
+                  {c.speaker && <span className="text-xs text-mute">{c.speaker}</span>}
                   <span className="line-clamp-2 text-[0.82rem] text-ink-2">{c.quote}</span>
                 </Cite>
               ))}
