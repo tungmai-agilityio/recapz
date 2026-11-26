@@ -95,7 +95,11 @@ ambiguity in this order and record it under "Decisions made" in the PR: ticket A
 
 **Merging.** Merge your own PR (squash, `--match-head-commit` on the commit you checked) once CI is green on the
 current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
-Never use `--admin`, `--auto`, a merge commit or any flag that skips checks.
+Never use `--admin`, `--auto`, a merge commit or any flag that skips checks. Never ask the maintainer for permission to
+merge: this applies to every PR, in every session and subagent. If CI is configured but reports no checks on the branch
+(check `gh run list --branch <branch>`), there is no result to wait for: the local `test-runner` PASS and `code-reviewer`
+APPROVE for that HEAD stand in, `scripts/automerge-check.sh`'s "unreadable check results" reason is overridden, and the
+`Auto-merged:` comment says so. Mention it in the final report so a stopped CI gets fixed.
 
 **Escalation.** Escalate only critical changes: leave the PR open, set the ticket `needs-review` with a
 comment saying why, notify the maintainer, then continue with independent tickets.
