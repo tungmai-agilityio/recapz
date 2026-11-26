@@ -103,7 +103,7 @@ pub struct Storage {
     pub secret: String,
 }
 
-/// SMTP relay for the "report is ready" email. Empty `host` turns the email off. The login never comes
+/// SMTP relay for the "report is ready" and invite emails. Empty `host` turns both off. The login never comes
 /// from the config file: `Config::load` reads `RECAPZ_SMTP_USER` and `RECAPZ_SMTP_PASSWORD`.
 #[derive(Deserialize, Clone)]
 #[serde(default)]

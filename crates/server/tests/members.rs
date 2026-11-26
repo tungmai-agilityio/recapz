@@ -189,7 +189,10 @@ async fn admin_lists_invites_changes_roles_and_removes() {
         .await;
     assert_eq!(
         (s, b.as_str()),
-        (StatusCode::CREATED, r#"{"link":"https://recapz.example/"}"#)
+        (
+            StatusCode::CREATED,
+            r#"{"link":"https://recapz.example/","email":"off"}"#
+        )
     );
     let (_, b) = f.call(&f.boss, "GET", "/api/members", "").await;
     let v: serde_json::Value = serde_json::from_str(&b).unwrap();
@@ -317,5 +320,84 @@ async fn last_admin_and_self_removal_are_refused() {
     assert_eq!(
         (s, b.as_str()),
         (StatusCode::CONFLICT, "a workspace needs at least one admin")
+    );
+}
+
+struct FakeMail {
+    sent: Mutex<Vec<(String, String, String)>>,
+    fail: bool,
+}
+
+impl recapz_server::mail::Mailer for FakeMail {
+    fn send(&self, to: &str, subject: &str, body: &str) -> anyhow::Result<()> {
+        if self.fail {
+            anyhow::bail!("relay down for {to}");
+        }
+        let m = (to.into(), subject.into(), body.into());
+        self.sent.lock().unwrap().push(m);
+        Ok(())
+    }
+}
+
+/// An app whose invite mailer is `mail`, signed in as the bootstrap admin.
+async fn with_mail(mail: Arc<FakeMail>) -> (Router, String, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        base_url: "https://recapz.example".into(),
+        ..Config::default()
+    };
+    let app = routes::router_with_mail(cfg, Arc::new(Mutex::new(control)), None, Some(mail));
+    let boss = send(&app, login("boss@example.com")).await.1.unwrap();
+    (app, boss, dir)
+}
+
+#[tokio::test]
+async fn an_invite_is_emailed_and_a_failed_email_still_saves_it() {
+    let body = r#"{"email":"Bob@Example.com","role":"member"}"#;
+    let ok = Arc::new(FakeMail {
+        sent: Mutex::default(),
+        fail: false,
+    });
+    let (app, boss, _d) = with_mail(ok.clone()).await;
+    let (s, _, b) = send(&app, req("POST", "/api/members/invites", &boss, body)).await;
+    assert_eq!(
+        (s, b.as_str()),
+        (
+            StatusCode::CREATED,
+            r#"{"link":"https://recapz.example/","email":"sent"}"#
+        )
+    );
+    let sent = ok.sent.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].0, "Bob@Example.com");
+    assert_eq!(sent[0].1, "You're invited to Workspace on Recapz");
+    assert_eq!(
+        sent[0].2,
+        "You've been invited to the Workspace workspace on Recapz.\n\n\
+         Sign in with Google as Bob@Example.com to join:\nhttps://recapz.example/\n"
+    );
+
+    let down = Arc::new(FakeMail {
+        sent: Mutex::default(),
+        fail: true,
+    });
+    let (app, boss, _d) = with_mail(down).await;
+    let (s, _, b) = send(&app, req("POST", "/api/members/invites", &boss, body)).await;
+    assert_eq!(
+        (s, b.as_str()),
+        (
+            StatusCode::CREATED,
+            r#"{"link":"https://recapz.example/","email":"failed"}"#
+        )
+    );
+    let (_, _, b) = send(&app, req("GET", "/api/members", &boss, "")).await;
+    let v: serde_json::Value = serde_json::from_str(&b).unwrap();
+    assert_eq!(
+        v["invites"][0]["email"], "bob@example.com",
+        "saved despite the failed email"
     );
 }

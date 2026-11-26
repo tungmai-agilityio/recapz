@@ -1,4 +1,5 @@
-//! Emails the meeting report link to attendees who are members, once per member and meeting.
+//! Emails the meeting report link to attendees who are members, once per member and meeting, and
+//! the sign-in link to a person an admin invites.
 //! The transport sits behind `Mailer`, so tests need no SMTP server. Logs hold meeting IDs only.
 use crate::config::Mail;
 use anyhow::{Context, Result};
@@ -54,6 +55,17 @@ impl Mailer for SmtpMailer {
         self.smtp.send(&m)?;
         Ok(())
     }
+}
+
+/// Subject and body of the invite email: the workspace, the address to sign in as, and the link.
+pub fn invite_email(workspace: &str, to: &str, link: &str) -> (String, String) {
+    (
+        format!("You're invited to {workspace} on Recapz"),
+        format!(
+            "You've been invited to the {workspace} workspace on Recapz.\n\n\
+             Sign in with Google as {to} to join:\n{link}\n"
+        ),
+    )
 }
 
 /// Sends the report link to every active member on the invite who may see the meeting. A member

@@ -41,6 +41,8 @@ pub struct App {
     >,
     /// One-time sign-in codes for the desktop app.
     desktop_codes: Arc<desktop_auth::Codes>,
+    /// SMTP relay for invite emails; `None` when no `[mail]` host is configured.
+    mail: Option<Arc<dyn crate::mail::Mailer>>,
 }
 
 mod ask;
@@ -68,6 +70,22 @@ pub fn router_with_llm(
     control: Arc<Mutex<Connection>>,
     llm: Option<Arc<recapz_llm::Router>>,
 ) -> Router {
+    let mail = crate::mail::SmtpMailer::from_config(&cfg.mail)
+        .unwrap_or_else(|e| {
+            tracing::error!("mail config: {e:#}");
+            None
+        })
+        .map(|m| Arc::new(m) as Arc<dyn crate::mail::Mailer>);
+    router_with_mail(cfg, control, llm, mail)
+}
+
+/// `router_with_llm` with the invite mailer given, so tests need no SMTP relay.
+pub fn router_with_mail(
+    cfg: Config,
+    control: Arc<Mutex<Connection>>,
+    llm: Option<Arc<recapz_llm::Router>>,
+    mail: Option<Arc<dyn crate::mail::Mailer>>,
+) -> Router {
     let embedder =
         crate::embedder::from_config(&cfg.embedder, &cfg.llm).expect("embedder checked at start");
     let store =
@@ -85,6 +103,7 @@ pub fn router_with_llm(
         llm,
         asks: Default::default(),
         desktop_codes: Default::default(),
+        mail,
     };
     Router::new()
         .route(

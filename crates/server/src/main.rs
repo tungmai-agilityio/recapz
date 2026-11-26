@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         )
     });
     if mail.is_none() {
-        tracing::warn!("no [mail] host configured: report emails are off");
+        tracing::warn!("no [mail] host configured: report and invite emails are off");
     }
     runner::spawn(
         cfg.data_dir.clone(),

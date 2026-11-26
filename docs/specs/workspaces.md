@@ -28,7 +28,8 @@ so one busy workspace can take every notetaker slot.
   new `workspace_invites` table, valid 14 days. The link is the plain sign-in page (`{base_url}/`) and carries no
   token: signing in with Google as that email accepts every pending invite for it, so a leaked link grants
   nothing. A person already signed in sees new workspaces in the switcher, because listing workspaces accepts
-  pending invites first.
+  pending invites first. Since #633 the server also emails that link to the invited address when a `[mail]`
+  relay is configured; with none, or when the send fails, the invite is still saved and the admin copies the link.
 - **Roles stay `admin` and `member`;** the server refuses to remove or demote the last admin of a workspace.
 - **Removing a member** (admin only, never yourself): their meetings move to the admin who removed them, keeping
   each meeting's `share`; their personal documents and their calendar connection are hard-deleted (no one else
