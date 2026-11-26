@@ -76,7 +76,7 @@ code, not graded `high`. Then run:
 
 `scripts/automerge-check.sh <pr> --reviewed-sha <full sha the reviewer approved> --implementer-risk <low|high> --reviewer-risk <low|high, or na for a docs-only PR> [--local-pass <full sha of the test-runner PASS>]`
 
-- `ELIGIBLE`: `gh pr merge <pr> --squash --delete-branch --match-head-commit <that sha> --subject "<PR title>" --body "<2-3 line summary>\n\nCloses #<n>"` (`Refs #<n>` for a partial PR; never `--auto`,
+- `ELIGIBLE`: `gh pr merge <pr> --squash --delete-branch --match-head-commit <that sha> --subject "<PR title>" --body "$(printf '%s\n\nCloses #%s' "<2-3 line summary>" <issue>)"` (`Refs` instead of `Closes` for a partial PR; never `--auto`,
   `--admin` or a flag that skips checks). Post the audit comment: it starts with `Auto-merged:` and lists the CI
   jobs (or "no CI result: local test-runner PASS and code-reviewer APPROVE on <sha>"), the reviewed commit, both
   risk grades and "Decisions: None". Swap the closed issue's `status:` label for `status:done`. Clean up as the

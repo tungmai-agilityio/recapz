@@ -33,7 +33,7 @@ before merging:
 5. The branch, title and every commit subject follow CONTRIBUTING.md and no commit carries a tool trailer.
 6. The change is not critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD (`--reviewer-risk na` for a docs-only PR; `--local-pass <sha>` when there is no CI) or gave only non-critical denylisted-path reasons, which you name in the audit comment.
 
-Only if all hold, run `gh pr merge <n> --squash --delete-branch --match-head-commit <the full sha you checked> --subject "<PR title>" --body "<2-3 line summary>\n\nCloses #<n>"` (`Refs #<n>` for a partial PR). The explicit subject and body keep `main` to the title, a short summary and the issue line; the PR body is the review record and is not copied. Never use `--admin`, `--auto`, a merge commit or rebase merge, or any flag that skips checks.
+Only if all hold, run `gh pr merge <n> --squash --delete-branch --match-head-commit <the full sha you checked> --subject "<PR title>" --body "$(printf '%s\n\nCloses #%s' "<2-3 line summary>" <issue>)"` (`Refs` instead of `Closes` for a partial PR; `<issue>` is the ticket number, not the PR number). The explicit subject and body keep `main` to the title, a short summary and the issue line; the PR body is the review record and is not copied. Never use `--admin`, `--auto`, a merge commit or rebase merge, or any flag that skips checks.
 
 ## After the merge
 
