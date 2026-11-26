@@ -78,6 +78,77 @@ pub fn bootstrap_admin(control: &Connection, email: &str) -> Result<()> {
     Ok(())
 }
 
+/// Adds a workspace for the server owner: the tenant row, its migrated database and an admin invite for
+/// `admin_email`. A name already in use (any case) is refused. Returns the new workspace id.
+pub fn create_workspace(
+    control: &Connection,
+    data_dir: &Path,
+    name: &str,
+    admin_email: &str,
+) -> Result<String> {
+    let (name, email) = (name.trim(), admin_email.trim().to_lowercase());
+    if name.is_empty() {
+        anyhow::bail!("the workspace name is empty");
+    }
+    if !email.contains('@') {
+        anyhow::bail!("'{admin_email}' is not an email address");
+    }
+    let taken: bool = control.query_row(
+        "SELECT EXISTS (SELECT 1 FROM tenants WHERE lower(name) = lower(?1))",
+        [name],
+        |r| r.get(0),
+    )?;
+    if taken {
+        anyhow::bail!("a workspace named '{name}' already exists");
+    }
+    let id = new_id();
+    open_tenant(data_dir, &id)?;
+    control.execute(
+        "INSERT INTO tenants (id, name) VALUES (?1, ?2)",
+        [&id, name],
+    )?;
+    control.execute(
+        "INSERT INTO workspace_invites (email, tenant_id, role, invited_by, created_at)
+         VALUES (?1, ?2, 'admin', NULL, ?3)",
+        params![email, id, now_ms()],
+    )?;
+    Ok(id)
+}
+
+pub struct WorkspaceRow {
+    pub id: String,
+    pub name: String,
+    pub members: i64,
+    /// This month's estimated cost in micro-USD.
+    pub cost_micro_usd: i64,
+}
+
+/// Every workspace with its member count and this month's cost.
+pub fn list_workspaces(
+    control: &Connection,
+    data_dir: &Path,
+    now: i64,
+) -> Result<Vec<WorkspaceRow>> {
+    let mut s = control.prepare(
+        "SELECT t.id, t.name, (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id)
+         FROM tenants t ORDER BY t.name, t.id",
+    )?;
+    let rows = s
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<Result<Vec<(String, String, i64)>, _>>()?;
+    rows.into_iter()
+        .map(|(id, name, members)| {
+            let cost = crate::usage::month_totals(&open_tenant(data_dir, &id)?, now)?.total();
+            Ok(WorkspaceRow {
+                id,
+                name,
+                members,
+                cost_micro_usd: cost,
+            })
+        })
+        .collect()
+}
+
 pub struct User {
     pub id: String,
     pub email: String,
@@ -364,5 +435,44 @@ mod tests {
         c.execute("DELETE FROM memberships WHERE user_id = ?1", [&u.id])
             .unwrap();
         assert!(user_for_session(&c, &sid).unwrap().is_none());
+    }
+
+    #[test]
+    fn workspace_create_refuses_duplicates_and_list_counts_members_and_cost() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_control(dir.path()).unwrap();
+        let id = create_workspace(&c, dir.path(), " Acme ", "Boss@X.com").unwrap();
+        assert!(tenant_dir(dir.path(), &id).join("recapz.sqlite").exists());
+        let err = create_workspace(&c, dir.path(), "ACME", "other@x.com").unwrap_err();
+        assert!(err.to_string().contains("already exists"), "{err}");
+        assert!(create_workspace(&c, dir.path(), "", "a@x.com").is_err());
+        assert!(create_workspace(&c, dir.path(), "Beta", "nope").is_err());
+        assert_eq!(tenant_ids(&c).unwrap(), vec![id.clone()]);
+        // The admin invite works: signing in makes the person an admin of the new workspace.
+        let u = user_for_sign_in(&c, "boss@x.com", None).unwrap().unwrap();
+        assert_eq!(
+            (u.tenant_id.as_str(), u.role.as_str()),
+            (id.as_str(), "admin")
+        );
+
+        let id2 = create_workspace(&c, dir.path(), "Beta", "b@x.com").unwrap();
+        let t = open_tenant(dir.path(), &id).unwrap();
+        let now = now_ms();
+        t.execute_batch(
+            "INSERT INTO meetings (id, title, platform, status) VALUES ('m', 'Sync', 'upload', 'ready');",
+        )
+        .unwrap();
+        t.execute(
+            "INSERT INTO speech_usage (meeting_id, kind, audio_seconds, cost_micro_usd, at) VALUES ('m', 'batch', 60, 12000, ?1)",
+            [now],
+        )
+        .unwrap();
+        let rows = list_workspaces(&c, dir.path(), now).unwrap();
+        let got: Vec<_> = rows
+            .iter()
+            .map(|w| (w.name.as_str(), w.members, w.cost_micro_usd))
+            .collect();
+        assert_eq!(got, vec![("Acme", 1, 12000), ("Beta", 0, 0)]);
+        assert_eq!(rows[1].id, id2);
     }
 }
