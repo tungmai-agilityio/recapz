@@ -5,7 +5,7 @@ dev:
 
 local:
 	@test -f config.toml || { echo "copy config.example.toml to config.toml first (see docs/running-locally.md)"; exit 1; }
-	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
+	@set -a && [ -f .env ] && . ./.env; set +a; trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
 
 # Sign the notetaker's Google account in (opens a browser window), or delete that sign-in.
 notetaker-login notetaker-logout:

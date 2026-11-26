@@ -5,13 +5,13 @@ One command once the setup below is done: `make local` (server with real transcr
 ## Setup (once)
 
 1. Install Rust (version pinned in `rust-toolchain.toml`), Node and pnpm.
-2. Get a Deepgram API key and export it before starting: `export RECAPZ_SPEECH_KEY=...` (read from the environment only, never `config.toml`). The server refuses to start without it, and call and upload audio is sent to Deepgram.
+2. Get a Deepgram API key and place it in `.env` (or export it before starting): `RECAPZ_SPEECH_KEY=...` (read from the environment only, never `config.toml`; `.env` is already in `.gitignore`). The server refuses to start without it, and call and upload audio is sent to Deepgram.
 3. `cp config.example.toml config.toml` (never commit it) and set:
    - `bootstrap_admin_email = "you@example.com"`
    - `dev_login = true` (local only; Google sign-in is not needed)
    - `base_url = "http://localhost:5173"`: the server rejects browser POSTs (upload, Ask) whose Origin is not `base_url`, and the browser talks to the web app on :5173. Leave the default and every upload and Ask in the browser returns 403.
    - Optional, for reports and Ask, under `[llm]`: `provider = "openai"`, `base_url = "https://api.openai.com/v1"`, `api_key`, `model` (for example `gpt-4o-mini`), and the two prices. Reasoning models (the gpt-5 family) spend `max_tokens` on thinking before the reply, so with the default 2048 some report tasks come back empty and the report fails with `invalid JSON after retry (Eof)`. Start at `max_tokens = 8192` for them (a 40-second sample already used about 3,700 thinking tokens per task, so longer meetings may need more). The key lives only in this file; keep it out of git and chat.
-   - Optional, only to try Google Calendar connect: set `RECAPZ_SECRET_KEY` in the environment (never in `config.toml`) to 64 hex characters, for example from `openssl rand -hex 32`. It encrypts stored Google refresh tokens; without it Connect calendar answers 503. Add `<base_url>/auth/calendar/callback` as an authorised redirect URI in the Google client.
+   - Optional, only to try Google Calendar connect: set `RECAPZ_SECRET_KEY` in `.env` or the environment (never in `config.toml`) to 64 hex characters, for example from `openssl rand -hex 32`. It encrypts stored Google refresh tokens; without it Connect calendar answers 503. Add `<base_url>/auth/calendar/callback` as an authorised redirect URI in the Google client.
 4. `pnpm -C web install`
 
 ## Run
@@ -19,6 +19,8 @@ One command once the setup below is done: `make local` (server with real transcr
 ```sh
 make local
 ```
+
+`make local` automatically sources `.env` if present before starting `recapz-server` and `web dev`, so developers don't have to manually export `RECAPZ_*` variables every time.
 
 Open http://localhost:5173. Without `[llm]` the app still transcribes but writes no reports.
 
