@@ -43,8 +43,8 @@
 - Labels come from `scripts/labels.sh` (safe to re-run); change them there, not by hand in GitHub.
 
 ## Pull requests
-- One concern per PR; keep it reviewable. Title is `T-<NNN>: type(scope): summary` for a ticket, e.g.
-  `T-042: feat(desktop): ask to record when a call starts` (NNN is the issue number it closes). With no clear ticket
+- One concern per PR; keep it reviewable. Title is `T-<NNN> type(scope): summary` for a ticket, e.g.
+  `T-042 feat(desktop): ask to record when a call starts` (NNN is the issue number it closes). With no clear ticket
   the title is `type: description`, e.g. `docs: update deploy status`. The part after the code is the Conventional
   Commit that becomes the squash subject; at most 72 characters in total.
 - Description: what changed, how it was tested, and a one-line reason for any new dependency.

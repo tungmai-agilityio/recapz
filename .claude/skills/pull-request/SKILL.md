@@ -17,7 +17,7 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 
 1. `git fetch origin main && git switch -c <type>/<short-name> origin/main`
 2. Before pushing: confirm the handoff cites a `test-runner` `STATUS: PASS` for the current HEAD with `Dirty: no`, and a `code-reviewer` `APPROVE` (docs-only PRs skip both; check `git diff --name-only origin/main` lists only docs); if HEAD moved since, stop and return to the main session. This skill never runs tests. Then `node scripts/pr-size.mjs origin/main`. Over 800 source lines: stop and split, or ask for the `size-exception` label.
-3. `git push -u origin <branch>`, then `gh pr create` (ready for review, not draft; `gh pr edit` to update) with the title `T-<NNN>: type(scope): summary` for a ticket (`type: description` with no ticket; Conventional Commits, at most 72 characters, no trailing period); it becomes the squashed commit on `main`. Commit subjects on the branch use the same format.
+3. `git push -u origin <branch>`, then `gh pr create` (ready for review, not draft; `gh pr edit` to update) with the title `T-<NNN> type(scope): summary` for a ticket (`type: description` with no ticket; Conventional Commits, at most 72 characters, no trailing period); it becomes the squashed commit on `main`. Commit subjects on the branch use the same format.
 4. Body sections, in plain words: Summary (what and why), Testing (what ran and what did not), and a one-line reason for every new dependency.
 5. If review fixes change the code after the PASS, re-run `test-runner` and the reviewer before the merge.
 

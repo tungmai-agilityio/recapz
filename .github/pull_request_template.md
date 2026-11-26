@@ -19,7 +19,7 @@ these do not block the merge. -->
 code depends on). Otherwise write "None". -->
 
 ## Checklist
-- [ ] Branch is `<type>/T-<NNN>-<slug>` (or `<type>/<slug>` with no ticket); title is `T-<NNN>: type(scope): summary` (or `type: description` with no ticket)
+- [ ] Branch is `<type>/T-<NNN>-<slug>` (or `<type>/<slug>` with no ticket); title is `T-<NNN> type(scope): summary` (or `type: description` with no ticket)
 - [ ] About 300 (small) or 600 (medium) source lines, at most 800 (`node scripts/pr-size.mjs origin/main`)
 - [ ] No AI or competitor mentions, no tool trailers
 - [ ] Issue exists with a milestone; docs (spec status, running-locally, deploy, decisions, README index) updated or "no doc change" stated

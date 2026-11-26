@@ -35,7 +35,7 @@ Input: a ticket issue number, or none for "the next ticket". One ticket is one P
 - On `STATUS: PASS` for the current HEAD with `Dirty: no`, run `code-reviewer` with the ticket number so it checks
   each Acceptance item and grades risk. Fix blockers; a nit is fixed if trivial and otherwise ignored, and never counts as a round. **At most 2 CHANGES
   REQUESTED rounds** for blockers, then escalate.
-- Open the PR with the `pull-request` skill: title `T-<NNN>: type(scope): summary`, body ending `Closes #<n>` only if the PR
+- Open the PR with the `pull-request` skill: title `T-<NNN> type(scope): summary`, body ending `Closes #<n>` only if the PR
   delivers the whole ticket, otherwise `Refs #<n>` (and create a ticket for the missing part first). Fill
   "Decisions made" with each choice you settled, and "Decisions needing the maintainer" with only a choice the spec
   does not settle that is costly to undo, or exactly `None`.
