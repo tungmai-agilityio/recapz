@@ -93,12 +93,12 @@ ask the maintainer nothing and use no interactive question tool; stop only for a
 ambiguity in this order and record it under "Decisions made" in the PR: ticket Acceptance, spec,
 `docs/decisions/`, an existing code pattern, the smallest reversible option.
 
-**Merging.** Merge your own PR (squash, `--match-head-commit` on the commit you checked) once CI is green on the
+**Merging.** Merge your own PR (squash, `--match-head-commit` on the commit you checked) when CI reports, once it is green on the
 current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
 Never use `--admin`, `--auto`, a merge commit or any flag that skips checks. Never ask the maintainer for permission to
 merge: this applies to every PR, in every session and subagent. If CI is configured but reports no checks on the branch
-(check `gh run list --branch <branch>`; GitHub Actions stops when the free monthly minutes run out, which was the case from
-2026-11-23), there is no result to wait for: the local `test-runner` PASS and `code-reviewer`
+(check `gh run list --branch <branch>`; GitHub Actions stops when the free monthly minutes run out, observed with no `ci` run after
+2026-11-23, cause reported by the maintainer; table row 2 below), there is no result to wait for: the local `test-runner` PASS and `code-reviewer`
 APPROVE for that HEAD stand in, `scripts/automerge-check.sh`'s "unreadable check results" reason is overridden, and the
 `Auto-merged:` comment says so. Mention it in the final report so a stopped CI gets fixed.
 
@@ -129,7 +129,9 @@ high risk, open decisions, CI or HEAD problems, unreadable data) escalates.
 maintainer. This section is how a ticket PR is checked. It merges without the maintainer when **all** hold:
 
 1. Every CI check passed on the current HEAD, read by the merge step itself with `gh pr checks`: no pending, failed or
-   skipped job. `ci.yml` (rust, web, guards) is the only workflow; commit, title, branch and size rules are checked
+   skipped job. When CI is configured but reports no checks (see "Merging"), the local `test-runner` PASS and
+   `code-reviewer` APPROVE for that HEAD satisfy this condition and the `Auto-merged:` comment names the substitute.
+   `ci.yml` (rust, web, guards) is the only workflow; commit, title, branch and size rules are checked
    locally and by `code-reviewer` with `scripts/check-commits.sh` and `scripts/pr-size.mjs`, not in CI.
    A docs-only PR (every path under `docs/` or `README.md`; see `scripts/ci-changes.sh`) still runs these jobs, but
    `rust` and `web` skip their steps and report a pass, so the required check names are never missing or skipped.
@@ -155,7 +157,8 @@ continues with independent tickets, and the maintainer merges or decides. Mergin
 the guards against pushing to `main` are unchanged.
 
 **How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
-reasons to escalate; any failure to read data counts as a reason. The caller passes the full reviewed commit id and
+reasons to escalate; any failure to read data counts as a reason, so while CI reports nothing it prints "unreadable
+check results", which the caller overrides by hand under "Merging" (the script is not changed). The caller passes the full reviewed commit id and
 both risk grades. `ship-ticket` then runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push
 after the check cannot slip in. Never `--auto`. Nothing server-side stops someone with push access from
 merging a red PR by hand.
@@ -207,7 +210,7 @@ Then run the pipeline on the next real feature.
 |---|---|---|
 | 0 test-runner and `cargo` | #155, #157 (hook fixes) | yes; `cargo` was found, shared `CARGO_TARGET_DIR` not set |
 | 1 templates, labels, CONTRIBUTING | #156, #159 | labels created; forms not yet filed through the UI |
-| 2 CI | #162, #164, #165 | yes through 2026-11-23; no `ci` run is listed after that date, cause *unverified* |
+| 2 CI | #162, #164, #165 | yes through 2026-11-23; no `ci` run is listed after that date, cause *unverified* (maintainer says the free monthly Actions limit) |
 | 3 spec template | #166 (its `grill-spec` skill was removed later) | template not yet used |
 | 4 `plan-tickets` | #167 | no |
 | 5 `ship-ticket`, merge rule | #169 | first run on ticket #174 |
