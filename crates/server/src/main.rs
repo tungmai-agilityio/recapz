@@ -41,6 +41,15 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("no [storage] bucket configured: recordings stay on local disk");
     }
     let embedder = recapz_server::embedder::from_config(&cfg.embedder, &cfg.llm)?; // fail fast on a bad name
+    let mail = recapz_server::mail::SmtpMailer::from_config(&cfg.mail)?.map(|m| {
+        (
+            Arc::new(m) as Arc<dyn recapz_server::mail::Mailer>,
+            cfg.base_url.clone(),
+        )
+    });
+    if mail.is_none() {
+        tracing::warn!("no [mail] host configured: report emails are off");
+    }
     runner::spawn(
         cfg.data_dir.clone(),
         Arc::new(DeepgramTranscriber::new(
@@ -55,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
             monthly_cap_micro_usd: cfg.monthly_cap_micro_usd(),
             server_monthly_cap_micro_usd: cfg.server_monthly_cap_micro_usd(),
         },
+        mail,
     );
     if cfg.google.client_id.is_empty() || cfg.secret_key.is_empty() {
         tracing::warn!("calendar sync is off: needs google.client_id and RECAPZ_SECRET_KEY");

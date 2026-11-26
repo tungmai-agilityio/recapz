@@ -6,6 +6,7 @@ pub mod dev_call;
 pub mod embedder;
 pub mod google_calendar;
 pub mod live;
+pub mod mail;
 pub mod notetaker;
 pub mod notetaker_loop;
 pub mod report_model;

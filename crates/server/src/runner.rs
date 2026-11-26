@@ -1,3 +1,4 @@
+use crate::mail::{send_report_ready, Mailer};
 use crate::report_model::LlmReportModel;
 #[cfg(test)]
 use recapz_core::db::tenant_dir;
@@ -36,6 +37,7 @@ fn run_pending(
     report: Option<&LlmReportModel>,
     embedder: &dyn Embedder,
     limits: Limits,
+    mail: Option<(&dyn Mailer, &str)>,
 ) -> anyhow::Result<bool> {
     let mut kinds = vec![
         transcribe_job::KIND,
@@ -90,7 +92,16 @@ fn run_pending(
                 archive_job::handle(c, j, data_dir, &tenant, blobs.expect("kind needs a store"))
             }
             (label_job::KIND, _) => label_job::handle(c, j, data_dir, &tenant),
-            (report_job::KIND, Some(m)) => report_job::handle(c, j, m),
+            (report_job::KIND, Some(m)) => {
+                report_job::handle(c, j, m)?;
+                // The report is stored; an email problem must not fail it (a retry would pay again).
+                if let (Some((mailer, base_url)), Some(mid)) = (mail, j.meeting_id.as_deref()) {
+                    if let Err(e) = send_report_ready(c, mailer, base_url, mid) {
+                        tracing::warn!("report email not sent for meeting {mid}: {e:#}");
+                    }
+                }
+                Ok(())
+            }
             (index_job::KIND, _) => index_job::handle(c, j, embedder),
             (document::KIND, _) => document::handle(c, data_dir, &tenant, j, embedder),
             _ => anyhow::bail!("no handler for {}", j.kind),
@@ -132,6 +143,7 @@ pub fn spawn(
     report: Option<Arc<LlmReportModel>>,
     embedder: Arc<dyn Embedder>,
     limits: Limits,
+    mail: Option<(Arc<dyn Mailer>, String)>,
 ) {
     tokio::spawn(async move {
         let (d, e) = (data_dir.clone(), embedder.clone());
@@ -158,12 +170,13 @@ pub fn spawn(
                     Err(e) => tracing::error!("retention sweep panicked: {e}"),
                 }
             }
-            let (d, t, b, r, e) = (
+            let (d, t, b, r, e, m) = (
                 data_dir.clone(),
                 tx.clone(),
                 blobs.clone(),
                 report.clone(),
                 embedder.clone(),
+                mail.clone(),
             );
             match tokio::task::spawn_blocking(move || {
                 run_pending(
@@ -173,6 +186,7 @@ pub fn spawn(
                     r.as_deref(),
                     e.as_ref(),
                     limits,
+                    m.as_ref().map(|(m, u)| (m.as_ref(), u.as_str())),
                 )
             })
             .await
@@ -223,7 +237,16 @@ mod tests {
         .unwrap();
         let off = document::add(&conn, dir.path(), &tenant, "m1", "a.txt", b"alpha beta").unwrap();
         let emb = Counting(Default::default());
-        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
+        assert!(run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            NO_LIMITS,
+            None
+        )
+        .unwrap());
         assert_eq!(emb.0.load(SeqCst), 0, "toggle off: nothing is embedded");
         let chunks = |id: &str| -> i64 {
             conn.query_row(
@@ -235,7 +258,16 @@ mod tests {
         };
         assert_eq!(chunks(&off), 1, "still keyword-searchable");
         assert!(document::set_llm_ok(&conn, "m1", &off, true).unwrap());
-        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
+        assert!(run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            NO_LIMITS,
+            None
+        )
+        .unwrap());
         assert_eq!(emb.0.load(SeqCst), 1, "toggle on: one chunk embedded");
     }
 
@@ -255,7 +287,8 @@ mod tests {
                 None,
                 None,
                 &recapz_core::embed::HashEmbedder,
-                NO_LIMITS
+                NO_LIMITS,
+                None
             )
             .unwrap(),
             "no job should run"
@@ -293,7 +326,16 @@ mod tests {
         .unwrap();
         let id = jobs::enqueue(&conn, archive_job::KIND, Some("m1"), None).unwrap();
         let emb = recapz_core::embed::HashEmbedder;
-        assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb, NO_LIMITS).unwrap());
+        assert!(!run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            NO_LIMITS,
+            None
+        )
+        .unwrap());
         assert_eq!(jobs::state(&conn, id).unwrap(), Some(("queued".into(), 0)));
         assert!(run_pending(
             dir.path(),
@@ -301,7 +343,8 @@ mod tests {
             Some(&Keep),
             None,
             &emb,
-            NO_LIMITS
+            NO_LIMITS,
+            None
         )
         .unwrap());
         assert_eq!(jobs::state(&conn, id).unwrap().unwrap().0, "done");
@@ -336,7 +379,9 @@ mod tests {
             server_monthly_cap_micro_usd: 0,
         };
         // spend (5) has reached the cap (5): the index job waits
-        assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(5)).unwrap());
+        assert!(
+            !run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(5), None).unwrap()
+        );
         assert_eq!(
             jobs::state(&conn, index).unwrap(),
             Some(("queued".into(), 0))
@@ -349,7 +394,8 @@ mod tests {
             Some(&Keep),
             None,
             &emb,
-            cap(5)
+            cap(5),
+            None
         )
         .unwrap());
         assert_eq!(jobs::state(&conn, archive).unwrap().unwrap().0, "done");
@@ -358,7 +404,7 @@ mod tests {
             Some(("queued".into(), 0))
         );
         // raising the cap (or a new month) lets it run
-        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(6)).unwrap());
+        assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(6), None).unwrap());
         assert_eq!(jobs::state(&conn, index).unwrap().unwrap().0, "done");
     }
 
@@ -395,7 +441,16 @@ mod tests {
         let state = |c: &rusqlite::Connection, j| jobs::state(c, j).unwrap().unwrap().0;
         // only A has a cap (5, reached by its spend of 5): A waits, B runs
         db::set_workspace_cap(&control, &ids[0], 5).unwrap();
-        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(0)).unwrap();
+        run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            limits(0),
+            None,
+        )
+        .unwrap();
         assert_eq!(
             (state(&ca, ja).as_str(), state(&cb, jb).as_str()),
             ("queued", "done")
@@ -406,13 +461,31 @@ mod tests {
             (cb, j)
         };
         db::set_workspace_cap(&control, &ids[0], 0).unwrap();
-        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(10)).unwrap();
+        run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            limits(10),
+            None,
+        )
+        .unwrap();
         assert_eq!(
             (state(&ca, ja).as_str(), state(&cb2, jb2).as_str()),
             ("queued", "queued")
         );
         // a higher server cap lets both run
-        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(11)).unwrap();
+        run_pending(
+            dir.path(),
+            &StubTranscriber,
+            None,
+            None,
+            &emb,
+            limits(11),
+            None,
+        )
+        .unwrap();
         assert_eq!(
             (state(&ca, ja).as_str(), state(&cb2, jb2).as_str()),
             ("done", "done")
@@ -454,7 +527,9 @@ mod tests {
         let emb = recapz_core::embed::HashEmbedder;
         for _ in 0..2 {
             jobs::enqueue(&conn, transcribe_job::KIND, Some("m1"), None).unwrap();
-            assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits).unwrap());
+            assert!(
+                run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits, None).unwrap()
+            );
         }
         let rows: Vec<(i64, i64)> = conn
             .prepare("SELECT audio_seconds, cost_micro_usd FROM speech_usage")

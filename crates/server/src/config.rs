@@ -103,6 +103,34 @@ pub struct Storage {
     pub secret: String,
 }
 
+/// SMTP relay for the "report is ready" email. Empty `host` turns the email off. The login never comes
+/// from the config file: `Config::load` reads `RECAPZ_SMTP_USER` and `RECAPZ_SMTP_PASSWORD`.
+#[derive(Deserialize, Clone)]
+#[serde(default)]
+pub struct Mail {
+    pub host: String,
+    /// 587 (STARTTLS) by default; 465 uses implicit TLS.
+    pub port: u16,
+    /// Sender address, e.g. `Recapz <notes@example.com>`.
+    pub from: String,
+    #[serde(skip)]
+    pub username: String,
+    #[serde(skip)]
+    pub password: String,
+}
+
+impl Default for Mail {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: 587,
+            from: String::new(),
+            username: String::new(),
+            password: String::new(),
+        }
+    }
+}
+
 /// Settings for the browser notetaker.
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
@@ -123,6 +151,7 @@ pub struct Config {
     pub dev_login: bool,
     pub google: Google,
     pub llm: Llm,
+    pub mail: Mail,
     pub notetaker: Notetaker,
     pub speech: Speech,
     pub storage: Storage,
@@ -156,6 +185,7 @@ impl Default for Config {
             dev_login: false,
             google: Google::default(),
             llm: Llm::default(),
+            mail: Mail::default(),
             notetaker: Notetaker::default(),
             speech: Speech::default(),
             storage: Storage::default(),
@@ -200,6 +230,8 @@ impl Config {
         cfg.speech.api_key = std::env::var("RECAPZ_SPEECH_KEY").unwrap_or_default();
         cfg.storage.key_id = std::env::var("RECAPZ_STORAGE_KEY_ID").unwrap_or_default();
         cfg.storage.secret = std::env::var("RECAPZ_STORAGE_SECRET").unwrap_or_default();
+        cfg.mail.username = std::env::var("RECAPZ_SMTP_USER").unwrap_or_default();
+        cfg.mail.password = std::env::var("RECAPZ_SMTP_PASSWORD").unwrap_or_default();
         cfg.llm_key_from_env(std::env::var("RECAPZ_LLM_KEY").ok());
         Ok(cfg)
     }
@@ -237,6 +269,18 @@ mod tests {
         assert!(cfg.require_speech_key().is_err());
         cfg.speech.api_key = "k".into();
         assert!(cfg.require_speech_key().is_ok());
+    }
+
+    #[test]
+    fn the_smtp_login_never_comes_from_the_file() {
+        let cfg: Config =
+            toml::from_str("[mail]\nhost = \"smtp.x\"\nusername = \"u\"\npassword = \"p\"")
+                .unwrap();
+        assert_eq!((cfg.mail.host.as_str(), cfg.mail.port), ("smtp.x", 587));
+        assert_eq!(
+            (cfg.mail.username.as_str(), cfg.mail.password.as_str()),
+            ("", "")
+        );
     }
 
     #[test]
