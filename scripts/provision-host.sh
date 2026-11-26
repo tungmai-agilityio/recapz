@@ -13,7 +13,7 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
-apt-get install -y chromium xvfb sqlite3 rsync curl ca-certificates gnupg ufw debian-keyring debian-archive-keyring apt-transport-https
+apt-get install -y chromium xvfb sqlite3 rsync curl jq ca-certificates gnupg ufw debian-keyring debian-archive-keyring apt-transport-https
 # Chromium's browser sign-in (DICE) fails to get a token in Debian's build and then signs the notetaker's
 # Google account out on every start; turning browser sign-in off keeps the plain web sign-in.
 install -d -m 0755 /etc/chromium/policies/managed

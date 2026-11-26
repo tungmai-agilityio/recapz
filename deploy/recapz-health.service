@@ -1,0 +1,8 @@
+[Unit]
+Description=Recapz health check (failed joins, stuck jobs)
+
+[Service]
+Type=oneshot
+User=recapz
+EnvironmentFile=/etc/recapz/smoke.env
+ExecStart=/usr/local/bin/recapz-check-health /var/lib/recapz

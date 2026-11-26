@@ -105,6 +105,7 @@ test:
 	./scripts/test-push-guards.sh
 	./scripts/test-desktop-latest.sh
 	./scripts/test-automerge.sh
+	./scripts/test-health.sh
 	cargo test --workspace
 	pnpm -C web test
 
