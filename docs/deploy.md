@@ -126,6 +126,31 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
 
+## Daily join smoke test
+
+A timer sends the notetaker to a standing test call every day and alerts admins if the meeting does not reach `ready` (`scripts/smoke-join.sh`), so a Meet page change is caught before a team meeting is missed. Failures post to `ALERT_WEBHOOK`, the same webhook as the other alerts.
+
+1. Keep one Meet call open for the test (a link that stays valid, e.g. a recurring event) and note its URL.
+2. As a member (e.g. the admin) sign in on the web app, copy the `recapz_session` cookie value, and write `/etc/recapz/smoke.env` (mode 0640, owner `recapz:recapz`, never commit it):
+
+```sh
+RECAPZ_URL=http://localhost:8080
+RECAPZ_COOKIE=recapz_session=<value>
+MEET_TEST_URL=<the standing test call link>   # the test call link is set here
+ALERT_WEBHOOK=<webhook url>
+```
+
+3. Install and enable:
+
+```sh
+sudo install -m 0755 scripts/smoke-join.sh /usr/local/bin/recapz-smoke-join
+sudo install -m 0644 deploy/recapz-smoke.service deploy/recapz-smoke.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now recapz-smoke.timer
+sudo systemctl start recapz-smoke.service   # run once now; check with journalctl -u recapz-smoke
+```
+
+Runs daily at 06:00 UTC. Someone must be in the test call (or it must admit the bot) when it runs. The session cookie expires with the session: when the script reports `join request failed`, refresh the cookie. Each run leaves a meeting in that member's account. This is **unverified** on a live host until the Meet live check (#424) is done.
+
 ## Deploy from CI
 
 `release-build` builds the binary and then, after you approve, deploys it. The `deploy` job runs for a `v*` tag, or for a manual run on `main` with `deploy=true`; never on a plain merge. It sends the binary and its sha256 to a restricted `deploy` user on the host, runs `scripts/smoke-deploy.sh` against the live URL and rolls back if that fails (`deploy-release.sh` also rolls back by itself when the service does not become healthy). The CI key can only run `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin), `rollback` and `status`; no shell, no forwarding. It can still ship any binary, so keep it only in the GitHub `production` environment.
