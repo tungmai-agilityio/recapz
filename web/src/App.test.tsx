@@ -37,7 +37,9 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   fireEvent.click(screen.getByRole('button', { name: 'Account' }))
   expect(screen.getByRole('menu').textContent).toContain('Admin')
   expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
-  expect(screen.getAllByTestId('v1-dot').length).toBe(5)
+  expect(screen.getByRole('menuitem', { name: 'Manage members' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'Members' }).getAttribute('href')).toBe('/members')
+  expect(screen.getAllByTestId('v1-dot').length).toBe(6)
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
 })
@@ -143,4 +145,13 @@ test('a 401 shows only the sign-in card, with no rail', async () => {
   mount('/', new Response('', { status: 401 }))
   expect(await screen.findByText('Sign in to Recapz')).toBeTruthy()
   expect(screen.queryByRole('navigation', { name: 'Screens' })).toBeNull()
+})
+
+test('a member sees no Members item and never requests the members API', async () => {
+  const calls: string[] = []
+  mount('/', new Response(JSON.stringify({ email: 'bo@example.com', name: 'Bo', role: 'member' })), calls)
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  expect(screen.queryByRole('menuitem', { name: 'Manage members' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Members' })).toBeNull()
+  expect(calls.filter((c) => c.includes('/api/members')).length).toBe(0)
 })

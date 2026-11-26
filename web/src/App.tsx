@@ -3,6 +3,7 @@ import { Shell } from './Shell'
 import { Ask } from './pages/Ask'
 import { Documents } from './pages/Documents'
 import { Live } from './pages/Live'
+import { Members } from './pages/Members'
 import { Meetings } from './pages/Meetings'
 import { DetectedMeeting } from './pages/Record'
 import { Recording } from './pages/Recording'
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/upload" element={<Upload />} />
         <Route path="/ask" element={<Ask />} />
         <Route path="/documents" element={<Documents />} />
+        <Route path="/members" element={<Members />} />
         <Route path="/recording" element={<Recording />} />
         <Route path="/meetings/:id" element={<Report />} />
         <Route path="/meetings/:id/live" element={<Live />} />

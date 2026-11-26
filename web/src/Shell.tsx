@@ -14,6 +14,7 @@ const groups: { label: string; items: { to: string; label: string; icon: IconNam
 ]
 
 function crumb(path: string) {
+  if (path === '/members') return <>Workspace / <b className="font-medium text-ink">Members</b></>
   if (path === '/recording') return <>Workspace / <b className="font-medium text-ink">Recording & privacy</b></>
   if (path === '/upload') return <>Meetings / <b className="font-medium text-ink">Upload</b></>
   if (path === '/documents') return <>Work / <b className="font-medium text-ink">My documents</b></>
@@ -41,6 +42,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
   // The rail shows "Live meeting" only while a call is being recorded.
   const meetings = useQuery({ queryKey: ['meetings'], queryFn: getMeetings, enabled: !!me.data, refetchInterval: 15_000 })
+  const admin = me.data?.role === 'admin'
   const live = meetings.data?.filter((m) => m.status === 'recording') ?? []
   const navigate = useNavigate()
   const out = useMutation({ mutationFn: logout, onSuccess: () => qc.resetQueries() })
@@ -70,7 +72,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <Glyph /><span>Recapz</span>
         </NavLink>
         <div className="contents max-[900px]:flex max-[900px]:min-w-0 max-[900px]:flex-1 max-[900px]:gap-1 max-[900px]:overflow-x-auto">
-        {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting', icon: 'live' as const }))] as typeof g.items : g.items })).map((g) => (
+        {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting', icon: 'live' as const }))] as typeof g.items : admin ? [...g.items, { to: '/members', label: 'Members', icon: 'members' as const }] : g.items })).map((g) => (
           <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (
@@ -98,6 +100,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 {me.data.name && <small className="break-all text-mute">{me.data.email}</small>}
                 <span className="mt-1.5 self-start"><Badge>{me.data.role.charAt(0).toUpperCase() + me.data.role.slice(1)}</Badge></span>
               </div>
+              {admin && <MenuItem onClick={() => navigate('/members')}>Manage members</MenuItem>}
               <MenuItem onClick={() => navigate('/recording')}>Recording & privacy</MenuItem>
               <MenuItem onClick={() => out.mutate()}>Sign out</MenuItem>
             </Menu>
