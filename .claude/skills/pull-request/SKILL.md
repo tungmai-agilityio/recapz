@@ -23,15 +23,15 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 
 ## Merge
 
-Ticket PRs merge through `ship-ticket` section 4. For any other PR (for example a docs-only PR), check every item
+Ticket PRs merge through `ship-ticket` section 6. For any other PR (for example a docs-only PR), check every item
 before merging:
 
 1. `gh pr view <n> --json state,isDraft,baseRefName,mergeable,labels,title` — must be open, not draft, target `main`, and be mergeable.
-2. `gh pr checks <n>` shows every check passing, and the recorded `test-runner` PASS matches the PR's HEAD (docs-only PRs skip the PASS).
+2. `gh pr checks <n>` shows every check passing, and the recorded `test-runner` PASS matches the PR's HEAD (docs-only PRs skip the PASS). If it says "no checks reported" and `gh run list --commit <HEAD>` is empty about 2 minutes after the last push, there is no CI: the local PASS stands in (`--local-pass` below).
 3. The PR body confirms `code-reviewer` approved, or that every blocker raised is fixed (docs-only PRs skip this).
 4. Size is within the guide (about 300 small, 600 medium, warning above 800 source lines), or the PR has the `size-exception` label.
 5. The branch, title and every commit subject follow CONTRIBUTING.md and no commit carries a tool trailer.
-6. The change is not critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD (`--reviewer-risk na` for a docs-only PR) or gave only non-critical denylisted-path reasons, which you name in the audit comment.
+6. The change is not critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD (`--reviewer-risk na` for a docs-only PR; `--local-pass <sha>` when there is no CI) or gave only non-critical denylisted-path reasons, which you name in the audit comment.
 
 Only if all hold, run `gh pr merge <n> --squash --delete-branch --match-head-commit <the full sha you checked>`. Never use `--admin`, `--auto`, a merge commit or rebase merge, or any flag that skips checks.
 

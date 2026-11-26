@@ -48,6 +48,7 @@ Follow `CONTRIBUTING.md`.
 - Push only your own branch. Never push to `main`, force-push shared branches, or use `--no-verify`.
 - Use `--force-with-lease` when necessary.
 - Merging and escalation: "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`. Never `--admin`, `--auto` or a merge commit.
+- Merge your own PRs without asking the maintainer, in every session and subagent. Wait for CI when it reports; with no CI result, `test-runner` PASS and `code-reviewer` APPROVE on the HEAD stand in (`scripts/automerge-check.sh --local-pass`). Escalate only critical changes ("Always critical" in the pipeline doc).
 
 ## Security & Privacy
 
