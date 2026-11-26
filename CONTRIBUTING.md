@@ -29,8 +29,8 @@
 - Issues own task status; `docs/specs/` and `docs/decisions/` hold specs and decisions. The full flow, labels and
   merge rules are in `docs/specs/delivery-pipeline.md`.
 - Start from an **Intent** issue. A merged spec turns into **Ticket** issues, each one PR.
-- Every ticket carries one `kind:`, `status:`, `type:` and `priority:` label (default `priority:p2`) and at least
-  one `area:` label. `type:` matches the branch prefix and commit type; the first `area:` is the commit scope.
+- Every ticket carries one `status:`, `type:` (`feat`, `bug`, `task`), `priority:` (`high`, `medium`, `low`; default `medium`) and `area:`
+  label. Add `needs-review` to an important issue that a human must review and approve before merge.
 - Planning: read existing issues, PRs, milestones and docs first; create one issue per planned PR before coding, with
   acceptance, dependencies, a `type:*` label and a milestone set at creation (each new plan gets a new `M<n> <name>`, never an old or finished one; close a milestone with its last issue); confirm with the
   maintainer before creating more than about 10 at once. Docs (spec, decision record, README index) are part of done.

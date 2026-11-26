@@ -90,7 +90,7 @@ scenario "head moves between reads" 1 'echo "$sha2" > $F/head2'
 scenario "paused" 1 'echo 1 > $F/var'
 scenario "variable not found but listing fails" 1 'touch $F/varlist.fail'
 scenario "variable API error" 1 'echo "HTTP 500: server error" > $F/var.err'
-scenario "human-merge label" 1 'jq ".labels=[{\"name\":\"human-merge\"}]" $F/view.json > $F/v && mv $F/v $F/view.json'
+scenario "needs-review label" 1 'jq ".labels=[{\"name\":\"needs-review\"}]" $F/view.json > $F/v && mv $F/v $F/view.json'
 scenario "draft" 1 'jq ".isDraft=true" $F/view.json > $F/v && mv $F/v $F/view.json'
 scenario "a real decision in the body" 1 'jq ".body=\"## Decisions needing the maintainer\nPolls every 3s.\n\"" $F/view.json > $F/v && mv $F/v $F/view.json'
 scenario "reviewed sha is not HEAD" 1 ':' --reviewed-sha "$sha2" --implementer-risk low --reviewer-risk low

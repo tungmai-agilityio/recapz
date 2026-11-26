@@ -114,7 +114,7 @@ What already exists:
    `recapz://signed-in?code=…&state=…` (the app's own random `state`, passed in as `/auth/desktop?state=`).
    `POST /auth/desktop/exchange` (same-origin, CSRF-checked, code and state must match) swaps the code for the
    usual session cookie. Codes are hashed, single use and expire after 60 s. Critical by `CLAUDE.md`:
-   `human-merge`.
+   `needs-review`.
 2. Tauri 2 app: one window on `base_url`, the deep-link and single-instance plugins (reason: the sign-in
    redirect), a Dock icon, and a menu-bar icon with Open and Quit. Close closes the window (the app stays in the Dock and menu bar; while recording it asks first). Quit always exits and stops capture. `make desktop-check` runs fmt
    and Clippy, and the pre-push hook calls it when `desktop/**` changed.

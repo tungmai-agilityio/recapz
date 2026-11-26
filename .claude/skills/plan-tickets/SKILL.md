@@ -5,7 +5,7 @@ description: Turn a merged spec's ticket table into GitHub ticket issues with th
 
 # Plan tickets from a merged spec
 
-Input: a spec file in `docs/specs/`. Output: one `kind:ticket` issue per row of its Tickets table, then the intent
+Input: a spec file in `docs/specs/`. Output: one ticket issue per row of its Tickets table, then the intent
 issue closed. Never invent tickets that are not in the table; if the table is wrong, stop and escalate.
 
 ## Planning rules (always)
@@ -30,18 +30,18 @@ issue closed. Never invent tickets that are not in the table; if the table is wr
 
 1. The spec is on `origin/main` (`git fetch origin main && git cat-file -e origin/main:docs/specs/<file>`). An
    unmerged spec is not approved: stop.
-2. Its `Intent: #N` issue exists and is `kind:intent`. Tickets for this spec do not already exist
+2. Its `Intent: #N` issue exists and its title has `intent:`. Tickets for this spec do not already exist
    (`gh issue list --search "<spec file name>" --state all`); if some do, stop and say which.
 3. Every label the plan needs exists (`gh label list`): run `scripts/labels.sh` if any is missing.
 4. Each row has: title as `type(scope): summary`, area, blocked by, touches, size, testing scope. A row over about
-   600 source lines, or missing a field, is sent back: set the intent to `status:needs-human` with a comment and stop.
+   600 source lines, or missing a field, is sent back: set the intent to `needs-review` with a comment and stop.
 
 ## Create
 
 For each row, in table order (so blockers exist first):
 
-- Title: the row's title. Labels: `kind:ticket`, `status:ready`, `type:<type>`, `priority:<p>` (default
-  `priority:p2`), and one `area:` per area, the first being the commit scope. Refuse a ticket missing any required
+- Title: the row's title. Labels: `status:ready`, `type:<feat|bug|task>`, `priority:<high|medium|low>` (default
+  `priority:medium`) and one `area:` (the one closest to the commit scope). Refuse a ticket missing any required
   label.
 - Body, with exactly these headings (same as `.github/ISSUE_TEMPLATE/ticket.yml`): Spec (link to the file on
   `main`), Goal, Acceptance (a checkable list taken from the spec), Touches (one path per line), Blocked by
@@ -55,7 +55,7 @@ title `docs(specs): link <feature> tickets`) with the `pull-request` skill, and 
 
 ## Stop and escalate
 
-On any failure part-way, do not delete issues already created. Set the intent to `status:needs-human` with a
+On any failure part-way, do not delete issues already created. Set the intent to `needs-review` with a
 comment listing what exists and what is missing, and stop.
 
 ## Next

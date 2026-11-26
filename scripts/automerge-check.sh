@@ -32,7 +32,7 @@ info=$(gh pr view "$pr" --json state,isDraft,baseRefName,headRefOid,labels,body)
 [ "$(jq -r .isDraft <<<"$info")" = false ] || no "PR is a draft"
 [ "$(jq -r .baseRefName <<<"$info")" = main ] || no "PR does not target main"
 labels=$(jq -r '.labels[].name' <<<"$info") || no "cannot read labels"
-grep -qx human-merge <<<"$labels" && no "labelled human-merge"
+grep -qx needs-review <<<"$labels" && no "labelled needs-review"
 head=$(jq -r .headRefOid <<<"$info")
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || no "reviewed sha must be the full 40-character commit id"
 [ "$sha" = "$head" ] || no "reviewer approval is not for the current HEAD ($head)"

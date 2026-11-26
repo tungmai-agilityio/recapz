@@ -10,19 +10,15 @@ label() { # name color description
   n=$((n + 1))
   if [ "$dry" = 1 ]; then echo "$1"; else gh label create "$1" --color "$2" --description "$3" --force; fi
 }
-label kind:intent 5319e7 "A pitch to grill into a spec"
-label kind:ticket 1d76db "One task, one PR"
-label status:backlog cfd3d7 "Intent filed, not started"
-label status:planning fbca04 "Being grilled into a spec"
 label status:ready fef2c0 "Unblocked and waiting to be picked up"
-label status:in-progress 0e8a16 "Claimed, work in a branch"
-label status:review b60205 "PR open"
-label status:needs-human d93f0b "Stopped; see the last comment"
-for t in feat fix refactor chore docs perf test; do label "type:$t" c5def5 "Commit type: $t"; done
-label priority:p0 b60205 "Security, data loss or a broken main"
-label priority:p1 d93f0b "Next up"
-label priority:p2 fbca04 "Normal (default)"
-label priority:p3 cfd3d7 "Someday"
-for a in server core web auth jobs meetings notetaker speech llm deploy desktop tooling; do label "area:$a" bfd4f2 "Commit scope: $a"; done
-label human-merge 000000 "Forces a manual merge"
+label status:in-progress 0e8a16 "Claimed, work in a branch or PR open"
+label status:done 0e8a16 "Merged or finished"
+label type:feat c5def5 "New behaviour"
+label type:bug c5def5 "Something is broken"
+label type:task c5def5 "Docs, maintenance, internal work"
+label priority:high b60205 "Do first; security, data loss or a broken main"
+label priority:medium fbca04 "Normal (default)"
+label priority:low cfd3d7 "Someday"
+for a in server web desktop notetaker ai tooling; do label "area:$a" bfd4f2 "Commit scope: $a"; done
+label needs-review 000000 "Important: a human reviews and approves before merge"
 [ "$dry" = 1 ] && echo "$n labels (dry run)" || echo "$n labels created or updated"
