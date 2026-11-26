@@ -63,6 +63,98 @@ pub(super) fn citation(h: &search::Hit, answered: bool) -> serde_json::Value {
     })
 }
 
+const RIBBON_PARTS: i64 = 60;
+
+/// Who spoke when, in at most `RIBBON_PARTS` equal slices of `[0, duration_ms]`: each slice goes to
+/// the speaker with the most time in it (`None` when nobody spoke) and neighbours with the same
+/// speaker merge, so `weight` is the number of slices. Speakers are numbered from 0 by first
+/// appearance, the numbering `web/src/ui/Ribbon.tsx` colours by.
+fn ribbon(segs: &[(Option<String>, i64, i64)], duration_ms: i64) -> Vec<(Option<usize>, i64)> {
+    let mut names: Vec<&str> = vec![];
+    let mut spans: Vec<(Option<usize>, i64, i64)> = vec![];
+    for (who, a, b) in segs {
+        let i = who
+            .as_deref()
+            .map(|w| match names.iter().position(|n| *n == w) {
+                Some(i) => i,
+                None => {
+                    names.push(w);
+                    names.len() - 1
+                }
+            });
+        spans.push((i, *a, *b));
+    }
+    let mut out: Vec<(Option<usize>, i64)> = vec![];
+    for k in 0..RIBBON_PARTS {
+        let (lo, hi) = (
+            duration_ms * k / RIBBON_PARTS,
+            duration_ms * (k + 1) / RIBBON_PARTS,
+        );
+        let mut time = vec![0i64; names.len()];
+        for (i, a, b) in &spans {
+            if let Some(i) = i {
+                time[*i] += (b.min(&hi) - a.max(&lo)).max(0);
+            }
+        }
+        // First speaker wins a tie.
+        let best = time
+            .iter()
+            .enumerate()
+            .rev()
+            .max_by_key(|(_, t)| **t)
+            .filter(|(_, t)| **t > 0);
+        let who = best.map(|(i, _)| i);
+        match out.last_mut() {
+            Some((w, n)) if *w == who => *n += 1,
+            _ => out.push((who, 1)),
+        }
+    }
+    out
+}
+
+/// A citation card with the data for the web app: its marker number `n` (the excerpt number the
+/// model used in the text), and for a meeting the speaker at that moment, the length of the
+/// transcript and the ribbon. A document, or a meeting without a transcript, leaves them null.
+fn card(
+    c: &Connection,
+    h: &search::Hit,
+    n: Option<usize>,
+    answered: bool,
+) -> anyhow::Result<serde_json::Value> {
+    let mut v = citation(h, answered);
+    v["n"] = serde_json::json!(n);
+    for k in ["speaker", "duration_ms", "ribbon"] {
+        v[k] = serde_json::Value::Null;
+    }
+    let Some(id) = &h.meeting_id else {
+        return Ok(v);
+    };
+    let mut q = c.prepare(
+        "SELECT COALESCE(p.display_name, p.label), g.start_ms, g.end_ms
+         FROM segments g LEFT JOIN speakers p ON p.id = g.speaker_id
+         WHERE g.meeting_id = ?1 ORDER BY g.start_ms, g.id",
+    )?;
+    let segs = q
+        .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<Result<Vec<(Option<String>, i64, i64)>, _>>()?;
+    let duration = segs.iter().map(|s| s.2).max().unwrap_or(0);
+    if duration <= 0 {
+        return Ok(v);
+    }
+    let overlap = |s: &&(Option<String>, i64, i64)| s.2.min(h.end_ms) - s.1.max(h.start_ms);
+    v["speaker"] = serde_json::json!(segs
+        .iter()
+        .filter(|s| s.0.is_some() && overlap(s) > 0)
+        .max_by_key(|s| (overlap(s), std::cmp::Reverse(s.1)))
+        .and_then(|s| s.0.clone()));
+    v["duration_ms"] = serde_json::json!(duration);
+    v["ribbon"] = ribbon(&segs, duration)
+        .into_iter()
+        .map(|(speaker, weight)| serde_json::json!({ "speaker": speaker, "weight": weight }))
+        .collect();
+    Ok(v)
+}
+
 /// The excerpts a model may see: only hits whose owner allowed it (`sendable`), the rest are
 /// returned as passages to show without a generated answer.
 pub(super) fn split_hits(hits: Vec<search::Hit>) -> (Vec<search::Hit>, Vec<search::Hit>) {
@@ -141,14 +233,28 @@ pub async fn ask(
         let (res, ()) = tokio::join!(produce, consume);
         let tail = match res {
             Ok(out) => {
-                record_usage(&app, tenant, "ask_answer", out.calls).await;
-                let citations: Vec<_> = out
+                record_usage(&app, tenant.clone(), "ask_answer", out.calls).await;
+                // `n` is the number the model saw for the excerpt: its place in `sendable` plus one.
+                let cards: Vec<_> = out
                     .value
                     .cited
                     .iter()
-                    .map(|&i| citation(&sendable[i], true))
-                    .chain(passages.iter().map(|h| citation(h, false)))
+                    .map(|&i| (sendable[i].clone(), Some(i + 1), true))
+                    .chain(passages.iter().map(|h| (h.clone(), None, false)))
                     .collect();
+                let plain: Vec<_> = cards.iter().map(|(h, _, a)| citation(h, *a)).collect();
+                let citations = app
+                    .tenant(tenant.clone(), move |c| {
+                        cards
+                            .iter()
+                            .map(|(h, n, a)| card(c, h, *n, *a))
+                            .collect::<anyhow::Result<Vec<_>>>()
+                    })
+                    .await
+                    .unwrap_or_else(|_| {
+                        tracing::error!("citation details not loaded");
+                        plain
+                    });
                 event("citations", serde_json::Value::Array(citations))
                     + &event("done", serde_json::json!({}))
             }
@@ -172,4 +278,36 @@ pub async fn ask(
         Body::from_stream(ReaderStream::new(rx_pipe)),
     )
         .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn seg(who: Option<&str>, a: i64, b: i64) -> (Option<String>, i64, i64) {
+        (who.map(Into::into), a, b)
+    }
+
+    #[test]
+    fn ribbon_merges_neighbours_marks_silence_and_numbers_speakers_by_first_appearance() {
+        // 0-60 s: Bo, 60-120 s: nobody, 120-180 s: Ann then Bo again at the very end.
+        let r = ribbon(
+            &[
+                seg(Some("Bo"), 0, 60_000),
+                seg(Some("Ann"), 120_000, 170_000),
+                seg(Some("Bo"), 170_000, 180_000),
+            ],
+            180_000,
+        );
+        assert_eq!(
+            r,
+            vec![(Some(0), 20), (None, 20), (Some(1), 17), (Some(0), 3)]
+        );
+        assert_eq!(r.iter().map(|p| p.1).sum::<i64>(), RIBBON_PARTS);
+    }
+
+    #[test]
+    fn ribbon_of_an_untitled_speakerless_transcript_is_one_unknown_part() {
+        assert_eq!(ribbon(&[seg(None, 0, 1000)], 1000), vec![(None, 60)]);
+    }
 }

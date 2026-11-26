@@ -480,3 +480,60 @@ async fn ask_searches_only_the_members_own_documents_and_never_sends_a_toggle_of
     );
     drop(boss);
 }
+
+#[tokio::test]
+async fn ask_citations_carry_the_marker_number_speaker_duration_and_ribbon() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = streaming_app(
+        dir.path(),
+        Pieces {
+            pieces: vec![
+                r#"{"answer":"Moved to May [1]. Not [5].","#,
+                r#""citations":[1]}"#,
+            ],
+            fail_after: false,
+        },
+    );
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let (tid, _) = seed(dir.path());
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    for (id, name) in [("s1", "Ann"), ("s2", "Bo")] {
+        t.execute(
+            "INSERT INTO speakers (id, meeting_id, label, display_name) VALUES (?1, 'shared', ?1, ?2)",
+            params![id, name],
+        )
+        .unwrap();
+    }
+    for (sp, a, b) in [("s1", 0, 100_000), ("s2", 100_000, 200_000)] {
+        t.execute(
+            "INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES ('shared', ?1, ?2, ?3, 'x')",
+            params![sp, a, b],
+        )
+        .unwrap();
+    }
+    let (s, _, sse) = send(&app, ask(&boss.unwrap(), "when is the launch date?")).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(answer_text(&sse), "Moved to May [1]. Not .");
+    let data = sse
+        .split("event: citations\ndata: ")
+        .nth(1)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap();
+    let cites: serde_json::Value = serde_json::from_str(data).unwrap();
+    let c = &cites[0];
+    assert_eq!(cites.as_array().unwrap().len(), 1, "{data}");
+    assert_eq!(
+        (
+            c["n"].clone(),
+            c["speaker"].clone(),
+            c["duration_ms"].clone()
+        ),
+        (1.into(), "Bo".into(), 200_000.into())
+    );
+    assert_eq!(
+        c["ribbon"],
+        serde_json::json!([{"speaker":0,"weight":30},{"speaker":1,"weight":30}])
+    );
+}
