@@ -31,7 +31,15 @@ pub fn is_stop(word: &str) -> bool {
 pub trait Embedder: Send + Sync {
     fn id(&self) -> &'static str;
     fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>>;
+    /// Vector matches below this cosine are noise, not hits. It belongs to the embedder because
+    /// similarity scores are not comparable across models; measure it with `cargo run -p eval -- ask`.
+    fn min_similarity(&self) -> f32 {
+        DEFAULT_MIN_SIMILARITY
+    }
 }
+
+/// Tuned for `HashEmbedder` (shared filler words score low); other embedders override it.
+pub const DEFAULT_MIN_SIMILARITY: f32 = 0.2;
 
 pub const HASH_DIM: usize = 256;
 

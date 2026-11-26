@@ -15,9 +15,6 @@ const OWN_DOC: &str = "d.member_id = ?1";
 type Key = (bool, i64);
 const POOL: usize = 50;
 const RRF_K: f32 = 60.0;
-/// Vector matches below this cosine are noise (shared filler words), not hits. Tuned for the
-/// hashed baseline embedder; revisit when a real model replaces it.
-const MIN_SIMILARITY: f32 = 0.2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
@@ -80,7 +77,13 @@ fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<Key>> {
 
 // ponytail: brute-force scan of the member's visible chunks; switch to an index when a workspace
 // holds more than ~100k chunks.
-fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Result<Vec<Key>> {
+fn vector_ids(
+    c: &Connection,
+    member: &str,
+    e: &dyn Embedder,
+    query: &str,
+    min_similarity: f32,
+) -> Result<Vec<Key>> {
     let qvec = e.embed(query)?;
     // Only chunks embedded by this same embedder are comparable; the rest are reached by keyword
     // until they are re-indexed. A document vector is read only while its toggle is on.
@@ -112,13 +115,13 @@ fn vector_ids(c: &Connection, member: &str, e: &dyn Embedder, query: &str) -> Re
                 .map(|(id, b)| ((doc, id), cosine(&qvec, &from_blob(&b)))),
         );
     }
-    scored.retain(|(_, s)| *s >= MIN_SIMILARITY);
+    scored.retain(|(_, s)| *s >= min_similarity);
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     Ok(scored.into_iter().take(POOL).map(|(k, _)| k).collect())
 }
 
 /// Top `limit` chunks the member may see, best first. `embedder` embeds the query and must be the
-/// one that indexed the chunks for the vector side to see them.
+/// one that indexed the chunks for the vector side to see them; its `min_similarity` is the cut-off.
 pub fn search(
     c: &Connection,
     member: &str,
@@ -126,10 +129,22 @@ pub fn search(
     embedder: &dyn Embedder,
     limit: usize,
 ) -> Result<Vec<Hit>> {
+    search_at(c, member, query, embedder, limit, embedder.min_similarity())
+}
+
+/// `search` with an explicit cosine cut-off, for measuring thresholds (`eval ask`).
+pub fn search_at(
+    c: &Connection,
+    member: &str,
+    query: &str,
+    embedder: &dyn Embedder,
+    limit: usize,
+    min_similarity: f32,
+) -> Result<Vec<Hit>> {
     let mut score: HashMap<Key, f32> = HashMap::new();
     for ids in [
         keyword_ids(c, member, query)?,
-        vector_ids(c, member, embedder, query)?,
+        vector_ids(c, member, embedder, query, min_similarity)?,
     ] {
         for (rank, id) in ids.into_iter().enumerate() {
             *score.entry(id).or_default() += 1.0 / (RRF_K + rank as f32 + 1.0);
@@ -334,6 +349,42 @@ mod tests {
         fn embed(&self, _: &str) -> anyhow::Result<Vec<f32>> {
             Ok(vec![1.0, 0.0])
         }
+    }
+
+    /// Same vector as `Flat`, but with its own cut-off.
+    struct Strict(f32);
+    impl Embedder for Strict {
+        fn id(&self) -> &'static str {
+            "flat-2"
+        }
+        fn embed(&self, _: &str) -> anyhow::Result<Vec<f32>> {
+            Ok(vec![0.6, 0.8])
+        }
+        fn min_similarity(&self) -> f32 {
+            self.0
+        }
+    }
+
+    #[test]
+    fn the_embedders_own_threshold_decides_which_vector_matches_count() {
+        let (_d, c) = setup();
+        c.execute(
+            "INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding, embedder) VALUES ('mine', 0, 1000, 'alpha', ?1, 'flat-2')",
+            params![to_blob(&[1.0, 0.0])],
+        )
+        .unwrap();
+        // The query vector (0.6, 0.8) has cosine 0.6 with the chunk; no shared word, so only vectors can match.
+        assert_eq!(
+            search(&c, "alice", "zzz", &Strict(0.55), 5).unwrap().len(),
+            1
+        );
+        assert!(search(&c, "alice", "zzz", &Strict(0.65), 5)
+            .unwrap()
+            .is_empty());
+        assert!(search_at(&c, "alice", "zzz", &Strict(0.55), 5, 0.65)
+            .unwrap()
+            .is_empty());
+        assert_eq!(crate::embed::HashEmbedder.min_similarity(), 0.2);
     }
 
     struct Down;
