@@ -152,7 +152,7 @@ non-owners once the list returns the owner.
       ribbon, faces and Talk time. Not ticked: line text, time and seek checked by eye on 2026-11-20 (#327), but the
       test meeting has no speakers, so the colour bar, speaker name and Unknown label were not seen)
 - [ ] Processing, failed with retry, no report yet, no audio yet, 404
-      (processing, failed with error, no report, no audio, 404 done; retry hidden, no endpoint)
+      (processing, failed with error, no report, no audio, 404 done; retry is a button for the owner or an admin)
       Not ticked: only 404 was checked by eye (2026-11-20, #327); the other states have tests in Report.test.tsx
       but no meeting in that state to screenshot.
 
@@ -176,7 +176,7 @@ non-owners once the list returns the owner.
       button stays disabled until a file is chosen. The prototype calls the third language "Vietnamese + English";
       the app says "Mixed languages". The prototype's Number of speakers field is hidden on purpose.
 - [ ] Pipeline progress over the real statuses (uploaded, transcribing, reporting, ready, failed); error with retry;
-      link to the new meeting when ready. Built in #138. Retry re-uploads the file (no retry endpoint). Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
+      link to the new meeting when ready. Built in #138. Retry queues the failed step again (`POST /api/meetings/{id}/retry`); no re-upload. Shows 4 steps (Uploaded, Transcribing, Report, Ready), not the prototype's 5, since the backend has no Speakers or Indexed status.
       Not ticked: on 2026-11-20 (#328) a real 1.4 MB WAV was uploaded to a local server whose speech key was
       invalid. The four steps and the red error ("Processing failed: speech provider refused the request: HTTP 401
       Unauthorized") showed, and pressing "Process recording" again re-uploaded the file (a second failed meeting,

@@ -1,7 +1,7 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { getMeeting, uploadRecording, type MeetingLanguage } from '../api'
+import { getMeeting, retryMeeting, uploadRecording, type MeetingLanguage } from '../api'
 import { Button } from '../ui/Button'
 import { Columns } from '../ui/Columns'
 import { Field, inputClass } from '../ui/Field'
@@ -29,6 +29,11 @@ export function Upload() {
   const bad = file ? problem(file) : null
   const send = useMutation({ mutationFn: () => uploadRecording(file!, title, language) })
   const id = send.data?.id
+  const qc = useQueryClient()
+  const retry = useMutation({
+    mutationFn: () => retryMeeting(id!),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['upload-status', id] }),
+  })
   const { data: m } = useQuery({
     queryKey: ['upload-status', id],
     queryFn: () => getMeeting(id!),
@@ -70,7 +75,11 @@ export function Upload() {
             </ol>
           )}
           {status === 'failed' && (
-            <p role="alert" className="text-sm text-bad">Processing failed{m?.error ? `: ${m.error}` : '.'} Press Process recording to try again.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p role="alert" className="text-sm text-bad">Processing failed{m?.error ? `: ${m.error}` : '.'}</p>
+              <Button disabled={retry.isPending} onClick={() => retry.mutate()}>Retry</Button>
+              {retry.isError && <p role="alert" className="text-sm text-bad">Retry failed. Try again.</p>}
+            </div>
           )}
           {send.isError && <p role="alert" className="text-sm text-bad">Upload failed. Try again.</p>}
           {id && status === 'ready' && <Link to={`/meetings/${id}`} className="text-sm font-medium">Open the meeting</Link>}

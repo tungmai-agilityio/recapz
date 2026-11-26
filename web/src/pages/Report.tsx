@@ -12,7 +12,7 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, regenerateReport, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
 
 const SHARE_LABEL: Record<MeetingShare, string> = { attendees: 'Attendees', workspace: 'Whole team', owner: 'Only me' }
 
@@ -46,6 +46,10 @@ export function Report() {
       toast('Regenerating the report')
       void qc.invalidateQueries({ queryKey: ['meeting', id] })
     },
+  })
+  const retry = useMutation({
+    mutationFn: () => retryMeeting(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['meeting', id] }),
   })
   const setLanguage = useMutation({
     mutationFn: (language: MeetingLanguage) => setMeetingLanguage(id, language),
@@ -185,7 +189,12 @@ export function Report() {
           {setLanguage.error && <p role="alert" className="mt-1 text-xs text-bad">{setLanguage.error.message.replace(/^\d+ /, '')}</p>}
         </div>
       )}
-      {m.status === 'failed' && <p role="alert" className="mt-3 text-sm text-bad">{m.error ?? 'Processing failed.'}</p>}
+      {m.status === 'failed' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p role="alert" className="text-sm text-bad">{retry.error ? retry.error.message.replace(/^\d+ /, '') : m.error ?? 'Processing failed.'}</p>
+          {m.can_edit && <Button disabled={retry.isPending} onClick={() => retry.mutate()}>Retry</Button>}
+        </div>
+      )}
 
       {confirming && (
         <ConfirmDialog title="Delete this meeting?" confirmLabel="Delete meeting" busy={del.isPending}

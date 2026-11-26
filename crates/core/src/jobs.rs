@@ -102,6 +102,36 @@ pub fn run_once(
     Ok(true)
 }
 
+/// Queues the meeting's latest failed job again from its own stage and clears the meeting error.
+/// Returns false when the meeting has no failed job.
+pub fn retry_failed(c: &Connection, meeting_id: &str) -> Result<bool> {
+    let Some((id, kind)) = c
+        .query_row(
+            "SELECT id, kind FROM jobs WHERE meeting_id=?1 AND state='failed' ORDER BY id DESC LIMIT 1",
+            [meeting_id],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+        )
+        .optional()?
+    else {
+        return Ok(false);
+    };
+    c.execute(
+        "UPDATE jobs SET state='queued', attempts=0, run_after=?2, locked_until=NULL, last_error=NULL WHERE id=?1",
+        params![id, now_ms()],
+    )?;
+    // Index and archive run after the report is ready, so their meeting stays ready.
+    let status = match kind.as_str() {
+        "transcribe" => "transcribing",
+        "label" | "report" => "reporting",
+        _ => "ready",
+    };
+    c.execute(
+        "UPDATE meetings SET status=?2, error=NULL WHERE id=?1",
+        params![meeting_id, status],
+    )?;
+    Ok(true)
+}
+
 pub fn state(c: &Connection, id: i64) -> Result<Option<(String, i64)>> {
     Ok(
         c.query_row("SELECT state, attempts FROM jobs WHERE id=?1", [id], |r| {
@@ -135,6 +165,35 @@ mod tests {
         run_once(&c, &["boom"], |_, _| anyhow::bail!("nope")).unwrap();
         assert_eq!(state(&c, bad).unwrap().unwrap(), ("queued".into(), 1));
     }
+    #[test]
+    fn retry_requeues_the_failed_stage_with_fresh_attempts_and_clears_the_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, status, error) VALUES ('m1','t','upload','failed','boom')",
+            [],
+        )
+        .unwrap();
+        assert!(!retry_failed(&c, "m1").unwrap());
+        let id = enqueue(&c, "transcribe", Some("m1"), None).unwrap();
+        c.execute(
+            "UPDATE jobs SET state='failed', attempts=?2, last_error='boom' WHERE id=?1",
+            params![id, MAX_ATTEMPTS],
+        )
+        .unwrap();
+        assert!(retry_failed(&c, "m1").unwrap());
+        assert_eq!(state(&c, id).unwrap().unwrap(), ("queued".into(), 0));
+        let m: (String, Option<String>) = c
+            .query_row(
+                "SELECT status, error FROM meetings WHERE id='m1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(m, ("transcribing".to_string(), None));
+        assert!(!retry_failed(&c, "m1").unwrap(), "nothing failed any more");
+    }
+
     #[test]
     fn final_failure_marks_the_meeting_failed_but_a_retry_does_not() {
         let dir = tempfile::tempdir().unwrap();
