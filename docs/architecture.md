@@ -12,7 +12,7 @@ A map of where things live, checked against the repository tree on 2026-11-25. F
 | Speech | `crates/speech` | `Transcriber` trait, Deepgram batch (`deepgram.rs`) and streaming (`stream.rs`), upload decoding (`decode.rs`) |
 | LLM | `crates/llm` | `Provider` trait, OpenAI-compatible and Anthropic adapters, report and Ask prompts (`prompts/`, versioned) |
 | Notetaker | `crates/notetaker` | Browser driver for Google Meet, session rules, opt-out detection, WAV writer; no browser needed for its unit tests |
-| Eval | `crates/eval` | `cargo run -p eval`: speech word error rate, Ask, live-answer and report-prompt scoring (`eval report`) |
+| Eval | `crates/eval` | `cargo run -p eval`: speech word error rate, Ask, live-answer and report-prompt scoring (`eval report`). `eval ask <set.json> [--embedder hash\|hosted]` prints the pass rate at cosine cut-offs 0.0 to 0.6; each embedder owns its cut-off (`Embedder::min_similarity`, hash 0.2, hosted 0.2 until measured) |
 | Web | `web/` | React + Vite app: `src/pages`, shared primitives in `src/ui`, recording capture in `src/capture` |
 | Desktop | `desktop/` | Tauri 2 macOS app in its own Cargo workspace (CI never builds it): shell and sign-in (`main.rs`), Core Audio capture (`audio/`), microphone-holder detection (`detect.rs`), prompt window (`prompt.rs`, `ui/prompt.html`), tray dot (`dot.rs`), updater (`update.rs`) |
 | Deploy | `deploy/`, `scripts/` | systemd units, Caddyfile, backup timer, provisioning and release scripts, git hooks |

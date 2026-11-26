@@ -637,8 +637,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "recapz-core",
  "recapz-llm",
+ "recapz-server",
  "rusqlite",
  "serde_json",
  "tokio",

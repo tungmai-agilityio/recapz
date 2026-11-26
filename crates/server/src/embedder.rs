@@ -4,6 +4,9 @@ use recapz_core::embed::{Embedder, HashEmbedder};
 use std::{sync::Arc, time::Duration};
 
 const HOSTED_TIMEOUT: Duration = Duration::from_secs(30);
+/// ponytail: not measured yet; the same cut-off as the hash baseline until `eval ask --embedder hosted`
+/// runs on real questions (#419). Set it from that sweep.
+const HOSTED_MIN_SIMILARITY: f32 = 0.2;
 
 /// `hash` is the built-in word-overlap baseline. `hosted` calls `POST {base}/embeddings` on the
 /// OpenAI-compatible server in `[llm]`; it sends transcript text, documents marked "May be sent to
@@ -103,6 +106,9 @@ impl Embedder for HostedEmbedder {
     }
     fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         self.rt.block_on(self.call(text))
+    }
+    fn min_similarity(&self) -> f32 {
+        HOSTED_MIN_SIMILARITY
     }
 }
 
