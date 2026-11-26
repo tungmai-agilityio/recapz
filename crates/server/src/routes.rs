@@ -49,6 +49,7 @@ mod dev_live;
 mod documents;
 mod live;
 mod live_ask;
+mod members;
 mod record;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
@@ -105,6 +106,16 @@ pub fn router_with_llm(
             get(get_audio_retention).put(put_audio_retention),
         )
         .route("/api/usage", get(get_usage))
+        .route("/api/members", get(members::list))
+        .route("/api/members/invites", post(members::invite))
+        .route(
+            "/api/members/invites/{email}",
+            axum::routing::delete(members::cancel_invite),
+        )
+        .route(
+            "/api/members/{id}",
+            patch(members::set_role).delete(members::remove),
+        )
         .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/api/me", get(me))
@@ -648,10 +659,12 @@ async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>
     Ok(Json(out))
 }
 
-/// Makes sure the signed-in user has a members row in their tenant DB (meeting owner FK).
+/// Makes sure the signed-in user has an active members row in their tenant DB (meeting owner FK)
+/// with their current name and role; signing in again after a removal makes it active again.
 fn ensure_member(c: &Connection, u: &db::User) -> anyhow::Result<()> {
     c.execute(
-        "INSERT OR IGNORE INTO members (id, email, name, role) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO members (id, email, name, role) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (id) DO UPDATE SET name = COALESCE(?3, name), role = ?4, status = 'active'",
         params![u.id, u.email, u.name, u.role],
     )?;
     Ok(())

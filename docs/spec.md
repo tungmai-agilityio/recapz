@@ -53,9 +53,11 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 - `GET /api/me`, `GET /api/meetings`, `GET /api/meetings/upcoming`, `POST /api/meetings/join`, `POST /api/uploads`,
   `POST /api/recordings`, `GET /api/health`
 - Per meeting: `/transcript`, `/report`, `/audio`, `/live`, `/record` (WebSocket), `/live-ask`, `PATCH /language`
+- Members (admin only, 403 otherwise): `GET /api/members`, `POST /api/members/invites` (email, role; returns the
+  sign-in link), `DELETE /api/members/invites/{email}`, `PATCH /api/members/{id}` (role), `DELETE /api/members/{id}`.
+  Removing the last admin or yourself is refused.
 - `POST /api/ask`, documents, settings, usage, calendar connect. The list above is a guide, not exhaustive: the
-  router is `crates/server/src/routes.rs`. Not found there on 2026-11-25: `GET /api/events`, members and invites
-  endpoints, participant purge (*unverified*: only a text search of `routes.rs`).
+  router is `crates/server/src/routes.rs`. Not found there on 2026-11-25: `GET /api/events`, participant purge (*unverified*: only a text search of `routes.rs`).
 
 ## Language models
 
