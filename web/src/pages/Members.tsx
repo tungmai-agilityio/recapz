@@ -9,6 +9,8 @@ import { PageHead } from '../ui/PageHead'
 import { Cell, Row, Table } from '../ui/Table'
 import { useToast } from '../ui/toast-context'
 
+/** Pulls the select's box left so its text lines up with the column header (header and cells pad 10px). */
+const inCell = `${inputClass} @2xl:-ml-[11px]`
 /** The server's refusal text without its leading status code ("409 a workspace needs ..."). */
 const reason = (e: unknown, fallback: string) => (e instanceof Error ? e.message.replace(/^\d+\s+/, '') : '') || fallback
 
@@ -65,8 +67,8 @@ export function Members() {
   return (
     <section className="flex flex-col gap-7">
       <PageHead title="Members" lede="Invite people by email, then send them the link: they sign in with Google as that email to join." />
-      <form onSubmit={submit} noValidate className="frame flex flex-wrap items-end gap-3" aria-label="Invite">
-        <div className="min-w-56 flex-1">
+      <form onSubmit={submit} noValidate className="frame flex flex-wrap items-start gap-3" aria-label="Invite">
+        <div className="min-w-56 flex-1 max-sm:basis-full">
           <Field label="Email" error={error}>
             {(p) => <input {...p} type="email" className={`${inputClass} w-full`} value={email} onChange={(e) => setEmail(e.target.value)} />}
           </Field>
@@ -78,7 +80,10 @@ export function Members() {
             </select>
           )}
         </Field>
-        <Button type="submit" variant="primary" disabled={invite.isPending}>Invite</Button>
+        <div className="flex flex-col gap-1.5">
+          <span aria-hidden className="text-sm select-none">&nbsp;</span>
+          <Button type="submit" variant="primary" disabled={invite.isPending}>Invite</Button>
+        </div>
         {link && (
           <p className="flex w-full flex-wrap items-center gap-2 text-sm text-ink-2">
             <span className="min-w-0 break-all">Invite sent. Share this link: <b className="text-ink">{link}</b></span>
@@ -98,7 +103,7 @@ export function Members() {
                   <Cell label="Member" className="font-semibold @max-2xl:col-span-2"><span className="flex items-center gap-2.5"><Face name={name} speaker={null} size={28} />{name}{you && <Badge>You</Badge>}</span></Cell>
                   <Cell label="Email" className="break-all text-ink-2 @max-2xl:col-span-2">{m.email}</Cell>
                   <Cell label="Role">
-                    <select aria-label={`Role of ${name}`} className={inputClass} value={m.role} disabled={change.isPending}
+                    <select aria-label={`Role of ${name}`} className={inCell} value={m.role} disabled={change.isPending}
                       onChange={(e) => change.mutate({ id: m.id, role: e.target.value as Role })}>
                       <option value="member">Member</option><option value="admin">Admin</option>
                     </select>
@@ -112,7 +117,11 @@ export function Members() {
               <Row key={i.email}>
                 <Cell label="Member" className="font-semibold @max-2xl:col-span-2"><span className="flex items-center gap-2.5"><Face name={i.email} speaker={null} size={28} />{i.email}<Badge tone="signal">Pending</Badge></span></Cell>
                 <Cell label="Email" className="break-all text-ink-2 @max-2xl:col-span-2">{i.email}</Cell>
-                <Cell label="Role">{i.role === 'admin' ? 'Admin' : 'Member'}</Cell>
+                <Cell label="Role">
+                  <select aria-label={`Role of ${i.email}`} className={inCell} value={i.role} disabled>
+                    <option value="member">Member</option><option value="admin">Admin</option>
+                  </select>
+                </Cell>
                 <Cell label="Meetings"><span className="text-mute">0</span></Cell>
                 <Cell className="@max-2xl:col-span-2">{ask(i.email, 'Cancel invite', `Cancel invite for ${i.email}`)}</Cell>
               </Row>
