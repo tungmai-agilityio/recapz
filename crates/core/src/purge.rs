@@ -1,5 +1,5 @@
 //! Hard delete of one meeting: audio files, then every database row about it, including search rows.
-//! Used for opt-out; retention and per-participant purge reuse it later.
+//! Used for opt-out and retention; `purge_participant` removes one person's speech everywhere.
 use crate::{
     blobs::{audio_key, Blobs},
     db::tenant_dir,
@@ -55,6 +55,73 @@ pub fn purge_meeting(
         c.execute("DELETE FROM jobs WHERE meeting_id = ?1", [meeting_id])?;
         c.execute("DELETE FROM llm_usage WHERE meeting_id = ?1", [meeting_id])?;
         Ok(c.execute("DELETE FROM meetings WHERE id = ?1", [meeting_id])? > 0)
+    })();
+    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+    done
+}
+
+/// How many meetings one person spoke in, matched by the speaker's display name (case and edge
+/// spaces ignored). Shown in the confirm dialog.
+pub fn participant_meetings(c: &Connection, name: &str) -> Result<i64> {
+    Ok(c.query_row(
+        "SELECT count(DISTINCT meeting_id) FROM speakers WHERE lower(trim(display_name)) = lower(trim(?1))",
+        [name],
+        |r| r.get(0),
+    )?)
+}
+
+/// Hard delete of everything one participant said, in every meeting. Their segments (with word
+/// timings) and speaker rows go; chunks and search rows of those meetings go too, and so do the
+/// report and its action items, because any of them may quote the person. Nothing readable is left
+/// while the rebuild runs: an `index` and a `report` job are queued per meeting and rebuild from the
+/// remaining transcript (a meeting left with no transcript stays without them). One transaction,
+/// safe to repeat. Returns the meetings changed. ponytail: the recording itself is not cut;
+/// removing one voice from audio needs diarised audio, add when the spec asks for it.
+pub fn purge_participant(c: &Connection, name: &str) -> Result<i64> {
+    if name.trim().is_empty() {
+        bail!("empty participant name");
+    }
+    c.execute_batch("BEGIN")?;
+    let done = (|| -> Result<i64> {
+        let ids: Vec<String> = c
+            .prepare(
+                "SELECT DISTINCT meeting_id FROM speakers WHERE lower(trim(display_name)) = lower(trim(?1))",
+            )?
+            .query_map([name], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        let who = "SELECT id FROM speakers WHERE meeting_id = ?1 AND lower(trim(display_name)) = lower(trim(?2))";
+        for m in &ids {
+            c.execute(
+                &format!("DELETE FROM segments WHERE meeting_id = ?1 AND speaker_id IN ({who})"),
+                [m, name],
+            )?;
+            c.execute(
+                &format!("DELETE FROM speakers WHERE id IN ({who})"),
+                [m, name],
+            )?;
+            // The chunk delete trigger removes the search rows.
+            c.execute("DELETE FROM chunks WHERE meeting_id = ?1", [m])?;
+            c.execute("DELETE FROM reports WHERE meeting_id = ?1", [m])?;
+            c.execute("DELETE FROM action_items WHERE meeting_id = ?1", [m])?;
+            c.execute(
+                "DELETE FROM jobs WHERE meeting_id = ?1 AND kind IN ('index','report') AND state = 'queued'",
+                [m],
+            )?;
+            let left: i64 = c.query_row(
+                "SELECT count(*) FROM segments WHERE meeting_id = ?1",
+                [m],
+                |r| r.get(0),
+            )?;
+            if left > 0 {
+                crate::jobs::enqueue(c, crate::index_job::KIND, Some(m), None)?;
+                crate::jobs::enqueue(c, crate::report_job::KIND, Some(m), None)?;
+                c.execute(
+                    "UPDATE meetings SET status = 'reporting' WHERE id = ?1 AND status = 'ready'",
+                    [m],
+                )?;
+            }
+        }
+        Ok(ids.len() as i64)
     })();
     c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
     done
@@ -190,6 +257,138 @@ mod tests {
             !purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap(),
             "second call finds nothing"
         );
+    }
+
+    #[test]
+    fn a_participants_words_leave_transcript_search_and_ask_and_the_rest_is_rebuilt() {
+        use crate::{embed::HashEmbedder, index_job, jobs, search::search};
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        c.execute(
+            "INSERT INTO members (id, email, role) VALUES ('o','o@x.test','admin')",
+            [],
+        )
+        .unwrap();
+        for m in ["m1", "m2", "m3"] {
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status, owner_id, share) VALUES (?1,'t','upload','ready','o','workspace')",
+                [m],
+            )
+            .unwrap();
+        }
+        // m1 and m2: Lan says zebrafish, Minh says walrus. m3: Minh only.
+        c.execute_batch(
+            r#"INSERT INTO speakers (id, meeting_id, label, display_name) VALUES
+               ('l1','m1','S1','Lan'),('n1','m1','S2','Minh'),('l2','m2','S1',' lan '),('n2','m2','S2','Minh'),('n3','m3','S1','Minh');
+             INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text, words_json) VALUES
+               ('m1','l1',0,1000,'zebrafish budget','["zebrafish"]'),('m1','n1',1000,2000,'walrus plan',NULL),
+               ('m2','l2',0,1000,'zebrafish again',NULL),('m2','n2',1000,2000,'walrus again',NULL),
+               ('m3','n3',0,1000,'walrus alone',NULL);
+             INSERT INTO reports (meeting_id, summary) VALUES ('m1','zebrafish summary'),('m2','x'),('m3','y');
+             INSERT INTO action_items (id, meeting_id, text) VALUES ('a1','m1','zebrafish task'),('a3','m3','keep');"#,
+        )
+        .unwrap();
+        for m in ["m1", "m2", "m3"] {
+            jobs::enqueue(&c, "index", Some(m), None).unwrap();
+        }
+        let drain = || {
+            while let Some(job) = jobs::claim(&c, &["index"]).unwrap() {
+                index_job::handle(&c, &job, &HashEmbedder).unwrap();
+                jobs::finish(&c, job.id, Ok(())).unwrap();
+            }
+        };
+        drain();
+        let hits = |q: &str| search(&c, "o", q, &HashEmbedder, 10).unwrap().len();
+        assert_eq!(hits("zebrafish"), 2, "seed must be searchable");
+        assert_eq!(participant_meetings(&c, "LAN").unwrap(), 2);
+
+        assert_eq!(purge_participant(&c, "lan").unwrap(), 2);
+
+        let n = |sql: &str| count(&c, sql);
+        assert_eq!(n("SELECT count(*) FROM segments WHERE text LIKE '%zebrafish%' OR words_json LIKE '%zebrafish%'"), 0, "transcript");
+        assert_eq!(
+            n("SELECT count(*) FROM speakers WHERE lower(trim(display_name))='lan'"),
+            0
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH 'zebrafish'"),
+            0,
+            "FTS"
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM chunks WHERE text LIKE '%zebrafish%'"),
+            0
+        );
+        assert_eq!(
+            hits("zebrafish"),
+            0,
+            "Ask right after the purge, before any rebuild"
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM reports WHERE meeting_id IN ('m1','m2')"),
+            0
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM action_items WHERE meeting_id = 'm1'"),
+            0
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM segments"),
+            3,
+            "Minh's three lines stay"
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM reports WHERE meeting_id = 'm3'"),
+            1,
+            "untouched meeting"
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM action_items WHERE meeting_id = 'm3'"),
+            1
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM jobs WHERE state='queued' AND kind='report'"),
+            2
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM jobs WHERE state='queued' AND kind='index'"),
+            2
+        );
+        assert_eq!(
+            n("SELECT count(*) FROM meetings WHERE status='reporting'"),
+            2
+        );
+
+        // The rebuild works from what is left and cannot bring the text back.
+        drain();
+        assert_eq!(
+            n("SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH 'zebrafish'"),
+            0
+        );
+        assert_eq!(hits("zebrafish"), 0);
+        assert_eq!(hits("walrus"), 3, "Minh's text is searchable again");
+        assert_eq!(participant_meetings(&c, "Lan").unwrap(), 0);
+        assert_eq!(
+            purge_participant(&c, "Lan").unwrap(),
+            0,
+            "repeat finds nothing"
+        );
+        assert!(purge_participant(&c, "  ").is_err());
+    }
+
+    #[test]
+    fn a_meeting_left_without_speech_gets_no_rebuild_jobs() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        c.execute_batch(
+            "INSERT INTO meetings (id, title, platform, status) VALUES ('m1','t','upload','ready');
+             INSERT INTO speakers (id, meeting_id, label, display_name) VALUES ('s','m1','S1','Lan');
+             INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES ('m1','s',0,1,'zebrafish');",
+        )
+        .unwrap();
+        assert_eq!(purge_participant(&c, "Lan").unwrap(), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM segments"), 0);
+        assert_eq!(count(&c, "SELECT count(*) FROM jobs"), 0);
     }
 
     #[test]

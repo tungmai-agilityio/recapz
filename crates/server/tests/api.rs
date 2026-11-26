@@ -1596,3 +1596,96 @@ async fn action_items_are_edited_by_members_who_see_the_meeting() {
     let (s, ..) = send(&app, no_csrf).await;
     assert_eq!((s, row().0), (StatusCode::FORBIDDEN, 1), "csrf required");
 }
+
+#[tokio::test]
+async fn purging_a_participant_is_admin_only_csrf_protected_and_removes_their_words_everywhere() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await;
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    t.execute_batch(&format!(
+        "UPDATE meetings SET status='ready' WHERE id='{id}';
+         INSERT INTO speakers (id, meeting_id, label, display_name) VALUES
+           ('s1','{id}','Speaker 1','Lan'), ('s2','{id}','Speaker 2','Minh');
+         INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text) VALUES
+           ('{id}','s1',0,1000,'zebrafish budget'), ('{id}','s2',1000,2000,'walrus plan');
+         INSERT INTO reports (meeting_id, summary) VALUES ('{id}','zebrafish summary');
+         INSERT INTO chunks (meeting_id, start_ms, end_ms, text, embedding)
+           VALUES ('{id}',0,2000,'zebrafish budget walrus plan',x'00');"
+    ))
+    .unwrap();
+    let fts = || {
+        count(
+            &t,
+            "SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH 'zebrafish'",
+        )
+    };
+    assert_eq!(fts(), 1, "seed must be searchable");
+
+    let (s, _, b) = send(&app, get("/api/participants", &boss)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&b).unwrap(),
+        json!([{"name":"Lan","meetings":1},{"name":"Minh","meetings":1}])
+    );
+    let (s, ..) = send(&app, get("/api/participants", &amy)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let body = r#"{"name":"Lan"}"#;
+    let purge =
+        |cookie: &str, body: &str| json_req("POST", "/api/participants/purge", cookie, body);
+    let (s, ..) = send(&app, purge(&amy, body)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "members cannot purge");
+    let no_csrf = Request::post("/api/participants/purge")
+        .header(header::COOKIE, boss.as_str())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let (s, ..) = send(&app, no_csrf).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "csrf required");
+    let (s, ..) = send(&app, purge(&boss, r#"{"name":" "}"#)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        count(&t, "SELECT count(*) FROM segments"),
+        2,
+        "refusals delete nothing"
+    );
+    assert_eq!(fts(), 1);
+
+    let (s, _, b) = send(&app, purge(&boss, body)).await;
+    assert_eq!((s, b.as_str()), (StatusCode::OK, r#"{"meetings":1}"#));
+
+    let (_, _, b) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &boss)).await;
+    assert!(!b.contains("zebrafish") && b.contains("walrus plan"), "{b}");
+    let (_, _, b) = send(&app, get(&format!("/api/meetings/{id}/report"), &boss)).await;
+    assert!(!b.contains("zebrafish"), "{b}");
+    assert_eq!(fts(), 0, "FTS");
+    let hits =
+        recapz_core::search::search(&t, "any", "zebrafish", &recapz_core::embed::HashEmbedder, 5)
+            .unwrap();
+    assert!(hits.is_empty(), "Ask");
+    assert_eq!(
+        count(
+            &t,
+            "SELECT count(*) FROM jobs WHERE state='queued' AND kind IN ('index','report')"
+        ),
+        2
+    );
+    let (_, _, b) = send(&app, get("/api/participants", &boss)).await;
+    assert_eq!(b, r#"[{"name":"Minh","meetings":1}]"#);
+}

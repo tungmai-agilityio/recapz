@@ -240,3 +240,57 @@ test('join settings show loading, then an error when they cannot load', async ()
   expect((await screen.findByRole('alert')).textContent).toBe('Could not load the join settings.')
   expect(screen.queryByLabelText('Notetaker name')).toBeNull()
 })
+
+function forget(role: string, purge = new Response('{"meetings":2}')) {
+  const calls: { m: string; u: string; body?: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    calls.push({ m: init?.method ?? 'GET', u, body: init?.body as string | undefined })
+    if (u === '/api/participants/purge') return purge
+    return new Response(JSON.stringify(
+      u === '/api/me' ? { email: 'a@b.c', name: null, role, recording_storage: 'local_disk' }
+        : u === '/api/participants' ? [{ name: 'Lan', meetings: 2 }, { name: 'Minh', meetings: 1 }]
+          : u === '/api/settings/audio-retention' ? { days: 90 }
+            : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
+              : { connected: false, needs_reconnect: false },
+    ))
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  return calls
+}
+
+test('forgetting a person: the confirm names them and the meeting count, and only Confirm calls POST', async () => {
+  const calls = forget('admin')
+  await screen.findByRole('option', { name: 'Minh' })
+  fireEvent.change(screen.getByLabelText('Participant'), { target: { value: 'Lan' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete their speech' }))
+  expect(screen.getByRole('alertdialog').textContent).toMatch(/Delete everything Lan said\?.*removed from 2 meetings/)
+  expect(calls.filter((c) => c.m === 'POST')).toEqual([])
+  fireEvent.click(screen.getByRole('button', { name: 'Delete everything' }))
+  await waitFor(() => expect(calls.filter((c) => c.m === 'POST')).toEqual([{ m: 'POST', u: '/api/participants/purge', body: '{"name":"Lan"}' }]))
+  expect(await screen.findByText('Deleted everything Lan said in 2 meetings')).toBeTruthy()
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('a failed purge keeps the dialog open and says so; Cancel sends nothing more', async () => {
+  const calls = forget('admin', new Response('no', { status: 500 }))
+  await screen.findByRole('option', { name: 'Minh' })
+  fireEvent.change(screen.getByLabelText('Participant'), { target: { value: 'Minh' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete their speech' }))
+  expect(screen.getByRole('alertdialog').textContent).toMatch(/removed from 1 meeting,/)
+  fireEvent.click(screen.getByRole('button', { name: 'Delete everything' }))
+  expect(await screen.findByText('Could not delete. Try again.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+  expect(calls.filter((c) => c.m === 'POST').length).toBe(1)
+})
+
+test('members never see the card or request participants', async () => {
+  const calls = forget('member')
+  await screen.findByText(/deleted after/)
+  expect(screen.queryByLabelText('Participant')).toBeNull()
+  expect(calls.some((c) => c.u.startsWith('/api/participants'))).toBe(false)
+})

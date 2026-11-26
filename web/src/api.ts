@@ -236,6 +236,17 @@ export interface CalendarStatus { connected: boolean; needs_reconnect: boolean }
 
 export const getCalendar = async (): Promise<CalendarStatus> => (await check(await fetch('/api/calendar'))).json()
 
+export interface Participant { name: string; meetings: number }
+
+/** Admin only: named speakers with the meetings they spoke in. */
+export const getParticipants = async (): Promise<Participant[]> => (await check(await fetch('/api/participants'))).json()
+
+/** Admin only: hard deletes everything this person said, in every meeting. */
+export const purgeParticipant = async (name: string): Promise<{ meetings: number }> =>
+  (await check(await fetch('/api/participants/purge', {
+    method: 'POST', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ name }),
+  }))).json()
+
 export const disconnectCalendar = async () => { await check(await fetch('/api/calendar', { method: 'DELETE', headers: csrf() })) }
 
 export interface Attendee {
