@@ -20,6 +20,8 @@ One command once the setup below is done: `make local` (server with real transcr
 make local
 ```
 
+`make local` loads a `.env` file in the repo root when it exists (gitignored; for example `RECAPZ_SECRET_KEY=...`), so you need not export variables by hand.
+
 Open http://localhost:5173. Without `[llm]` the app still transcribes but writes no reports.
 
 ## Desktop app against your local server (macOS)

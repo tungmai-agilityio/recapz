@@ -1,11 +1,11 @@
 .PHONY: dev local hooks desktop-check desktop-dmg desktop-run desktop-update-test notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
 
 dev:
-	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
+	@trap 'kill 0' INT TERM; set -a; [ -f .env ] && . ./.env; set +a; cargo run -p recapz-server & pnpm -C web dev & wait
 
 local:
 	@test -f config.toml || { echo "copy config.example.toml to config.toml first (see docs/running-locally.md)"; exit 1; }
-	@trap 'kill 0' INT TERM; cargo run -p recapz-server & pnpm -C web dev & wait
+	@trap 'kill 0' INT TERM; set -a; [ -f .env ] && . ./.env; set +a; cargo run -p recapz-server & pnpm -C web dev & wait
 
 # Sign the notetaker's Google account in (opens a browser window), or delete that sign-in.
 notetaker-login notetaker-logout:
