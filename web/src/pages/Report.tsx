@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { clock } from '../clock'
 import { meetingTime } from './meeting-days'
@@ -12,7 +12,9 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, Unauthorized, type MeetingLanguage, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
+
+const SHARE_LABEL: Record<MeetingShare, string> = { attendees: 'Attendees', workspace: 'Whole team', owner: 'Only me' }
 
 export function Report() {
   const { id = '' } = useParams()
@@ -39,6 +41,10 @@ export function Report() {
   const setLanguage = useMutation({
     mutationFn: (language: MeetingLanguage) => setMeetingLanguage(id, language),
     onSuccess: ({ language }) => qc.setQueryData(['meeting', id], (m: MeetingDetail | undefined) => m && { ...m, language }),
+  })
+  const setShare = useMutation({
+    mutationFn: (share: MeetingShare) => setMeetingShare(id, share),
+    onSuccess: ({ share }) => qc.setQueryData(['meeting', id], (m: MeetingDetail | undefined) => m && { ...m, share }),
   })
   const [draft, setDraft] = useState<string | null>(null) // non-null while the title is being edited
   const rename = useMutation({
@@ -110,6 +116,18 @@ export function Report() {
   if (meeting.isError) return <p className="text-mute">Meeting not found.</p>
   if (!meeting.data) return <p className="text-mute">Loading…</p>
   const m = meeting.data
+  const sharing = (
+    <>
+      <label className="block text-sm text-mute">Shared with{' '}
+        {m.can_edit ? (
+          <select className={inputClass} disabled={setShare.isPending} value={m.share} onChange={(e) => setShare.mutate(e.target.value as MeetingShare)}>
+            {Object.entries(SHARE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        ) : SHARE_LABEL[m.share]}
+      </label>
+      {setShare.error && <p role="alert" className="text-xs text-bad">{setShare.error.message.replace(/^\d+ /, '')}</p>}
+    </>
+  )
 
   return (
     <article>
@@ -203,7 +221,7 @@ export function Report() {
       {tab === 'summary' ? (
         <div role="tabpanel" className="mt-6">
           {report.data ? (
-            <ReportSections r={report.data} talk={talk} language={m.language} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+            <ReportSections r={report.data} talk={talk} language={m.language} sharing={sharing} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
           ) : (
             <p className="text-mute">
               {m.status === 'ready' ? 'No report was written for this meeting.'
@@ -249,7 +267,7 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ r, talk, language, sharing, seek, open }: { sharing: ReactNode; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
   const time = (ms: number) => (
     <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
@@ -321,6 +339,7 @@ function ReportSections({ r, talk, language, seek, open }: { r: ReportData; talk
         <section className="space-y-1">
           <Heading>Details</Heading>
           <p className="text-sm text-mute">Language: {language}</p>
+          {sharing}
         </section>
       </aside>
     </div>

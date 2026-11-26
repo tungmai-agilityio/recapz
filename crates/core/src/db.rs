@@ -3,6 +3,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite_migration::{Migrations, M};
 use std::path::{Path, PathBuf};
 
+/// The one meeting access rule, for a query over `meetings m` where `?1` is the member id: the owner,
+/// anyone when shared with the workspace, or (the default `attendees`) a member whose email is on the
+/// invite of the calendar event the meeting came from. `owner` shares with nobody else.
+pub const MEETING_VISIBLE: &str = "(m.owner_id = ?1 OR m.share = 'workspace' OR (m.share = 'attendees' AND EXISTS (
+    SELECT 1 FROM calendar_events e, json_each(e.attendees) a
+    WHERE e.meeting_id = m.id AND lower(json_extract(a.value, '$.email')) = (SELECT lower(email) FROM members WHERE id = ?1))))";
+
 pub fn new_id() -> String {
     uuid::Uuid::now_v7().to_string()
 }

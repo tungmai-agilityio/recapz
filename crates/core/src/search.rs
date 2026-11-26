@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
 /// The one meeting access rule as SQL, for a meeting aliased `m` and the member id as `?1`.
-const VISIBLE: &str = "(m.owner_id = ?1 OR m.share = 'workspace')";
+use crate::db::MEETING_VISIBLE as VISIBLE;
 /// The document access rule as SQL, for a document aliased `d` and the member id as `?1`.
 const OWN_DOC: &str = "d.member_id = ?1";
 /// A chunk is a meeting chunk (`false`) or a document chunk (`true`); their ids are separate.
@@ -242,6 +242,27 @@ mod tests {
         );
         // bob owns it, so he sees both.
         assert_eq!(ask(&c, "bob", "launch budget").len(), 2);
+    }
+
+    #[test]
+    fn an_attendee_sees_an_attendees_meeting_only_while_it_is_shared_that_way() {
+        let (_d, c) = setup();
+        add(&c, "secret", 0, "the launch budget is nine thousand");
+        // alice is on the invite (email matched case-insensitively) of the event bob's meeting came from.
+        c.execute(
+            "INSERT INTO calendar_events (id, member_id, external_id, title, starts_at, ends_at, meeting_id, attendees)
+             VALUES ('e', 'bob', 'x', 'Sync', 0, 1, 'secret', '[{\"email\":\"Alice@X.test\"}]')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(ask(&c, "alice", "launch budget").len(), 1);
+        c.execute(
+            "UPDATE meetings SET share = 'owner' WHERE id = 'secret'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(ask(&c, "alice", "launch budget").len(), 0, "only me");
+        assert_eq!(ask(&c, "bob", "launch budget").len(), 1);
     }
 
     #[test]

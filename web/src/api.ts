@@ -14,7 +14,12 @@ export interface MeetingDetail extends Meeting {
   language: string
   ended_at: number | null
   error: string | null
+  share: MeetingShare
+  /** The owner or an admin: may rename, re-share and delete. */
+  can_edit: boolean
 }
+
+export type MeetingShare = 'attendees' | 'workspace' | 'owner'
 
 export interface Segment {
   id: number
@@ -103,6 +108,10 @@ export const getReport = async (id: string): Promise<ReportData | null> =>
 
 export const renameMeeting = async (id: string, title: string): Promise<{ title: string }> =>
   (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ title }) }))).json()
+
+/** Owner or admin only: the server answers 403 for anyone else who can see the meeting. */
+export const setMeetingShare = async (id: string, share: MeetingShare): Promise<{ share: MeetingShare }> =>
+  (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ share }) }))).json()
 
 /** Only before the notetaker joins; the server answers 409 afterwards and 403 for a non-owner. */
 export const setMeetingLanguage = async (id: string, language: MeetingLanguage): Promise<{ language: MeetingLanguage }> =>
