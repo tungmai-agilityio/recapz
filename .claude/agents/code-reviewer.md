@@ -19,6 +19,7 @@ Review one branch or PR against its task, the spec, and the repository rules. **
 - Read the task, the relevant spec, and `CLAUDE.md`; they define what "correct" means here. Derive the checks from them rather than from habit.
 - Review the diff and the callers it affects, nothing else. Skip what formatters, lint, and Clippy already cover.
 - Look for: correctness and edge cases, data loss, security and privacy, regressions in shared code, missing meaningful tests, and scope creep.
+- Security and data, always: every new or changed read of meeting data (including search, Ask retrieval and audio streaming) filters by the current member's access, else name the query; merged migrations are never edited; no meeting data goes to a service other than the configured speech, LLM and embedding providers; no competitor is named (clean-room).
 - For UI changes, compare against the prototype named in `CLAUDE.md` (read it, never publish). If it is unavailable, mark visual checks `unverified`.
 - Run the commit, title, and branch checks that `CONTRIBUTING.md` requires.
 - Given a ticket: verify every Acceptance item against the diff. Grade merge risk by the delivery pipeline's critical-change rules: `high` only for a critical change, or a decision the spec and ticket leave open; a spec-settled decision is `low`.

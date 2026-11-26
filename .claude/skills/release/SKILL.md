@@ -22,7 +22,8 @@ details live in `docs/deploy.md`.
 6. **Confirm** version, notes and checklist with the maintainer before creating anything. On a yes, create the
    GitHub release targeting `main` (it creates the tag; never push tags by hand). On a no or silence, create nothing.
 7. **macOS app:** the newest release must always carry a `latest.json`, or the app's update check gets a 404.
-   Build and upload it when `desktop/` changed since the last tag, otherwise copy the previous release's
+   Build and upload it when `desktop/` changed since the last tag or the previous release has no `latest.json`,
+   otherwise copy the previous release's
    `latest.json`, both as `docs/deploy.md` describes. Never read or print the updater key. Not on the maintainer's
    Mac: say the release has no `latest.json` yet and stop; never skip silently.
 8. Print the checklist as the install commands to run, and stop. Do not run them.

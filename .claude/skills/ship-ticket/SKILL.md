@@ -15,11 +15,11 @@ settles, CI that reports nothing, or a denylisted-path reason on a non-critical 
 ## 1. Claim
 
 - Check whether auto-merge is paused (`scripts/automerge-pause.sh detect`). If so, still ship, but hand the PR to
-  the maintainer at step 5.
+  the maintainer at step 5, and reopen the reverted PR's ticket as `needs-review` with a comment.
 - No ticket given: take the highest-priority, lowest-numbered open `status:ready` ticket whose blockers are closed.
 - Refuse (comment, leave it ready) if its `Touches` overlap a `status:in-progress` ticket, or three are in progress.
 - Move the label from `status:ready` to `status:in-progress`. Work in your own worktree off `origin/main`, on a
-  branch named as `CONTRIBUTING.md` says.
+  branch named as `CONTRIBUTING.md` says, its type mapped from the `type:` label as the pipeline doc says.
 - Read the ticket, its spec, `CLAUDE.md` and every file in `Touches`.
 
 ## 2. Implement
@@ -50,8 +50,8 @@ Every new commit restarts this loop; a PASS or APPROVE counts only for the HEAD 
 ## 5. Merge or hand over
 
 Grade your own risk by the pipeline's critical-change rules (a doubt is checked in the spec and code, not graded
-`high`), then run `scripts/automerge-check.sh` with the reviewed sha, both risk grades and, without CI,
-`--local-pass`.
+`high`), then run `scripts/automerge-check.sh` with the reviewed sha, both risk grades (`--reviewer-risk na` for a
+docs-only PR) and, without CI, `--local-pass`.
 
 - `ELIGIBLE`, or only denylisted-path reasons on a non-critical change: merge as the `pull-request` skill says.
   Post an audit comment starting `Auto-merged:` with the CI jobs (or the local substitute), reviewed commit, both

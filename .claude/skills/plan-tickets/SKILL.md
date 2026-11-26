@@ -9,6 +9,7 @@ Input: a spec with a Tickets table. Output: one ticket issue per row, then the i
 milestone and title conventions are in `CONTRIBUTING.md` and the delivery pipeline doc; follow them exactly.
 
 **The table is the plan.** Never invent, merge or split tickets. If the table is wrong, stop and escalate.
+**Clean-room:** never name competitors in issues, PRs, commits or repository files.
 
 ## Check first, create nothing until all hold
 
