@@ -24,8 +24,7 @@ them.
 - `scripts/smoke-join.sh`: daily live check.
 
 Missing: the live check (row 16). A live call has recorded audio (#130 to #132), but the Meet page labels and
-every fact marked *unverified* still need the maintainer's run. The notetaker sign-in status has no
-endpoint yet.
+every fact marked *unverified* still need the maintainer's run.
 
 ## Goals and non-goals
 
@@ -203,7 +202,7 @@ assumes.
 | Opt-out in chat | `Session` | `purge_meeting`, `opted_out` |
 | Chat notice not posted | Driver | Leave before capture starts, `failed`, "Chat is off, so the notetaker could not announce itself" |
 | Page not recognised | Selector step fails | `failed`, `meet_ui_changed: <step>`; no screenshot (it would hold faces and names) |
-| Account signed out | Sign-in page instead of the call | `failed`, `notetaker_signed_out`; admins see it on Recording & privacy |
+| Account signed out | Sign-in page instead of the call | `failed`, `notetaker_signed_out`; admins see the status and a banner on Recording & privacy (`GET /api/notetaker/status`) |
 | Browser crash or DevTools disconnect | Driver | Finish WAV, transcribe if over 30 s of audio, else `failed` |
 | No audio frames | 5 min guard | As browser crash |
 | Too long | `max_call_minutes` | `MaxDuration`, transcribe |
@@ -362,7 +361,7 @@ label, must be confirmed in the live check (row 16).
 ### Calendar connect on Recording & privacy (PR 14)
 - The prototype's Recording & privacy screen needs a settings API that does not exist yet, so this PR adds the screen with only the calendar row; the other rows stay unticked in `docs/ui-parity.md`. The tile copies the prototype's Connections tile (logo, name, one line, badge) inside the screen's boxed row layout.
 - The Google callback now redirects to `/recording?calendar=<outcome>` (it was `/`), so the member lands where the outcome is shown.
-- Notetaker sign-in status is not shown: the server has no endpoint for it. Add one with the settings API, then a status row here.
+- Notetaker sign-in status: `GET /api/notetaker/status` (admin only) returns `signed_in`, `signed_out` or `unknown`. It is `signed_out` with no saved profile; otherwise it is what the last call found, kept in `data_dir/notetaker-signin` (outside the profile folder, no cookies): a call that reached the call or lobby writes `signed_in`, a call that hit the sign-in page writes `signed_out`. `notetaker-login` and `notetaker-logout` clear the note, so a fresh sign-in reads `unknown` until the next call. A saved profile is never checked against Google on its own, so `signed_in` can be stale (unverified live).
 - Checked by eye in the in-app browser: Daylight and Ink, mobile width. Dark mode was not checked beyond the shared tokens. Screenshot of this screen and the prototype's are in the thread.
 - At the time of this PR the server did not serve the built web app, so outside `make dev` the redirect to `/recording?...` had no page to land on. Serving the app has since merged (#281), so the redirect now lands on the page.
 

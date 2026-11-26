@@ -312,3 +312,42 @@ test('members never see the card or request participants', async () => {
   expect(screen.queryByLabelText('Participant')).toBeNull()
   expect(calls.some((c) => c.u.startsWith('/api/participants'))).toBe(false)
 })
+
+function notetakerStatus(role: string, sign_in: string) {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+    calls.push(u)
+    return new Response(JSON.stringify(
+      u === '/api/me' ? { email: 'a@b.c', name: null, role }
+        : u === '/api/notetaker/status' ? { sign_in }
+          : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] } : { connected: false, needs_reconnect: false },
+    ))
+  }))
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/recording']}><Recording /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>,
+  )
+  return calls
+}
+
+test('a signed-out notetaker shows a banner and how to sign in again to admins', async () => {
+  notetakerStatus('admin', 'signed_out')
+  expect((await screen.findByRole('alert', { name: '' })).textContent).toBe('The notetaker is signed out, so calls fail until someone signs it in again.')
+  expect(screen.getByText('Signed out')).toBeTruthy()
+  expect(screen.getByText('recapz notetaker-login')).toBeTruthy()
+})
+
+test('a signed-in notetaker shows the badge and no banner or login hint', async () => {
+  notetakerStatus('admin', 'signed_in')
+  expect(await screen.findByText('Signed in')).toBeTruthy()
+  expect(screen.queryByText(/is signed out/)).toBeNull()
+  expect(screen.queryByText('recapz notetaker-login')).toBeNull()
+})
+
+test('members never request or see the notetaker status', async () => {
+  const calls = notetakerStatus('member', 'signed_out')
+  expect(await screen.findByText('Where audio goes')).toBeTruthy()
+  expect(calls).not.toContain('/api/notetaker/status')
+  expect(screen.queryByText('Notetaker account')).toBeNull()
+})

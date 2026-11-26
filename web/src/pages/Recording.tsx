@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { disconnectCalendar, getCalendar, getJoinSettings, getParticipants, purgeParticipant, putAudioRetention, putJoinSettings, putTranscriptRetention, type JoinSettings, type Participant } from '../api'
+import { disconnectCalendar, getCalendar, getJoinSettings, getNotetakerStatus, getParticipants, purgeParticipant, putAudioRetention, putJoinSettings, putTranscriptRetention, type JoinSettings, type Participant } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -84,6 +84,45 @@ function JoinForm({ saved, admin }: { saved: JoinSettings; admin: boolean }) {
             <div className="mt-4"><Button type="submit" variant="primary" disabled={save.isPending}>Save</Button></div>
           </form>
         )}
+      </div>
+    </div>
+  )
+}
+
+const signIns = {
+  signed_in: { tone: 'good', label: 'Signed in', hint: 'The last call got past the Google sign-in page.' },
+  signed_out: { tone: 'bad', label: 'Signed out', hint: 'Google asked for a sign-in, so the notetaker cannot join calls.' },
+  unknown: { tone: undefined, label: 'Not checked yet', hint: 'A profile is saved, but no call has used it since. The next call checks it.' },
+} as const
+
+/** Admin only: whether the notetaker's Google account is signed in, and how to sign it in again. */
+function NotetakerSignIn() {
+  const st = useQuery({ queryKey: ['notetaker-status'], queryFn: getNotetakerStatus })
+  const s = st.data && signIns[st.data.sign_in]
+  return (
+    <div className="mt-4 frame frame-row">
+      <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+        <div>
+          <h2 className="font-semibold">Notetaker account</h2>
+          <p className="mt-1 text-sm text-mute">The Google account the notetaker joins calls with. Only admins see this.</p>
+        </div>
+        <div className="text-sm">
+          {st.isError && <p role="alert" className="text-bad">Could not load the notetaker status.</p>}
+          {s && (
+            <>
+              {st.data.sign_in === 'signed_out' && (
+                <p role="alert" className="mb-3 rounded-md bg-bad-wash px-3 py-2 text-bad">
+                  The notetaker is signed out, so calls fail until someone signs it in again.
+                </p>
+              )}
+              <Badge tone={s.tone}>{s.label}</Badge>
+              <p className="mt-2 text-mute">{s.hint}</p>
+              {st.data.sign_in !== 'signed_in' && (
+                <p className="mt-2">To sign in again, run <code className="font-mono">recapz notetaker-login</code> on the server, sign in by hand, then close the window.</p>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -279,6 +318,7 @@ export function Recording() {
           </div>
         </div>
       )}
+      {storage.isAdmin && <NotetakerSignIn />}
       {storage.isAdmin && <ForgetPerson />}
       {asking && (
         <ConfirmDialog title="Disconnect Google Calendar?" confirmLabel="Disconnect" busy={off.isPending}

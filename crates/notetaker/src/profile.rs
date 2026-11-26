@@ -21,6 +21,47 @@ pub fn has_login(data_dir: &Path) -> bool {
     profile_dir(data_dir).join("Default").is_dir()
 }
 
+/// What the last check of the saved profile found. `Unknown` = a profile exists but no call has
+/// reached Meet with it yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignIn {
+    SignedIn,
+    SignedOut,
+    Unknown,
+}
+
+impl SignIn {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SignIn::SignedIn => "signed_in",
+            SignIn::SignedOut => "signed_out",
+            SignIn::Unknown => "unknown",
+        }
+    }
+}
+
+fn status_file(data_dir: &Path) -> PathBuf {
+    data_dir.join("notetaker-signin") // beside the profile, never inside it: no cookies here
+}
+
+/// Notes what a call just found: Meet showed the sign-in page, or let the account in.
+pub fn record_sign_in(data_dir: &Path, found: SignIn) {
+    let _ = fs::write(status_file(data_dir), found.as_str()); // a status note must never fail a call
+}
+
+/// Signed out when there is no profile or the last call found the sign-in page; signed in when the
+/// last call got past it.
+pub fn sign_in(data_dir: &Path) -> SignIn {
+    if !has_login(data_dir) {
+        return SignIn::SignedOut;
+    }
+    match fs::read_to_string(status_file(data_dir)).as_deref() {
+        Ok("signed_out") => SignIn::SignedOut,
+        Ok("signed_in") => SignIn::SignedIn,
+        _ => SignIn::Unknown,
+    }
+}
+
 /// Whether a window can be shown: always on macOS and Windows, on Linux only with a display
 /// (the server runs a virtual one; a person needs SSH X forwarding or VNC to reach it).
 pub fn display_available(display: Option<&str>, wayland: Option<&str>, linux: bool) -> bool {
@@ -39,6 +80,7 @@ pub fn login(chromium: &Path, data_dir: &Path) -> Result<()> {
         .mode(0o700)
         .create(&dir)?;
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?; // also fixes a folder made earlier
+    let _ = fs::remove_file(status_file(data_dir)); // a fresh sign-in has not been checked yet
     let status = Command::new(chromium)
         .arg(format!("--user-data-dir={}", dir.display()))
         .args(["--no-first-run", "--no-default-browser-check", SIGN_IN_URL])
@@ -55,6 +97,7 @@ pub fn login(chromium: &Path, data_dir: &Path) -> Result<()> {
 
 /// Removes the saved login (hard delete). Returns whether there was one.
 pub fn logout(data_dir: &Path) -> Result<bool> {
+    let _ = fs::remove_file(status_file(data_dir));
     match fs::remove_dir_all(profile_dir(data_dir)) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -88,6 +131,24 @@ mod tests {
         fs::write(&script, body).unwrap();
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         script
+    }
+
+    #[test]
+    fn sign_in_follows_the_profile_and_the_last_call_and_a_fresh_login_resets_it() {
+        let data = tmp("signin");
+        assert_eq!(sign_in(&data), SignIn::SignedOut); // no profile
+        login(&fake_browser(&data, true, 0), &data).unwrap();
+        assert_eq!(sign_in(&data), SignIn::Unknown); // profile, never checked
+        record_sign_in(&data, SignIn::SignedIn);
+        assert_eq!(sign_in(&data), SignIn::SignedIn);
+        record_sign_in(&data, SignIn::SignedOut);
+        assert_eq!(sign_in(&data), SignIn::SignedOut);
+        login(&fake_browser(&data, true, 0), &data).unwrap();
+        assert_eq!(sign_in(&data), SignIn::Unknown);
+        record_sign_in(&data, SignIn::SignedIn);
+        logout(&data).unwrap();
+        assert_eq!(sign_in(&data), SignIn::SignedOut);
+        assert!(!status_file(&data).exists());
     }
 
     #[test]

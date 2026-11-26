@@ -111,6 +111,7 @@ pub fn router_with_llm(
             get(get_transcript_retention).put(put_transcript_retention),
         )
         .route("/api/usage", get(get_usage))
+        .route("/api/notetaker/status", get(get_notetaker_status))
         .route("/api/workspaces", get(workspaces::list))
         .route("/api/workspaces/{id}/switch", post(workspaces::switch))
         .route("/api/members", get(members::list))
@@ -685,6 +686,27 @@ struct UsageOut {
     /// True when the workspace cap or the server-wide cap is reached: new paid jobs wait until next month or a higher cap.
     paused: bool,
     meetings: Vec<UsageMeeting>,
+}
+
+#[derive(Serialize)]
+struct NotetakerStatus {
+    /// `signed_in`, `signed_out` or `unknown`, from the last check of the saved profile.
+    sign_in: &'static str,
+}
+
+/// Admin only: whether the notetaker's Google account is signed in, as the last call found it.
+async fn get_notetaker_status(
+    State(app): State<App>,
+    jar: CookieJar,
+) -> Res<Json<NotetakerStatus>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied(
+            "only an admin can see the notetaker status",
+        ));
+    }
+    let sign_in = recapz_notetaker::profile::sign_in(&app.cfg.data_dir).as_str();
+    Ok(Json(NotetakerStatus { sign_in }))
 }
 
 /// Admin only: this month's estimated cost and the cap (workspace totals), and the costliest meetings
