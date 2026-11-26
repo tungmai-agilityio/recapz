@@ -682,6 +682,94 @@ async fn transcript_returns_each_segments_speaker_name() {
 }
 
 #[tokio::test]
+async fn regenerate_queues_one_report_job_for_a_ready_meeting_owner_or_admin_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let amy_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email='amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let ready = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    let busy = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "transcribing");
+    let url = |id: &str| format!("/api/meetings/{id}/report/regenerate");
+    let jobs = |id: &str| {
+        count(
+            &t,
+            &format!("SELECT count(*) FROM jobs WHERE meeting_id='{id}'"),
+        )
+    };
+    let status = |id: &str| -> String {
+        t.query_row("SELECT status FROM meetings WHERE id=?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+
+    let (s, ..) = send(&app, json_req("POST", &url(&ready), &bob, "")).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, body) = send(&app, json_req("POST", &url(&busy), &amy, "")).await;
+    assert_eq!(
+        (s, body.as_str()),
+        (StatusCode::CONFLICT, "meeting is not ready")
+    );
+    assert_eq!(
+        (jobs(&ready), jobs(&busy)),
+        (1, 1),
+        "refusals queue nothing"
+    );
+
+    // Owner queues one job; the old report stays; a second click is refused while it runs.
+    let (s, ..) = send(&app, json_req("POST", &url(&ready), &amy, "")).await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    assert_eq!((jobs(&ready), status(&ready).as_str()), (2, "reporting"));
+    assert_eq!(
+        count(
+            &t,
+            &format!("SELECT count(*) FROM reports WHERE meeting_id='{ready}'")
+        ),
+        1
+    );
+    let (s, ..) = send(&app, json_req("POST", &url(&ready), &amy, "")).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(jobs(&ready), 2);
+
+    // A member who can see the meeting but does not own it is denied; an admin may regenerate.
+    t.execute(
+        "UPDATE meetings SET status='ready', share='workspace' WHERE id=?1",
+        [&ready],
+    )
+    .unwrap();
+    let (s, ..) = send(&app, json_req("POST", &url(&ready), &bob, "")).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, ..) = send(&app, json_req("POST", &url(&ready), &boss, "")).await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    assert_eq!(jobs(&ready), 3);
+}
+
+#[tokio::test]
 async fn delete_meeting_is_owner_or_admin_only_and_removes_everything() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(dir.path());

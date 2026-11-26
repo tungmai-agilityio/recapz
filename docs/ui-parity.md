@@ -117,7 +117,7 @@ non-owners once the list returns the owner.
 
 ## S3 Meeting report
 - [ ] Header: back link, title, date, duration, platform, faces; Share, Regenerate, Delete with confirm
-      (Delete with confirm is done, in a "Meeting actions" menu; Share and Regenerate wait on their own tasks,
+      (Delete with confirm is done, in a "Meeting actions" menu; Regenerate is in that menu with a confirm (owner or admin, ready meetings only); Share waits on its own task,
       the date, duration and faces are built: faces show the people who spoke, from the transcript). Rename is also in that menu, with an inline title
       editor; the prototype header has neither, so the row stays unticked until the maintainer confirms the
       design. Checked by eye on 2026-11-20 (#327) at 1280 and 390 px: title, date, duration and platform match.
