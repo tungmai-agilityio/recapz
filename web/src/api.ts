@@ -82,6 +82,11 @@ export const putTranscriptRetention = async (days: number): Promise<{ days: numb
     method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ days }),
   }))).json()
 
+/** Admin only. From the last check of the notetaker's saved Google profile. */
+export type NotetakerSignIn = 'signed_in' | 'signed_out' | 'unknown'
+export const getNotetakerStatus = async (): Promise<{ sign_in: NotetakerSignIn }> =>
+  (await check(await fetch('/api/notetaker/status'))).json()
+
 export interface JoinSettings { join_rule: 'manual' | 'auto'; notetaker_name: string; join_message: string }
 
 export const getJoinSettings = async (): Promise<JoinSettings> =>

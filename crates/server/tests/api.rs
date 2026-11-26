@@ -1723,3 +1723,45 @@ async fn purging_a_participant_is_admin_only_csrf_protected_and_removes_their_wo
     let (_, _, b) = send(&app, get("/api/participants", &boss)).await;
     assert_eq!(b, r#"[{"name":"Minh","meetings":1}]"#);
 }
+
+#[tokio::test]
+async fn notetaker_status_is_admin_only_and_follows_the_saved_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        ..Config::default()
+    };
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let app = routes::router(cfg, Arc::new(Mutex::new(control)));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let (boss, amy) = (boss.unwrap(), amy.unwrap());
+    let (s, ..) = send(&app, get("/api/notetaker/status", &amy)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let status = || async {
+        let (s, _, body) = send(&app, get("/api/notetaker/status", &boss)).await;
+        assert_eq!(s, StatusCode::OK);
+        body
+    };
+    assert_eq!(
+        status().await,
+        r#"{"sign_in":"signed_out"}"#,
+        "no profile yet"
+    );
+    std::fs::create_dir_all(dir.path().join("notetaker-profile/Default")).unwrap();
+    assert_eq!(status().await, r#"{"sign_in":"unknown"}"#);
+    std::fs::write(dir.path().join("notetaker-signin"), "signed_in").unwrap();
+    assert_eq!(status().await, r#"{"sign_in":"signed_in"}"#);
+    std::fs::write(dir.path().join("notetaker-signin"), "signed_out").unwrap();
+    assert_eq!(status().await, r#"{"sign_in":"signed_out"}"#);
+}

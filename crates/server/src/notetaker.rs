@@ -11,6 +11,7 @@ use recapz_core::{
 };
 use recapz_notetaker::{
     driver::{CallDriver, DriverError, DriverEvent},
+    profile::{self, SignIn},
     session::{Action, Event, LeaveReason, Session},
     wav::{self, WavWriter},
 };
@@ -160,6 +161,11 @@ pub async fn run_meeting<D: CallDriver>(
     if let Err(e) = &out.end {
         // The meeting id and the error variant only: never the join link or anything said in the call.
         tracing::warn!("notetaker call {id} ended with {e:?}");
+    }
+    match &out.end {
+        Err(DriverError::SignedOut) => profile::record_sign_in(data_dir, SignIn::SignedOut),
+        Ok(_) => profile::record_sign_in(data_dir, SignIn::SignedIn), // reached the call: the account is in
+        Err(_) => {}
     }
     let ms = (out.samples / 16) as i64;
     let enough = |min: i64, why: &str| -> Result<()> {
@@ -687,6 +693,38 @@ mod tests {
                 kept,
                 "{name}: audio folder"
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_call_notes_whether_the_account_was_signed_in() {
+        let cases: Vec<(&str, Script, SignIn)> = vec![
+            (
+                "sign-in page",
+                vec![Err(DriverError::SignedOut)],
+                SignIn::SignedOut,
+            ),
+            (
+                "denied, so past the sign-in page",
+                vec![call(Event::Denied)],
+                SignIn::SignedIn,
+            ),
+            (
+                "page changed says nothing",
+                vec![Err(DriverError::UiChanged("x".into()))],
+                SignIn::Unknown,
+            ),
+        ];
+        for (name, script, want) in cases {
+            let (dir, tenant) = setup();
+            std::fs::create_dir_all(profile::profile_dir(dir.path()).join("Default")).unwrap();
+            assert_eq!(
+                profile::sign_in(dir.path()),
+                SignIn::Unknown,
+                "{name}: before"
+            );
+            run(&dir, &tenant, script, i64::MAX).await;
+            assert_eq!(profile::sign_in(dir.path()), want, "{name}");
         }
     }
 
