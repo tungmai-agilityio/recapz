@@ -3,6 +3,7 @@ use unicode_normalization::UnicodeNormalization;
 
 pub mod ask;
 pub mod live;
+pub mod report;
 
 /// NFC, lowercase, punctuation removed, whitespace collapsed.
 /// ponytail: tone-mark placement (`hoà` vs `hòa`) is not unified; add if it shows up in real diffs.

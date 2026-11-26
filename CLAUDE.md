@@ -24,7 +24,7 @@ One Rust binary (axum) serves an embedded React + Vite + TypeScript + Tailwind a
 - Every database read must enforce current-member meeting access.
 - Migrations are additive only; user-data deletion must be a hard delete.
 - New dependencies require a one-line PR justification.
-- Prompt changes require a prompt version bump; prompt evaluation has no tool yet (#420).
+- Prompt changes require a prompt version bump; run `cargo run -p eval -- report` (needs `RECAPZ_LLM_KEY`, `RECAPZ_EVAL_MODEL`) before and after a report prompt change and put both numbers in the PR.
 - Frontend: follow the approved prototype (including mobile and both skins), reuse `web/src/ui`, and use design tokens, never hex colors.
 - Notetaker host: run Chromium on `notetaker-profile/` only as `recapz` (a root-owned file breaks every call's profile copy: "dropped before enough audio"), and keep the `BrowserSignin: 0` policy (without it Chromium signs the Google account out on every start).
 - Use Recapz terminology consistently: notetaker, meeting report, transcript, speaker ribbon, Ask, live view, upload, members, recording & privacy.
