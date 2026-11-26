@@ -64,6 +64,7 @@ pub fn startup(data_dir: &Path) -> Result<()> {
 /// `max_concurrent` notetaker calls are active across all tenants. Browser calls neither count nor
 /// block: the cap protects Chromium memory, which they do not use. A tenant that errors is logged and
 /// skipped, so it neither blocks the others nor loses what they already claimed.
+/// Slots are shared fairly: one call per workspace in turn, longest-waiting workspace first.
 /// Returns `(tenant, meeting id, join url)` for each call to start.
 pub fn due_calls(
     data_dir: &Path,
@@ -75,35 +76,49 @@ pub fn due_calls(
     let mut active_total = 0usize;
     for tenant in db::tenant_ids(&control)? {
         match open_and_count(data_dir, &tenant, now) {
-            Ok((c, notetaker, all)) => {
+            Ok((c, notetaker, all, last)) => {
                 active_total += notetaker;
-                tenants.push((tenant, c, all));
+                tenants.push((tenant, c, all, last));
             }
             Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
         }
     }
-    let mut out = Vec::new();
-    for (tenant, c, active) in tenants {
-        let free = max_concurrent.saturating_sub(active_total + out.len());
-        // `claim_scheduled` caps on this tenant's own active calls, browser ones included, so give it
-        // room on top of all of them. If it ever skips browser calls, pass `notetaker + free` instead.
-        match claim_scheduled(&c, active + free) {
-            Ok(claimed) => out.extend(
-                claimed
-                    .into_iter()
-                    .map(|(id, url)| (tenant.clone(), id, url)),
-            ),
-            Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
+    // Fair share: the workspace that has gone longest without a call goes first, then one call per
+    // workspace per round until the free slots run out or nobody has a due meeting left.
+    tenants.sort_by(|a, b| (a.3, &a.0).cmp(&(b.3, &b.0)));
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    let mut taken = vec![0usize; tenants.len()];
+    loop {
+        let before = out.len();
+        for (i, (tenant, c, active, _)) in tenants.iter().enumerate() {
+            if active_total + out.len() >= max_concurrent {
+                return Ok(out);
+            }
+            // `claim_scheduled` caps on this tenant's own active calls, browser ones included, and the
+            // calls claimed here are `joining` already, so allow all of them plus exactly one more.
+            match claim_scheduled(c, active + taken[i] + 1) {
+                Ok(claimed) => {
+                    taken[i] += claimed.len();
+                    out.extend(
+                        claimed
+                            .into_iter()
+                            .map(|(id, url)| (tenant.clone(), id, url)),
+                    );
+                }
+                Err(e) => tracing::error!("notetaker loop, tenant {tenant}: {e:#}"),
+            }
+        }
+        if out.len() == before {
+            return Ok(out);
         }
     }
-    Ok(out)
 }
 
 fn open_and_count(
     data_dir: &Path,
     tenant: &str,
     now: i64,
-) -> Result<(rusqlite::Connection, usize, usize)> {
+) -> Result<(rusqlite::Connection, usize, usize, i64)> {
     let c = db::open_tenant(data_dir, tenant)?;
     book_due(&c, now, LEAD_MS)?;
     // (notetaker calls, all calls) that are active.
@@ -113,7 +128,14 @@ fn open_and_count(
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    Ok((c, notetaker, all))
+    // When this workspace last started a call (0 = never): who has waited longest goes first.
+    // ponytail: a call claimed but not yet started has no `started_at`; the round robin covers one pass.
+    let last = c.query_row(
+        "SELECT COALESCE(MAX(started_at), 0) FROM meetings WHERE platform != 'browser'",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok((c, notetaker, all, last))
 }
 
 /// Why a call cannot start at all, as the error shown on the meeting.
@@ -320,6 +342,46 @@ mod tests {
         meeting(&c1, "s2", "scheduled", 4);
         meeting(&c2, "s3", "scheduled", 5);
         assert_eq!(due_calls(dir.path(), 3, 1_000).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn slots_go_one_per_workspace_in_turn() {
+        let (dir, c1) = setup();
+        let control = db::open_control(dir.path()).unwrap();
+        control
+            .execute("INSERT INTO tenants (id, name) VALUES ('t2', 'Other')", [])
+            .unwrap();
+        let c2 = db::open_tenant(dir.path(), "t2").unwrap();
+        for (i, id) in ["a1", "a2", "a3", "a4", "a5"].iter().enumerate() {
+            meeting(&c1, id, "scheduled", 10 + i as i64);
+        }
+        meeting(&c2, "b1", "scheduled", 20);
+        let got = due_calls(dir.path(), 2, 1_000).unwrap();
+        assert_eq!(
+            got.iter()
+                .map(|(t, i, _)| (t.as_str(), i.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("t1", "a1"), ("t2", "b1")]
+        );
+        assert_eq!(status(&c1, "a2"), "scheduled");
+    }
+
+    #[test]
+    fn the_workspace_waiting_longest_goes_first() {
+        let (dir, c1) = setup();
+        let control = db::open_control(dir.path()).unwrap();
+        control
+            .execute("INSERT INTO tenants (id, name) VALUES ('t2', 'Other')", [])
+            .unwrap();
+        let c2 = db::open_tenant(dir.path(), "t2").unwrap();
+        meeting(&c1, "old", "done", 1);
+        c1.execute("UPDATE meetings SET started_at = 500 WHERE id='old'", [])
+            .unwrap();
+        meeting(&c1, "a", "scheduled", 10);
+        meeting(&c2, "b", "scheduled", 11);
+        let got = due_calls(dir.path(), 1, 1_000).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].1, "b", "t2 never had a call, t1 did at 500");
     }
 
     #[test]
