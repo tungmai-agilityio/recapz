@@ -100,6 +100,9 @@ paths the ticket changes. Testing scope follows "Testing & Verification" in `CLA
    migration, and `None` without a membership. `bootstrap_admin` writes the new invite table. Tests: an upgraded
    database keeps every user's workspace, role and session; a two-workspace user gets the workspace used last;
    an invite older than 14 days is ignored. Touches sessions: critical by `CLAUDE.md`, gets `human-merge`.
+   Built in #429: `user_for_sign_in` also still accepts rows in the old `invites` table (no expiry), because the
+   server tests and any hand-edited database write there; the migration copies them, it does not drop them.
+   `create_session` keeps its signature and stores the workspace sign-in would pick, so no caller changes.
 2. `members.rs` on the control and tenant connections: `list` (members and pending invites, with meeting counts),
    `invite` (refuses an existing member), `set_role` and `remove` with the last-admin guard, and `remove` doing
    what Decisions say in one transaction per database, reusing `purge::purge_document` for documents. Tests assert
