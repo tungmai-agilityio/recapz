@@ -13,8 +13,8 @@ and who owns each step.
 
 | Stage | Entry point | Output | Gate |
 |---|---|---|---|
-| Intake | `intent` issue template | Issue `kind:intent`, `status:backlog` | none |
-| Grill | an explicit grilling session with the maintainer | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<intent>`; intent is `status:planning` | the maintainer's confirmation that ends the grilling |
+| Intake | `intent` issue template | Issue titled `intent: ...`, `status:ready` | none |
+| Grill | an explicit grilling session with the maintainer | `docs/specs/<feature>.md` in a docs-only PR with `Refs #<intent>`; intent is `status:in-progress` | the maintainer's confirmation that ends the grilling |
 | Plan | `plan-tickets` skill | One issue per ticket, `status:ready`; closes the intent once every ticket exists | none |
 | Ship | `ship-ticket` skill | Implement, test, verify, review, open the PR | auto-merge or escalate (below) |
 | Deliver | `release` skill, on demand | `v0.x` tag, GitHub release, upgrade checklist | asks before tagging |
@@ -33,14 +33,13 @@ Issues own status; Markdown holds specs and decisions only. A PR says `Closes #N
 
 | Namespace | Values | Rule |
 |---|---|---|
-| `kind:` | `intent`, `ticket` | exactly one |
-| `status:` | `backlog`, `planning`, `ready`, `in-progress`, `review`, `needs-human` | exactly one on an open issue |
-| `type:` | `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`, `test` | exactly one per ticket; gives branch prefix and commit type. `ci`, `build`, `revert` use `chore` |
-| `priority:` | `p0`, `p1`, `p2`, `p3` | exactly one; default `p2`. `p0` is security, data loss or a broken `main` |
-| `area:` | `server`, `core`, `web`, `auth`, `jobs`, `meetings`, `notetaker`, `speech`, `llm`, `deploy`, `desktop`, `tooling` | at least one; the first is the commit scope. `tooling` covers hooks, scripts, `.github` and dependency updates |
-| `human-merge` | n/a | forces a manual merge |
+| `status:` | `ready`, `in-progress`, `done` | exactly one; `done` goes on when the issue closes |
+| `type:` | `feat`, `bug`, `task` | exactly one per ticket. `bug` is commit type `fix`; `task` covers docs, maintenance and internal work (`docs`, `chore`, `refactor`, `perf`, `test`, `ci`, `build`, `revert`); the branch prefix and commit type name the exact kind |
+| `priority:` | `high`, `medium`, `low` | exactly one; default `medium`. `high` includes security, data loss or a broken `main` |
+| `area:` | `server`, `web`, `desktop`, `notetaker`, `ai`, `tooling` | exactly one, the closest to the commit scope (`server` covers core, auth, jobs and meetings; `ai` covers speech and llm; `tooling` covers deploy). `tooling` covers hooks, scripts, `.github` and dependency updates |
+| `needs-review` | n/a | flag: important, a human reviews and approves before merge; also set on any stop or escalation |
 
-`done` is a closed issue. `blocked` is computed from open `blocked by #N` links, never stored.
+An intent is an issue titled `T-NNN intent: ...` (from the `intent` template); it uses the same `status:` labels and has no `type:`. `blocked` is computed from open `blocked by #N` links, never stored.
 `scripts/labels.sh` creates every label idempotently and is the source of truth; `plan-tickets` refuses a
 ticket missing a required label.
 
@@ -48,16 +47,16 @@ ticket missing a required label.
 
 | Event | Owner | Change |
 |---|---|---|
-| Intent filed | template | `status:backlog` |
-| Grill starts | whoever runs the session | `status:planning` |
-| Spec PR merges | n/a | intent stays `status:planning` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
+| Intent filed | template | `status:ready` |
+| Grill starts | whoever runs the session | `status:in-progress` |
+| Spec PR merges | n/a | intent stays `status:in-progress` (the PR uses `Refs`, not `Closes`, so a merged spec with no tickets is never hidden) |
 | Tickets created | `plan-tickets` | tickets `status:ready`; intent closed after the last ticket exists |
 | Ticket claimed | `ship-ticket` | `status:in-progress` |
-| PR opened | `ship-ticket` | `status:review` |
-| PR merges | `Closes #N`, then `ship-ticket` | ticket closed (only when the PR delivers the whole ticket, see Tickets); its `status:` label is removed |
-| Auto-merged PR reverted | pause rule | ticket reopened as `status:needs-human` with a comment |
-| Any stop or escalation | any skill | `status:needs-human` plus a comment saying why |
-| Escalation cleared | maintainer only | back to `status:ready` |
+| PR opened | `ship-ticket` | stays `status:in-progress` |
+| PR merges | `Closes #N`, then `ship-ticket` | ticket closed (only when the PR delivers the whole ticket, see Tickets); `status:done` replaces its `status:` label |
+| Auto-merged PR reverted | pause rule | ticket reopened as `status:in-progress` plus `needs-review` with a comment |
+| Any stop or escalation | any skill | `needs-review` flag (status unchanged) plus a comment saying why |
+| Escalation cleared | maintainer only | `needs-review` removed |
 
 ## Tickets
 
@@ -66,9 +65,9 @@ ticket missing a required label.
   (small/medium), Testing scope (crates or web, per "Testing & Verification" in `CLAUDE.md`).
 - A PR says `Closes #N` only when it delivers the whole ticket. A PR that delivers part says `Refs #N`, and the
   missing part gets its own ticket before the merge.
-- Work found missing after a ticket closed gets a new `type:fix` ticket linking the original. Reopen a ticket
+- Work found missing after a ticket closed gets a new `type:bug` ticket linking the original. Reopen a ticket
   only when its PR was reverted.
-- Order: `priority:p0` first, then p1, p2, p3, then lowest issue number, skipping tickets with an open blocker.
+- Order: `priority:high` first, then medium, low, then lowest issue number, skipping tickets with an open blocker.
 
 ## Ship
 
@@ -77,11 +76,11 @@ ticket missing a required label.
 - **Parallel work:** until `ship-epic` exists (rollout step 8), the maintainer starts one worktree per ticket. `ship-ticket` claims a ticket by setting
   `status:in-progress` and refuses one whose `touches:` overlap another `in-progress` ticket. At most 3 at once.
 - **Retry caps:** 3 failed test-fix cycles or 2 reviewer CHANGES REQUESTED rounds (blockers only; nits never count)
-  stop the ticket with `status:needs-human` and the last failure in a comment. An infrastructure-looking CI failure
+  stop the ticket with `needs-review` and the last failure in a comment. An infrastructure-looking CI failure
   is re-run once without counting.
 - **No questions:** a confirmed spec and its tickets are approved work. Unclear points are decided by the order in
   "Autonomy and escalation" and recorded in the PR under "Decisions made"; only the stop conditions escalate.
-- **Drift:** if the spec is wrong or the ticket too big, stop, comment, set `status:needs-human`. Never deviate
+- **Drift:** if the spec is wrong or the ticket too big, stop, comment, set `needs-review`. Never deviate
   silently or widen the PR. A spec amendment goes through a docs-only PR, then the ticket resumes.
 
 ## Autonomy and escalation
@@ -98,7 +97,7 @@ ambiguity in this order and record it under "Decisions made" in the PR: ticket A
 current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
 Never use `--admin`, `--auto`, a merge commit or any flag that skips checks.
 
-**Escalation.** Escalate only critical changes: leave the PR open, set the ticket `status:needs-human` with a
+**Escalation.** Escalate only critical changes: leave the PR open, set the ticket `needs-review` with a
 comment saying why, notify the maintainer, then continue with independent tickets.
 
 *Always critical* (no spec can pre-approve):
@@ -116,7 +115,7 @@ data. Sending meeting data to the configured LLM and embedding providers is allo
 decides it, the ticket's Acceptance names it and `code-reviewer` confirms the diff matches, merge it.
 
 `scripts/automerge-check.sh` is a signal; read its reasons. A denylisted-path reason alone, on a change that is
-not critical, may be overridden: name the paths in the audit comment. Every other reason (paused, `human-merge`,
+not critical, may be overridden: name the paths in the audit comment. Every other reason (paused, `needs-review`,
 high risk, open decisions, CI or HEAD problems, unreadable data) escalates.
 
 ## Merge
@@ -144,9 +143,9 @@ maintainer. This section is how a ticket PR is checked. It merges without the ma
    The denylist is a signal and never grants a merge by itself: a path-only reason for a change that is not critical
    under "Autonomy and escalation" may be overridden, naming the overridden paths in the audit comment. `scripts/automerge-lib.sh`
    holds the list.
-6. No `human-merge` label.
+6. No `needs-review` label.
 
-Otherwise, and for any critical change, the PR gets `status:needs-human`, the maintainer is notified once, the run
+Otherwise, and for any critical change, the PR gets `needs-review`, the maintainer is notified once, the run
 continues with independent tickets, and the maintainer merges or decides. Merging is a squash merge;
 the guards against pushing to `main` are unchanged.
 
@@ -191,7 +190,7 @@ Auto-merge stays off until steps 2, 5 and 6 have merged.
 5. `ship-ticket`, the reviewer's acceptance and risk grading, merge-when-green. Updates the `pull-request`
    skill, which currently forbids `--auto` and requires approval per merge, and the `CLAUDE.md` line "The
    maintainer approves each merge".
-6. Denylist script, audit comment, `human-merge` and pause on revert.
+6. Denylist script, audit comment, `needs-review` and pause on revert.
 7. `release`.
 8. `ship-epic <spec>`, built only after several single-ticket runs have merged cleanly (see Epic runs).
 
@@ -219,12 +218,12 @@ Known gaps:
 ## Epic runs
 
 `ship-epic <spec>` runs a spec's tickets in the background without the maintainer starting each one. It stops
-only on `status:needs-human`; the spec merge and critical PRs ("Autonomy and escalation") still need the maintainer. It starts
+only on `needs-review`; the spec merge and critical PRs ("Autonomy and escalation") still need the maintainer. It starts
 by itself after `plan-tickets` unless the maintainer said "spec only".
 
 - Reads the spec's tickets, applies the order rule, the `touches:` overlap check and the cap of 3, and starts
   one worker per eligible ticket in its own worktree; when one finishes it starts the next.
-- A ticket or PR that needs the maintainer is parked as `status:needs-human`. The run skips it and continues
+- A ticket or PR that needs the maintainer is parked as `needs-review`. The run skips it and continues
   with tickets that do not depend on it, and notifies the maintainer each time it parks one.
 - Halts at a configured ticket or spend limit, and pauses and retries on rate limits or CI outages instead of
   failing the ticket. Ends with a summary: merged, parked, and tickets blocked behind a parked one.

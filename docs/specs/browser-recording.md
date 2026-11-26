@@ -85,7 +85,7 @@ Recapz cannot use it except by uploading a file afterwards, which loses the live
    `platform = 'browser'` and starts `run_meeting` with the driver. `GET /api/meetings/{id}/record` upgrades to a
    WebSocket: binary frames of exactly 1600 samples (little-endian i16), text `stop` or `discard`; the refusals
    in Acceptance. Enables axum's `ws` feature (reason: the socket). Touches session checks and origin checks, so
-   it is critical by `CLAUDE.md` and gets `human-merge`.
+   it is critical by `CLAUDE.md` and gets `needs-review`.
 3. `startCapture(mode)` returns frames, input levels and state: tab audio plus microphone (echo cancellation
    on) or microphone only; an AudioWorklet mixes and resamples to 16 kHz frames of 1600 samples; the socket
    client buffers up to 60 s and reconnects with backoff; refuses a share without an audio track. Tests with fake

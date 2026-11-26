@@ -11,7 +11,7 @@ Never touch the production host, its config or secrets. The maintainer runs the 
 
 1. **Check `main` is releasable.** `git fetch origin main --tags`. The CI jobs for `origin/main`'s HEAD must have
    passed: `gh run list --branch main --limit 3` and `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`.
-   Stop and say which job failed if not. Open `status:needs-human` tickets are reported, not blocking.
+   Stop and say which job failed if not. Open `needs-review` tickets are reported, not blocking.
 2. **Find the range.** Last tag: `git describe --tags --abbrev=0 --match 'v0.*' origin/main`. None yet: the range
    is the whole history and the version is `v0.1.0`. Nothing merged since the last tag: stop.
 3. **Pick the version** (still `v0`): any `feat` or a breaking `!` bumps the minor (`v0.3.2` to `v0.4.0`); only

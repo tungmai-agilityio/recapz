@@ -1,7 +1,7 @@
 name: Ticket
 description: One task that becomes exactly one PR (normally created from an approved spec)
 title: "type(scope): summary"
-labels: ["kind:ticket", "status:ready"]
+labels: ["status:ready", "priority:medium"]
 body:
   - type: input
     id: spec
