@@ -1,17 +1,51 @@
 //! Commands run from a terminal instead of starting the server: `notetaker-login` and
-//! `notetaker-logout` manage the notetaker's saved Google sign-in.
+//! `notetaker-logout` manage the notetaker's saved Google sign-in; `workspace-create` and `workspace-list`
+//! manage workspaces.
 use crate::config::Config;
 use anyhow::{bail, Result};
+use recapz_core::db;
 use recapz_notetaker::{browser::find_chromium, profile};
 use std::path::Path;
 
 /// Runs `command` when it is one of ours and returns `Some`; `None` means start the server.
 pub fn run(command: Option<&str>, cfg: &Config) -> Option<Result<()>> {
+    let args: Vec<String> = std::env::args().skip(2).collect();
+    run_with(command, &args, cfg)
+}
+
+fn run_with(command: Option<&str>, args: &[String], cfg: &Config) -> Option<Result<()>> {
     match command {
+        Some("workspace-create") => Some(workspace_create(cfg, args)),
+        Some("workspace-list") => Some(workspace_list(cfg)),
         Some("notetaker-login") => Some(login(cfg)),
         Some("notetaker-logout") => Some(logout(cfg)),
         _ => None,
     }
+}
+
+fn workspace_create(cfg: &Config, args: &[String]) -> Result<()> {
+    let [name, email] = args else {
+        bail!("usage: recapz workspace-create <name> <admin email>");
+    };
+    let control = db::open_control(&cfg.data_dir)?;
+    let id = db::create_workspace(&control, &cfg.data_dir, name, email)?;
+    println!("Workspace created ({id}). {email} joins as its admin by signing in within 14 days.");
+    Ok(())
+}
+
+fn workspace_list(cfg: &Config) -> Result<()> {
+    let control = db::open_control(&cfg.data_dir)?;
+    println!("id\tname\tmembers\tcost this month (USD)");
+    for w in db::list_workspaces(&control, &cfg.data_dir, db::now_ms())? {
+        println!(
+            "{}\t{}\t{}\t{:.2}",
+            w.id,
+            w.name,
+            w.members,
+            w.cost_micro_usd as f64 / 1e6
+        );
+    }
+    Ok(())
 }
 
 fn login(cfg: &Config) -> Result<()> {
@@ -48,21 +82,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_two_notetaker_commands_are_handled_and_logout_deletes_the_profile() {
+    fn only_our_commands_are_handled_and_logout_deletes_the_profile() {
         let data = std::env::temp_dir().join(format!("recapz-cli-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&data);
         let cfg = Config {
             data_dir: data.clone(),
             ..Config::default()
         };
-        assert!(run(None, &cfg).is_none());
-        assert!(run(Some("serve"), &cfg).is_none());
+        assert!(run_with(None, &[], &cfg).is_none());
+        assert!(run_with(Some("serve"), &[], &cfg).is_none());
 
         std::fs::create_dir_all(profile::profile_dir(&data).join("Default")).unwrap();
         assert!(profile::has_login(&data));
-        run(Some("notetaker-logout"), &cfg).unwrap().unwrap();
+        run_with(Some("notetaker-logout"), &[], &cfg)
+            .unwrap()
+            .unwrap();
         assert!(!profile::profile_dir(&data).exists());
-        run(Some("notetaker-logout"), &cfg).unwrap().unwrap(); // nothing left: still fine
+        run_with(Some("notetaker-logout"), &[], &cfg)
+            .unwrap()
+            .unwrap(); // nothing left: still fine
         let _ = std::fs::remove_dir_all(&data);
     }
 
@@ -74,7 +112,42 @@ mod tests {
             },
             ..Config::default()
         };
-        let err = run(Some("notetaker-login"), &cfg).unwrap().unwrap_err();
+        let err = run_with(Some("notetaker-login"), &[], &cfg)
+            .unwrap()
+            .unwrap_err();
         assert!(err.to_string().contains("Chromium not found"), "{err}");
+    }
+
+    #[test]
+    fn workspace_commands_create_refuse_a_duplicate_and_list() {
+        let data = std::env::temp_dir().join(format!("recapz-ws-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        let cfg = Config {
+            data_dir: data.clone(),
+            ..Config::default()
+        };
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        run_with(Some("workspace-create"), &a(&["Acme", "boss@x.com"]), &cfg)
+            .unwrap()
+            .unwrap();
+        let err = run_with(Some("workspace-create"), &a(&["acme", "o@x.com"]), &cfg)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.to_string().contains("already exists"), "{err}");
+        let err = run_with(Some("workspace-create"), &a(&["Only name"]), &cfg)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.to_string().contains("usage"), "{err}");
+        run_with(Some("workspace-list"), &[], &cfg)
+            .unwrap()
+            .unwrap();
+        let control = db::open_control(&data).unwrap();
+        assert_eq!(
+            db::list_workspaces(&control, &data, db::now_ms())
+                .unwrap()
+                .len(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(&data);
     }
 }

@@ -100,6 +100,17 @@ sudoedit /etc/recapz/recapz.env   # add a line: RECAPZ_SPEECH_KEY=...
 - Chromium's sandbox needs unprivileged user namespaces. If your distribution blocks them for the service user, allow them for Chromium (the browser is never started with the sandbox off).
 - The saved sign-in (`notetaker-profile/`) and the per-call copies (`notetaker-tmp/`) hold live session cookies. They are excluded from backups; after a restore, run `notetaker-login` again.
 
+## Workspaces
+
+The server owner adds workspaces from the command line, on the host as the service user (the same config as the service):
+
+```sh
+sudo -u recapz recapz workspace-create "Acme" boss@example.com   # tenant, its database and an admin invite
+sudo -u recapz recapz workspace-list                              # id, name, members, this month's cost (USD)
+```
+
+`workspace-create` refuses a name already in use (any case). The admin joins by signing in with that Google account within 14 days; there is no self-service sign-up.
+
 ## Backups
 
 ```sh
