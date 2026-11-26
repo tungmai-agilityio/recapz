@@ -42,6 +42,18 @@ test('signed-in shell shows the rail, the account and the Meetings page', async 
   expect(screen.queryByRole('menu')).toBeNull()
 })
 
+test('the rail scrolls the current screen into view when the route changes', async () => {
+  const seen: (string | null)[] = []
+  Element.prototype.scrollIntoView = function (this: Element) { if (this.closest('nav')) seen.push(this.textContent) }
+  mount('/ask', signedIn())
+  await screen.findByRole('link', { name: 'Ask' })
+  await waitFor(() => expect(seen).toEqual(['Ask']))
+  fireEvent.click(screen.getByRole('link', { name: 'Upload' }))
+  await waitFor(() => expect(seen).toEqual(['Ask', 'Upload']))
+  // @ts-expect-error jsdom has no scrollIntoView; remove the stub so other tests see the original
+  delete Element.prototype.scrollIntoView
+})
+
 test('the account menu links to Recording & privacy', async () => {
   mount('/', signedIn())
   fireEvent.click(await screen.findByRole('button', { name: 'Account' }))

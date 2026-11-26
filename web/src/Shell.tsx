@@ -36,6 +36,8 @@ const Glyph = () => (
 export function Shell({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const { pathname } = useLocation()
+  // The rail scrolls sideways on a phone; keep the current screen's link in view.
+  useEffect(() => { document.querySelector('nav [aria-current="page"]')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' }) }, [pathname])
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
   // The rail shows "Live meeting" only while a call is being recorded.
   const meetings = useQuery({ queryKey: ['meetings'], queryFn: getMeetings, enabled: !!me.data, refetchInterval: 15_000 })
@@ -63,21 +65,23 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen grid-cols-[208px_minmax(0,1fr)] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[auto_1fr]">
       <nav aria-label="Screens"
-        className="sticky top-0 flex h-screen flex-col gap-5 overflow-x-hidden overflow-y-auto border-r border-hair bg-rail px-2.5 py-4 text-rail-fg max-[900px]:h-auto max-[900px]:flex-row max-[900px]:flex-wrap max-[900px]:items-center max-[900px]:gap-1 max-[900px]:overflow-visible max-[900px]:border-r-0 max-[900px]:border-b max-[900px]:py-2">
+        className="sticky top-0 flex h-screen flex-col gap-5 overflow-x-hidden overflow-y-auto border-r border-hair bg-rail px-2.5 py-4 text-rail-fg max-[900px]:h-auto max-[900px]:flex-row max-[900px]:items-center max-[900px]:gap-1 max-[900px]:overflow-visible max-[900px]:border-r-0 max-[900px]:border-b max-[900px]:py-2">
         <NavLink to="/" end aria-label="Recapz home" className="flex items-center gap-2 px-2 font-bold tracking-tight text-rail-on no-underline">
           <Glyph /><span>Recapz</span>
         </NavLink>
+        <div className="contents max-[900px]:flex max-[900px]:min-w-0 max-[900px]:flex-1 max-[900px]:gap-1 max-[900px]:overflow-x-auto">
         {groups.map((g) => ({ ...g, items: g.label === 'Work' ? [...g.items, ...live.map((m) => ({ to: `/meetings/${m.id}/live`, label: live.length > 1 ? `Live: ${m.title}` : 'Live meeting', icon: 'live' as const }))] as typeof g.items : g.items })).map((g) => (
-          <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row max-[900px]:flex-wrap">
+          <div key={g.label} className="flex flex-col gap-px max-[900px]:flex-row">
             <div className="px-2.5 pb-1.5 text-[0.66rem] tracking-[0.12em] uppercase opacity-60 max-[900px]:hidden">{g.label}</div>
             {g.items.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.end}
-                className={({ isActive }) => `relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
+                className={({ isActive }) => `relative flex items-center gap-2.5 rounded-md px-2.5 max-[900px]:whitespace-nowrap py-1.5 text-sm font-medium no-underline hover:text-rail-on ${isActive ? 'bg-nav-on-bg text-nav-on-fg before:absolute before:top-2 before:bottom-2 before:-left-2.5 before:w-[3px] before:rounded-r-sm before:bg-nav-marker max-[900px]:before:hidden' : ''}`}>
                 <Icon name={i.icon} />{i.label}<span aria-hidden title="In v1" data-testid="v1-dot" className="ml-auto inline-block h-1.5 w-1.5 rounded-full bg-current opacity-60 max-[900px]:hidden" />
               </NavLink>
             ))}
           </div>
         ))}
+        </div>
         {me.data && (
           <div className="relative mt-auto border-t border-hair pt-2.5 max-[900px]:mt-0 max-[900px]:ml-auto max-[900px]:border-t-0 max-[900px]:pt-0">
             <Menu label="Account" side={narrow ? 'below' : 'above'} align={narrow ? 'right' : 'left'} className="min-w-0 [&>button]:w-full max-[900px]:[&>button]:w-auto" trigger={

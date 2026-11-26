@@ -10,7 +10,7 @@ Which document owns what. When two disagree, the one named here wins; fix the ot
 | What a feature does and its tickets | `docs/specs/<feature>.md` (Status line says what merged) |
 | Run it locally, desktop app against it | `docs/running-locally.md` |
 | Host, release, backups, macOS app release | `docs/deploy.md` |
-| Screens against the prototype | `docs/ui-parity.md` |
+| Screens against the prototype | `docs/ui-parity.md`; canonical UI reference: https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH |
 | How ideas become releases, merge rules | `docs/specs/delivery-pipeline.md` |
 | Branches, commits, PRs | `CONTRIBUTING.md` |
 | Engineering contract | `CLAUDE.md` |

@@ -1,7 +1,7 @@
 ---
 name: test-runner
 description: Runs repository tests and quality checks in a specified working folder. Reports a concise, evidence-based verdict. Use before handoff or merge; scoped checks during implementation can run inline.
-tools: Bash, Read, Grep, Glob, mcp__playwright__*
+tools: Bash, Read, Grep, Glob, Artifact, mcp__playwright__*
 model: haiku
 maxTurns: 30
 omitClaudeMd: true

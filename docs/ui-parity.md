@@ -1,6 +1,6 @@
 # UI parity checklist
 
-The Recapz prototype is the visual spec (guide §10: Daylight and Ink skins, light and dark). This file is the
+The Recapz prototype (https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH) is the canonical UI reference and the visual spec (guide §10: Daylight and Ink skins, light and dark). This file is the
 definition of done for every web PR.
 
 ## How to use it
@@ -72,7 +72,7 @@ definition of done for every web PR.
 - [x] Signed-out state shows the sign-in card; a 401 returns to it
       Covered by App.test.tsx (#135).
 - [x] Mobile (under 900 px): rail becomes a top strip, Ask box on its own row
-      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). The strip wraps onto a second line at 390 px; the prototype scrolls it sideways.
+      Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). The strip scrolls sideways like the prototype and keeps the current screen's link in view; the logo and account button stay fixed so the menu is not clipped. Rechecked on 2026-11-26 at 390 px, Daylight light.
 
 ## S2 Meetings
 - [x] Header "Meetings" with a counts line, Upload link, Send notetaker button (built: counts line shows meetings this month and
@@ -224,7 +224,7 @@ non-owners once the list returns the owner.
 ## S8 Recording & privacy
 - [x] Calendar row: Google Calendar tile with Connected, Reconnect needed or Not connected, Connect or Reconnect, Disconnect with confirm, and the `?calendar=` outcome message (both skins, mobile checked by eye)
 - [ ] Notetaker sign-in status on this screen: no API exposes it yet (a signed-out account only shows as a failed meeting's error), so there is nothing to show
-- [x] Join rule radios, notetaker name, join message: admins edit and Save (`PUT /api/settings`, saved toast, server refusals next to the field) with a live preview of the chat notice that adds the "opt out" wording like the server; members read text only (jsdom tests). Screenshots at 1280 and 390 px, both skins: not taken, checked by jsdom only.
+- [x] Join rule radios, notetaker name, join message: admins edit and Save (`PUT /api/settings`, saved toast, server refusals next to the field) with a live preview of the chat notice that adds the "opt out" wording like the server; members read text only (jsdom tests). Name, message and retention fields fill the column (was: shrunk to default width). Checked in Chromium on 2026-11-26 at 1280 and 390 px, Daylight light; Ink and dark not checked.
 - [ ] Retention selects (audio, transcripts); "Where data lives" read-only text
       Open: a "Where audio goes" card names no speech provider (jsdom test). It says where recordings are kept (object storage or local disk) and how long their audio stays (read from `GET /api/settings/audio-retention`); checked by eye at 1280 px only. Admins get a "Delete audio after" select (30, 90, 180, 365 days, the current value, or keep until the meeting is deleted) that saves with `PUT` and toasts; a refusal is shown; members see text only (jsdom tests); checked in a headless browser at 1280 and 390 px, Daylight light, against mocked API data, 2026-11-19, with no prototype state to compare against. Transcript retention stays unbuilt: no settings API for it yet. The rest of "Where data lives" likewise. Earlier note: transcript retention and the rest of "Where data lives" have no settings API yet. Admins also get a "Usage this month" card (cost, cap, cap alert, cost per meeting) from `GET /api/usage`; members never request it; checked by eye at 1280 px only, no prototype state to compare.
 - [ ] Delete everything one participant said, with confirm; Save changes; saved toast
