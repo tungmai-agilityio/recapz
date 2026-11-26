@@ -1,7 +1,7 @@
 import { colour } from './speaker-colour'
 import type { KeyboardEvent, MouseEvent } from 'react'
 
-const sizes = { list: 'h-1.5 w-[120px] rounded-[2px]', scrubber: 'h-7 w-full rounded', live: 'h-5 w-full rounded-[2px]' }
+const sizes = { list: 'h-1.5 w-[120px] rounded-[2px]', card: 'h-1.5 w-full rounded-[2px]', scrubber: 'h-7 w-full rounded', live: 'h-5 w-full rounded-[2px]' }
 
 /** The speaker ribbon: a strip of who spoke when. `speaker` is 0-based (`null` = unknown); `weight` is the share of the width.
  *  With `onSeek`, `now` and `total` (ms) the scrubber becomes a slider: chapter `ticks`, amber playhead, click and arrow keys seek. */

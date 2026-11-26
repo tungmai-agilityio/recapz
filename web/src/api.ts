@@ -198,6 +198,12 @@ export interface Citation {
   quote: string
   /** False for a passage from a document not allowed to go to the language model: no answer used it. */
   answered: boolean
+  /** The `[n]` marker in the answer text that cites this card; null for a passage no answer used. Ask only. */
+  n?: number | null
+  /** Meetings only (Ask): who spoke at the cited moment, the transcript length and a coarse speaker ribbon (`speaker` 0-based, null = nobody). */
+  speaker?: string | null
+  duration_ms?: number | null
+  ribbon?: { speaker: number | null; weight: number }[] | null
 }
 
 /** Pulls `event:`/`data:` pairs out of a server-sent-event text, leaving any unfinished tail. */
