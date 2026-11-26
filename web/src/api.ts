@@ -370,8 +370,10 @@ export interface Invite { email: string; role: Role; created_at: number }
 export const getMembers = async (): Promise<{ members: Member[]; invites: Invite[] }> =>
   (await check(await fetch('/api/members'))).json()
 
-/** Returns the sign-in link to copy; the invite carries no token. */
-export const inviteMember = async (email: string, role: Role): Promise<{ link: string }> =>
+/** Whether the server emailed the invite: `off` when it has no mail relay. The invite is saved either way. */
+export type InviteEmail = 'sent' | 'off' | 'failed'
+/** Returns the sign-in link to copy (the invite carries no token) and whether it was emailed. */
+export const inviteMember = async (email: string, role: Role): Promise<{ link: string; email: InviteEmail }> =>
   (await check(await fetch('/api/members/invites', {
     method: 'POST', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ email, role }),
   }))).json()

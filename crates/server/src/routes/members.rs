@@ -1,4 +1,4 @@
-//! Members screen API (admin only): list, invite by link, change role, remove.
+//! Members screen API (admin only): list, invite (emailed when `[mail]` is set), change role, remove.
 use super::{ApiError, App, Res};
 use axum::{
     extract::{Path, State},
@@ -40,6 +40,8 @@ pub(super) struct NewInvite {
 #[derive(Serialize)]
 pub(super) struct Link {
     link: String,
+    /// `sent`, `off` (no `[mail]` host) or `failed`; the invite is saved either way.
+    email: &'static str,
 }
 
 #[derive(Deserialize)]
@@ -108,11 +110,34 @@ pub(super) async fn invite(
     if !b.email.contains('@') {
         return Err(ApiError::BadRequest("enter a valid email"));
     }
-    app.control(move |c| members::invite(c, &u.tenant_id, &u.id, &b.email, &b.role))
+    let (tenant, to) = (u.tenant_id.clone(), b.email.trim().to_owned());
+    let workspace = app
+        .control(move |c| {
+            members::invite(c, &u.tenant_id, &u.id, &b.email, &b.role)?;
+            Ok(c.query_row(
+                "SELECT name FROM tenants WHERE id = ?1",
+                [&u.tenant_id],
+                |r| r.get::<_, String>(0),
+            )?)
+        })
         .await
         .map_err(refusal)?;
     let link = format!("{}/", app.cfg.base_url.trim_end_matches('/'));
-    Ok((StatusCode::CREATED, Json(Link { link })))
+    let email = match app.mail.clone() {
+        None => "off",
+        Some(m) => {
+            let (subject, body) = crate::mail::invite_email(&workspace, &to, &link);
+            let sent = tokio::task::spawn_blocking(move || m.send(&to, &subject, &body)).await;
+            if matches!(sent, Ok(Ok(()))) {
+                "sent"
+            } else {
+                // The error text can name the address, so only the workspace ID is logged.
+                tracing::warn!("invite email failed for workspace {tenant}");
+                "failed"
+            }
+        }
+    };
+    Ok((StatusCode::CREATED, Json(Link { link, email })))
 }
 
 pub(super) async fn cancel_invite(

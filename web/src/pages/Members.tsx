@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { cancelInvite, getMe, getMembers, inviteMember, removeMember, setMemberRole, Unauthorized, type Role } from '../api'
+import { cancelInvite, getMe, getMembers, inviteMember, removeMember, setMemberRole, Unauthorized, type InviteEmail, type Role } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Face } from '../ui/Face'
@@ -13,6 +13,12 @@ import { useToast } from '../ui/toast-context'
 const inCell = `${inputClass} @2xl:-ml-[11px]`
 /** The server's refusal text without its leading status code ("409 a workspace needs ..."). */
 const reason = (e: unknown, fallback: string) => (e instanceof Error ? e.message.replace(/^\d+\s+/, '') : '') || fallback
+/** What the invite notice says before the link, by whether the server emailed it. */
+const sentText = (r: { to: string; email: InviteEmail }) => ({
+  sent: `Invite emailed to ${r.to}. You can also share this link:`,
+  off: 'Invite saved. Email is not set up, so share this link:',
+  failed: `Invite saved, but the email to ${r.to} could not be sent. Share this link:`,
+})[r.email]
 
 export function Members() {
   const qc = useQueryClient()
@@ -22,14 +28,14 @@ export function Members() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['members'] })
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('member')
-  const [link, setLink] = useState('')
+  const [sent, setSent] = useState<{ link: string; to: string; email: InviteEmail } | null>(null)
   // An id or an invite email: the row whose Remove or Cancel invite waits for its inline confirm.
   const [confirm, setConfirm] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   const invite = useMutation({
     mutationFn: () => inviteMember(email.trim(), role),
-    onSuccess: (r) => { setLink(r.link); setEmail(''); setError(''); return refresh() },
+    onSuccess: (r) => { setSent({ ...r, to: email.trim() }); setEmail(''); setError(''); return refresh() },
     onError: (e) => setError(reason(e, 'Could not invite.')),
   })
   const change = useMutation({
@@ -49,7 +55,7 @@ export function Members() {
     invite.mutate()
   }
   const copy = async () => {
-    try { await navigator.clipboard.writeText(link); toast('Link copied') } catch { toast('Could not copy. Select the link and copy it.') }
+    try { await navigator.clipboard.writeText(sent?.link ?? ''); toast('Link copied') } catch { toast('Could not copy. Select the link and copy it.') }
   }
 
   const ask = (key: string, label: string, aria: string) => confirm === key
@@ -66,7 +72,7 @@ export function Members() {
 
   return (
     <section className="flex flex-col gap-7">
-      <PageHead title="Members" lede="Invite people by email, then send them the link: they sign in with Google as that email to join." />
+      <PageHead title="Members" lede="Invite people by email: they get the link by email (or you share it) and sign in with Google as that email to join." />
       <form onSubmit={submit} noValidate className="frame flex flex-wrap items-start gap-3" aria-label="Invite">
         <div className="min-w-56 flex-1 max-sm:basis-full">
           <Field label="Email" error={error}>
@@ -84,9 +90,9 @@ export function Members() {
           <span aria-hidden className="text-sm select-none">&nbsp;</span>
           <Button type="submit" variant="primary" disabled={invite.isPending}>Invite</Button>
         </div>
-        {link && (
-          <p className="flex w-full flex-wrap items-center gap-2 text-sm text-ink-2">
-            <span className="min-w-0 break-all">Invite sent. Share this link: <b className="text-ink">{link}</b></span>
+        {sent && (
+          <p role="status" className="flex w-full flex-wrap items-center gap-2 text-sm text-ink-2">
+            <span className="min-w-0 break-all">{sentText(sent)} <b className="text-ink">{sent.link}</b></span>
             <Button onClick={copy}>Copy link</Button>
           </p>
         )}

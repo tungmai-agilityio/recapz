@@ -13,12 +13,12 @@ const data = {
   invites: [{ email: 'cy@example.com', role: 'member', created_at: 1 }],
 }
 
-function run(calls: string[] = [], fail?: Response, role = 'admin') {
+function run(calls: string[] = [], fail?: Response, role = 'admin', email = 'off') {
   vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${u}${typeof init?.body === 'string' ? ' ' + init.body : ''}`)
     if (u === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role }))
     if (init?.method && fail) return fail
-    if (init?.method === 'POST') return new Response(JSON.stringify({ link: 'https://x.test/' }), { status: 201 })
+    if (init?.method === 'POST') return new Response(JSON.stringify({ link: 'https://x.test/', email }), { status: 201 })
     if (init?.method) return new Response(null, { status: 204 })
     return new Response(JSON.stringify(data))
   }))
@@ -78,8 +78,19 @@ test('invite posts email and role, shows the link and Copy link copies it', asyn
   fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'admin' } })
   fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
   await waitFor(() => expect(calls).toContain('POST /api/members/invites {"email":"dee@example.com","role":"admin"}'))
+  expect((await screen.findByRole('status')).textContent).toContain('Invite saved. Email is not set up, so share this link:')
   fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }))
   await waitFor(() => expect(write).toHaveBeenCalledWith('https://x.test/'))
+})
+
+test.each([
+  ['sent', 'Invite emailed to dee@example.com. You can also share this link: https://x.test/'],
+  ['failed', 'Invite saved, but the email to dee@example.com could not be sent. Share this link: https://x.test/'],
+])('an invite whose email was %s says so', async (email, text) => {
+  run([], undefined, 'admin', email)
+  fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'dee@example.com' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
+  expect((await screen.findByRole('status')).textContent).toBe(`${text}Copy link`)
 })
 
 test('a bad email is refused locally; a server refusal shows next to the field', async () => {
