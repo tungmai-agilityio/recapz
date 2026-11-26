@@ -97,7 +97,8 @@ ambiguity in this order and record it under "Decisions made" in the PR: ticket A
 current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
 Never use `--admin`, `--auto`, a merge commit or any flag that skips checks. Never ask the maintainer for permission to
 merge: this applies to every PR, in every session and subagent. If CI is configured but reports no checks on the branch
-(check `gh run list --branch <branch>`), there is no result to wait for: the local `test-runner` PASS and `code-reviewer`
+(check `gh run list --branch <branch>`; GitHub Actions stops when the free monthly minutes run out, which was the case from
+2026-11-23), there is no result to wait for: the local `test-runner` PASS and `code-reviewer`
 APPROVE for that HEAD stand in, `scripts/automerge-check.sh`'s "unreadable check results" reason is overridden, and the
 `Auto-merged:` comment says so. Mention it in the final report so a stopped CI gets fixed.
 
