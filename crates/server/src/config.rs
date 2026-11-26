@@ -129,6 +129,9 @@ pub struct Config {
     /// Estimated spend per month (speech plus language model), in USD, after which new paid jobs
     /// pause until next month. 0 means no cap.
     pub monthly_cap_usd: f64,
+    /// Estimated spend per month summed over all workspaces, in USD, after which paid jobs pause in every
+    /// workspace until next month. 0 means no cap.
+    pub server_monthly_cap_usd: f64,
     /// Questions one member may ask per minute (each one is a paid model call).
     pub ask_per_minute: u32,
     /// Text embedder for Ask search: `hash` (built in) or `hosted` (see `[llm] embedding_model`). Changing it re-indexes meetings at start.
@@ -157,6 +160,7 @@ impl Default for Config {
             speech: Speech::default(),
             storage: Storage::default(),
             monthly_cap_usd: 0.0,
+            server_monthly_cap_usd: 0.0,
             ask_per_minute: 20,
             embedder: "hash".into(),
             max_concurrent_calls: 2,
@@ -169,6 +173,10 @@ impl Default for Config {
 impl Config {
     pub fn monthly_cap_micro_usd(&self) -> u64 {
         (self.monthly_cap_usd.max(0.0) * 1e6).round() as u64
+    }
+
+    pub fn server_monthly_cap_micro_usd(&self) -> u64 {
+        (self.server_monthly_cap_usd.max(0.0) * 1e6).round() as u64
     }
 
     /// Startup check: transcription cannot run without the speech key.

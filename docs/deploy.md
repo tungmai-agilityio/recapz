@@ -107,9 +107,12 @@ The server owner adds workspaces from the command line, on the host as the servi
 ```sh
 sudo -u recapz recapz workspace-create "Acme" boss@example.com   # tenant, its database and an admin invite
 sudo -u recapz recapz workspace-list                              # id, name, members, this month's cost (USD)
+sudo -u recapz recapz workspace-cap <id> 25                       # this workspace's monthly cap in USD (0 = no cap)
 ```
 
 `workspace-create` refuses a name already in use (any case). The admin joins by signing in with that Google account within 14 days; there is no self-service sign-up.
+
+Cost caps: `monthly_cap_usd` in `config.toml` is the default cap of every workspace, `workspace-cap` gives one workspace its own, and `server_monthly_cap_usd` (0 = off) pauses paid jobs in every workspace once the month's total across workspaces reaches it. Workspace admins cannot change caps; `/api/usage` shows the workspace's effective cap.
 
 ## Backups
 

@@ -4,7 +4,8 @@ bind = "127.0.0.1:8080"
 bootstrap_admin_email = ""   # first admin, invited on first start
 embedder = "hash"  # Ask text embedder: "hash" (built in, no download) or "hosted" (uses [llm] embedding_*; sends text to that provider)
 ask_per_minute = 20  # questions per member per minute
-monthly_cap_usd = 0          # estimated spend per month (speech + language model) after which new paid jobs wait until next month; 0 = no cap
+monthly_cap_usd = 0          # default estimated spend per workspace per month (speech + language model) after which its new paid jobs wait until next month; 0 = no cap. The server owner can set one workspace's own cap: recapz workspace-cap <id> <usd>
+server_monthly_cap_usd = 0   # estimated spend per month summed over all workspaces after which paid jobs wait in every workspace; 0 = off
 dev_login = false            # local development only: enables POST /auth/dev-login
 max_concurrent_calls = 2     # calls the notetaker may be in at once
 max_call_minutes = 240       # hard cap on one call
