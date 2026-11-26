@@ -53,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         runner::Limits {
             speech_micro_usd_per_minute: cfg.speech.price_per_minute_micro_usd,
             monthly_cap_micro_usd: cfg.monthly_cap_micro_usd(),
+            server_monthly_cap_micro_usd: cfg.server_monthly_cap_micro_usd(),
         },
     );
     if cfg.google.client_id.is_empty() || cfg.secret_key.is_empty() {

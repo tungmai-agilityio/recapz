@@ -31,6 +31,7 @@ pub fn open_control(data_dir: &Path) -> Result<Connection> {
     let m = Migrations::new(vec![
         M::up(include_str!("../migrations/control_001.sql")),
         M::up(include_str!("../migrations/control_002.sql")),
+        M::up(include_str!("../migrations/control_003.sql")),
     ]);
     open(&data_dir.join("control.sqlite"), &m)
 }
@@ -103,16 +104,56 @@ pub fn create_workspace(
     }
     let id = new_id();
     open_tenant(data_dir, &id)?;
-    control.execute(
-        "INSERT INTO tenants (id, name) VALUES (?1, ?2)",
-        [&id, name],
-    )?;
-    control.execute(
-        "INSERT INTO workspace_invites (email, tenant_id, role, invited_by, created_at)
-         VALUES (?1, ?2, 'admin', NULL, ?3)",
-        params![email, id, now_ms()],
-    )?;
+    let added = control
+        .execute(
+            "INSERT INTO tenants (id, name) VALUES (?1, ?2)",
+            [&id, name],
+        )
+        .and_then(|_| {
+            control.execute(
+                "INSERT INTO workspace_invites (email, tenant_id, role, invited_by, created_at)
+                 VALUES (?1, ?2, 'admin', NULL, ?3)",
+                params![email, id, now_ms()],
+            )
+        });
+    if let Err(e) = added {
+        // Do not leave a tenant directory that no tenants row points to.
+        let _ = std::fs::remove_dir_all(tenant_dir(data_dir, &id));
+        let _ = control.execute("DELETE FROM tenants WHERE id = ?1", [&id]);
+        return Err(e.into());
+    }
     Ok(id)
+}
+
+/// Sets one workspace's monthly cap (micro-USD; 0 = no cap), overriding the config default.
+pub fn set_workspace_cap(control: &Connection, id: &str, cap_micro_usd: u64) -> Result<()> {
+    let n = control.execute(
+        "UPDATE tenants SET monthly_cap_micro_usd = ?2 WHERE id = ?1",
+        params![id, cap_micro_usd as i64],
+    )?;
+    if n == 0 {
+        anyhow::bail!("no workspace with id '{id}'");
+    }
+    Ok(())
+}
+
+/// The cap that applies to a workspace: its own when the server owner set one, else `default`.
+pub fn effective_cap(control: &Connection, id: &str, default: u64) -> Result<u64> {
+    let own: Option<i64> = control.query_row(
+        "SELECT monthly_cap_micro_usd FROM tenants WHERE id = ?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok(own.map_or(default, |v| v.max(0) as u64))
+}
+
+/// This month's estimated cost summed over every workspace.
+pub fn server_month_total(control: &Connection, data_dir: &Path, now: i64) -> Result<i64> {
+    let mut sum = 0;
+    for id in tenant_ids(control)? {
+        sum += crate::usage::month_totals(&open_tenant(data_dir, &id)?, now)?.total();
+    }
+    Ok(sum)
 }
 
 pub struct WorkspaceRow {
@@ -474,5 +515,33 @@ mod tests {
             .collect();
         assert_eq!(got, vec![("Acme", 1, 12000), ("Beta", 0, 0)]);
         assert_eq!(rows[1].id, id2);
+    }
+
+    #[test]
+    fn workspace_cap_overrides_the_default_and_rejects_an_unknown_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_control(dir.path()).unwrap();
+        let a = create_workspace(&c, dir.path(), "A", "a@x.com").unwrap();
+        let b = create_workspace(&c, dir.path(), "B", "b@x.com").unwrap();
+        assert_eq!(effective_cap(&c, &a, 7).unwrap(), 7);
+        set_workspace_cap(&c, &a, 42).unwrap();
+        assert_eq!(effective_cap(&c, &a, 7).unwrap(), 42);
+        assert_eq!(effective_cap(&c, &b, 7).unwrap(), 7);
+        set_workspace_cap(&c, &a, 0).unwrap(); // 0 = no cap, not "use the default"
+        assert_eq!(effective_cap(&c, &a, 7).unwrap(), 0);
+        assert!(set_workspace_cap(&c, "nope", 1).is_err());
+    }
+
+    #[test]
+    fn a_failed_tenants_insert_leaves_no_tenant_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_control(dir.path()).unwrap();
+        c.execute_batch(
+            "CREATE TRIGGER no_tenants BEFORE INSERT ON tenants BEGIN SELECT RAISE(ABORT, 'no'); END;",
+        )
+        .unwrap();
+        assert!(create_workspace(&c, dir.path(), "A", "a@x.com").is_err());
+        let left = std::fs::read_dir(dir.path().join("tenants")).map_or(0, |d| d.count());
+        assert_eq!(left, 0);
     }
 }

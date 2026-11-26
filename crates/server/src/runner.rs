@@ -22,8 +22,10 @@ const PAID: [&str; 4] = [
 #[derive(Clone, Copy)]
 pub struct Limits {
     pub speech_micro_usd_per_minute: u64,
-    /// 0 means no cap.
+    /// Default cap per workspace (a workspace may have its own); 0 means no cap.
     pub monthly_cap_micro_usd: u64,
+    /// Cap on the sum over all workspaces; 0 means no cap.
+    pub server_monthly_cap_micro_usd: u64,
 }
 
 /// Report jobs run only when a language model is configured; otherwise they stay queued.
@@ -49,10 +51,16 @@ fn run_pending(
     }
     let control = db::open_control(data_dir)?;
     let mut ran = false;
+    let now = db::now_ms();
+    // Once per pass: past the server-wide cap, paid jobs wait in every workspace.
+    let server_paused = limits.server_monthly_cap_micro_usd > 0
+        && db::server_month_total(&control, data_dir, now)?
+            >= limits.server_monthly_cap_micro_usd as i64;
     for tenant in db::tenant_ids(&control)? {
         let conn = db::open_tenant(data_dir, &tenant)?;
         // Past the monthly cap the jobs that cost money stay queued; archive and label still run.
-        let paused = recapz_core::usage::paused(&conn, limits.monthly_cap_micro_usd, db::now_ms())?;
+        let cap = db::effective_cap(&control, &tenant, limits.monthly_cap_micro_usd)?;
+        let paused = server_paused || recapz_core::usage::paused(&conn, cap, now)?;
         let kinds: Vec<&str> = kinds
             .iter()
             .copied()
@@ -183,6 +191,7 @@ mod tests {
     const NO_LIMITS: Limits = Limits {
         speech_micro_usd_per_minute: 0,
         monthly_cap_micro_usd: 0,
+        server_monthly_cap_micro_usd: 0,
     };
 
     struct Counting(std::sync::atomic::AtomicUsize);
@@ -321,6 +330,7 @@ mod tests {
         let cap = |n| Limits {
             speech_micro_usd_per_minute: 0,
             monthly_cap_micro_usd: n,
+            server_monthly_cap_micro_usd: 0,
         };
         // spend (5) has reached the cap (5): the index job waits
         assert!(!run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(5)).unwrap());
@@ -347,6 +357,63 @@ mod tests {
         // raising the cap (or a new month) lets it run
         assert!(run_pending(dir.path(), &StubTranscriber, None, None, &emb, cap(6)).unwrap());
         assert_eq!(jobs::state(&conn, index).unwrap().unwrap().0, "done");
+    }
+
+    #[test]
+    fn a_workspace_cap_pauses_only_its_workspace_and_the_server_cap_pauses_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let control = db::open_control(dir.path()).unwrap();
+        let ids: Vec<String> = ["A", "B"]
+            .iter()
+            .map(|n| db::create_workspace(&control, dir.path(), n, "x@x.com").unwrap())
+            .collect();
+        let queue = |id: &str| {
+            let c = db::open_tenant(dir.path(), id).unwrap();
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status) VALUES ('m','t','upload','ready')",
+                [],
+            )
+            .unwrap();
+            let j = jobs::enqueue(&c, index_job::KIND, Some("m"), None).unwrap();
+            c.execute(
+                "INSERT INTO llm_usage (task, provider, model, cost_micro_usd, at) VALUES ('ask','p','m',5,?1)",
+                [db::now_ms()],
+            )
+            .unwrap();
+            (c, j)
+        };
+        let ((ca, ja), (cb, jb)) = (queue(&ids[0]), queue(&ids[1]));
+        let emb = recapz_core::embed::HashEmbedder;
+        let limits = |server| Limits {
+            speech_micro_usd_per_minute: 0,
+            monthly_cap_micro_usd: 0,
+            server_monthly_cap_micro_usd: server,
+        };
+        let state = |c: &rusqlite::Connection, j| jobs::state(c, j).unwrap().unwrap().0;
+        // only A has a cap (5, reached by its spend of 5): A waits, B runs
+        db::set_workspace_cap(&control, &ids[0], 5).unwrap();
+        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(0)).unwrap();
+        assert_eq!(
+            (state(&ca, ja).as_str(), state(&cb, jb).as_str()),
+            ("queued", "done")
+        );
+        // the server total (10) reached its cap: every workspace waits
+        let (cb2, jb2) = {
+            let j = jobs::enqueue(&cb, index_job::KIND, Some("m"), None).unwrap();
+            (cb, j)
+        };
+        db::set_workspace_cap(&control, &ids[0], 0).unwrap();
+        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(10)).unwrap();
+        assert_eq!(
+            (state(&ca, ja).as_str(), state(&cb2, jb2).as_str()),
+            ("queued", "queued")
+        );
+        // a higher server cap lets both run
+        run_pending(dir.path(), &StubTranscriber, None, None, &emb, limits(11)).unwrap();
+        assert_eq!(
+            (state(&ca, ja).as_str(), state(&cb2, jb2).as_str()),
+            ("done", "done")
+        );
     }
 
     #[test]
@@ -379,6 +446,7 @@ mod tests {
         let limits = Limits {
             speech_micro_usd_per_minute: 7_800,
             monthly_cap_micro_usd: 0,
+            server_monthly_cap_micro_usd: 0,
         };
         let emb = recapz_core::embed::HashEmbedder;
         for _ in 0..2 {

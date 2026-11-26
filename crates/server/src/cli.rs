@@ -1,6 +1,6 @@
 //! Commands run from a terminal instead of starting the server: `notetaker-login` and
-//! `notetaker-logout` manage the notetaker's saved Google sign-in; `workspace-create` and `workspace-list`
-//! manage workspaces.
+//! `notetaker-logout` manage the notetaker's saved Google sign-in; `workspace-create`, `workspace-list` and
+//! `workspace-cap` manage workspaces.
 use crate::config::Config;
 use anyhow::{bail, Result};
 use recapz_core::db;
@@ -17,6 +17,7 @@ fn run_with(command: Option<&str>, args: &[String], cfg: &Config) -> Option<Resu
     match command {
         Some("workspace-create") => Some(workspace_create(cfg, args)),
         Some("workspace-list") => Some(workspace_list(cfg)),
+        Some("workspace-cap") => Some(workspace_cap(cfg, args)),
         Some("notetaker-login") => Some(login(cfg)),
         Some("notetaker-logout") => Some(logout(cfg)),
         _ => None,
@@ -30,6 +31,20 @@ fn workspace_create(cfg: &Config, args: &[String]) -> Result<()> {
     let control = db::open_control(&cfg.data_dir)?;
     let id = db::create_workspace(&control, &cfg.data_dir, name, email)?;
     println!("Workspace created ({id}). {email} joins as its admin by signing in within 14 days.");
+    Ok(())
+}
+
+fn workspace_cap(cfg: &Config, args: &[String]) -> Result<()> {
+    let [id, usd] = args else {
+        bail!("usage: recapz workspace-cap <id> <usd> (0 = no cap)");
+    };
+    let usd: f64 = usd.parse()?;
+    if !usd.is_finite() || usd < 0.0 {
+        bail!("the cap must be zero or a positive number of USD");
+    }
+    let control = db::open_control(&cfg.data_dir)?;
+    db::set_workspace_cap(&control, id, (usd * 1e6).round() as u64)?;
+    println!("Workspace {id}: monthly cap set to ${usd:.2} (0 = no cap).");
     Ok(())
 }
 

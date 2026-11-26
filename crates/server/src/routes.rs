@@ -596,7 +596,7 @@ struct UsageOut {
     total_micro_usd: i64,
     /// 0 means no cap.
     cap_micro_usd: u64,
-    /// True when the cap is reached: new paid jobs wait until next month or a higher cap.
+    /// True when the workspace cap or the server-wide cap is reached: new paid jobs wait until next month or a higher cap.
     paused: bool,
     meetings: Vec<UsageMeeting>,
 }
@@ -608,8 +608,21 @@ async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>
     if u.role != "admin" {
         return Err(ApiError::Denied("only an admin can see usage"));
     }
-    let cap = app.cfg.monthly_cap_micro_usd();
     let (uid, tenant) = (u.id.clone(), u.tenant_id.clone());
+    let (default_cap, server_cap, dir) = (
+        app.cfg.monthly_cap_micro_usd(),
+        app.cfg.server_monthly_cap_micro_usd(),
+        app.cfg.data_dir.clone(),
+    );
+    let t = tenant.clone();
+    // The workspace's own cap when the server owner set one; the server-wide total pauses every workspace.
+    let (cap, server_paused) = app
+        .control(move |c| {
+            let paused = server_cap > 0
+                && db::server_month_total(c, &dir, db::now_ms())? >= server_cap as i64;
+            Ok((db::effective_cap(c, &t, default_cap)?, paused))
+        })
+        .await?;
     let out = app
         .tenant(tenant, move |c| {
             let now = db::now_ms();
@@ -619,7 +632,7 @@ async fn get_usage(State(app): State<App>, jar: CookieJar) -> Res<Json<UsageOut>
                 llm_micro_usd: t.llm_micro_usd,
                 total_micro_usd: t.total(),
                 cap_micro_usd: cap,
-                paused: cap > 0 && t.total() >= cap as i64,
+                paused: server_paused || (cap > 0 && t.total() >= cap as i64),
                 meetings: recapz_core::usage::per_meeting(c, now, 20, &uid)?
                     .into_iter()
                     .map(|m| UsageMeeting {
