@@ -216,10 +216,10 @@ non-owners once the list returns the owner.
 - [x] Rail: icon beside every item (Meetings, Upload, Ask, My documents, Live meeting, Recording & privacy), also in the mobile row; groups Work and Workspace. The prototype's Insights group is not shown: none of its screens exist in the app. Breadcrumb "Work / My documents" matches. Checked in a browser in #269
       Not checked in a browser: the empty, loading and error states, a nearly full meter and the Delete dialog.
 
-## S7 Members (blocked: members API)
-- [ ] Invite form (email, role) with validation errors, disabled for non-admins
-- [ ] Members table: face, name, email, role select, meetings, pending badge, Remove or Cancel invite with inline confirm
-- [ ] Default sharing and Who can sign in radio groups
+## S7 Members
+- [x] Invite form (email, role) with validation errors, and a Copy link button for the sign-in link the server returns. Members never see the form: the page shows "Only an admin can manage members." and never requests `/api/members`; the rail item and the account menu's "Manage members" show for admins only (jsdom tests). Checked in Chromium on 2026-11-26 at 1280 px (Daylight light) and 390 px (Daylight and Ink light) against a mocked API; the prototype was not opened side by side, so no prototype screenshot (written reason: compared with the Documents and Recording screens' shared `frame`, `Table` and `Field` only)
+- [x] Members table: face, name, email, role select, meetings, pending badge, Remove or Cancel invite with inline confirm ("Yes, remove" / "Keep"; the signed-in admin has no Remove). At 390 px each row is a two-column card (shared `Table`). Same check as above; Ink dark and Daylight dark not checked
+- [ ] Default sharing and Who can sign in radio groups: not built. `docs/specs/workspaces.md` has no setting behind either (the sign-in rule is the invite list), so there is nothing to save
 
 ## S8 Recording & privacy
 - [x] Calendar row: Google Calendar tile with Connected, Reconnect needed or Not connected, Connect or Reconnect, Disconnect with confirm, and the `?calendar=` outcome message (both skins, mobile checked by eye)

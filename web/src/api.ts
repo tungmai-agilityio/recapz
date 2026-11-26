@@ -313,3 +313,30 @@ export async function liveAsk(id: string, body: LiveAsk): Promise<{ answer: stri
   }
   return { answer, citations }
 }
+
+export type Role = 'admin' | 'member'
+export interface Member { id: string; email: string; name: string | null; role: Role; meetings: number }
+export interface Invite { email: string; role: Role; created_at: number }
+
+/** Admin only (403 otherwise): the members of this workspace and its pending invites. */
+export const getMembers = async (): Promise<{ members: Member[]; invites: Invite[] }> =>
+  (await check(await fetch('/api/members'))).json()
+
+/** Returns the sign-in link to copy; the invite carries no token. */
+export const inviteMember = async (email: string, role: Role): Promise<{ link: string }> =>
+  (await check(await fetch('/api/members/invites', {
+    method: 'POST', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ email, role }),
+  }))).json()
+
+export const cancelInvite = async (email: string) => {
+  await check(await fetch(`/api/members/invites/${encodeURIComponent(email)}`, { method: 'DELETE', headers: csrf() }))
+}
+
+export const setMemberRole = async (id: string, role: Role) => {
+  await check(await fetch(`/api/members/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ role }),
+  }))
+}
+
+/** Their meetings move to the admin who removes them. */
+export const removeMember = async (id: string) => { await check(await fetch(`/api/members/${id}`, { method: 'DELETE', headers: csrf() })) }
