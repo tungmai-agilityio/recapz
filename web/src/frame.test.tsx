@@ -47,3 +47,15 @@ test('Upload frames its form column and its aside', () => {
   expect(framed.length).toBe(2)
   expect(framed[1].tagName).toBe('ASIDE')
 })
+
+test('Ink separates settings rows with a hairline instead of a card', () => {
+  const rule = block(":root[data-skin='ink'] .frame-row")
+  expect(rule).toContain('border-top: 1px solid var(--hair)')
+  expect(rule).toContain('padding-top: 22px')
+})
+
+test('Recording & privacy frames every section with the shared rule, not its own card classes', () => {
+  const src = readFileSync('src/pages/Recording.tsx', 'utf8')
+  expect(src.match(/className="(?:mt-\d )?frame frame-row/g)?.length ?? 0).toBe(4)
+  expect(src).not.toContain('rounded-lg border border-hair bg-sheet')
+})

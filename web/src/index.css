@@ -63,6 +63,8 @@
 
 /* One rule for every framed section (list columns, report column and sidebar, Ask turns, Upload columns). */
 .frame { background: var(--frame-bg); border: var(--frame-border); border-radius: var(--frame-radius); padding: var(--frame-pad); box-shadow: var(--frame-shadow); }
+/* Settings rows: cards in Daylight; in Ink they sit on the paper with a hairline between them (prototype `.setrow`). */
+:root[data-skin='ink'] .frame-row { border-top: 1px solid var(--hair); padding-top: 22px; }
 body { @apply bg-paper font-sans text-ink antialiased; }
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .font-mono { font-variant-numeric: tabular-nums; }
