@@ -73,7 +73,7 @@ ticket missing a required label.
 
 - Sequence per ticket: implement, `test-runner`, `code-reviewer`, PR. The existing test and review helpers are reused; the reviewer
   also checks the diff against the ticket's acceptance list and grades risk.
-- **Parallel work:** until `ship-epic` exists (rollout step 8), the maintainer starts one worktree per ticket. `ship-ticket` claims a ticket by setting
+- **Parallel work:** `ship-ticket` works in its own worktree (it creates one when started in the main checkout). It claims a ticket by setting
   `status:in-progress` and refuses one whose `touches:` overlap another `in-progress` ticket. At most 3 at once.
 - **Retry caps:** 3 failed test-fix cycles or 2 reviewer CHANGES REQUESTED rounds (blockers only; nits never count)
   stop the ticket with `needs-review` and the last failure in a comment. An infrastructure-looking CI failure
@@ -96,9 +96,9 @@ ambiguity in this order and record it under "Decisions made" in the PR: ticket A
 **Merging.** Merge your own PR (squash, `--match-head-commit` on the commit you checked) when CI reports, once it is green on the
 current HEAD, `code-reviewer` approved that HEAD (docs-only PRs skip it) and the PR body has no open decision.
 Never use `--admin`, `--auto`, a merge commit or any flag that skips checks. Never ask the maintainer for permission to
-merge: this applies to every PR, in every session and subagent. If there is no CI result for the HEAD (none configured, or it reports no checks; check `gh run list --branch <branch>`),
-there is nothing to wait for: the local `test-runner` PASS and `code-reviewer`
-APPROVE for that HEAD stand in, `scripts/automerge-check.sh`'s "unreadable check results" reason is overridden, and the
+merge: this applies to every PR, in every session and subagent. If CI reports nothing for the HEAD (no check and no
+run, about 2 minutes after the last push), there is nothing to wait for: the local `test-runner` PASS and
+`code-reviewer` APPROVE for that HEAD stand in (`scripts/automerge-check.sh --local-pass <sha>`), and the
 `Auto-merged:` comment says so. Mention it in the final report so a stopped CI gets fixed.
 
 **Escalation.** Escalate only critical changes: leave the PR open, set the ticket `needs-review` with a
@@ -156,9 +156,8 @@ continues with independent tickets, and the maintainer merges or decides. Mergin
 the guards against pushing to `main` are unchanged.
 
 **How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
-reasons to escalate; any failure to read data counts as a reason, so while CI reports nothing it prints "unreadable
-check results", which the caller overrides by hand under "Merging" (the script is not changed). The caller passes the full reviewed commit id and
-both risk grades. `ship-ticket` then runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push
+reasons to escalate; any failure to read data counts as a reason. The caller passes the full reviewed commit id,
+both risk grades and, for the no-CI case, `--local-pass` with the `test-runner` PASS commit. `ship-ticket` then runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push
 after the check cannot slip in. Never `--auto`. Nothing server-side stops someone with push access from
 merging a red PR by hand.
 
