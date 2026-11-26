@@ -19,6 +19,7 @@ One Rust binary (axum) serves an embedded React + Vite + TypeScript + Tailwind a
 
 ## Engineering Rules
 
+- For codebase exploration, prefer the `scout` subagent (Haiku) over the built-in Explore.
 - Inspect existing code and follow established patterns. Change only necessary files; no unrelated refactoring or reformatting.
 - Every database read must enforce current-member meeting access.
 - Migrations are additive only; user-data deletion must be a hard delete.

@@ -5,40 +5,28 @@ description: Cut a release on demand - pick the next v0.x version, build notes f
 
 # Release
 
-Never touch the production host, its config or secrets. The maintainer runs the install.
+Never touch the production host, its config or secrets. The maintainer runs the install. Install and macOS app
+details live in `docs/deploy.md`.
 
 ## Steps
 
-1. **Check `main` is releasable.** `git fetch origin main --tags`. The CI jobs for `origin/main`'s HEAD must have
-   passed: `gh run list --branch main --limit 3` and `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`.
-   Stop and say which job failed if not. Open `needs-review` tickets are reported, not blocking.
-2. **Find the range.** Last tag: `git describe --tags --abbrev=0 --match 'v0.*' origin/main`. None yet: the range
-   is the whole history and the version is `v0.1.0`. Nothing merged since the last tag: stop.
-3. **Pick the version** (still `v0`): any `feat` or a breaking `!` bumps the minor (`v0.3.2` to `v0.4.0`); only
-   `fix`, `perf`, `refactor`, `chore`, `docs`, `test`, `ci` bumps the patch.
-4. **Build the notes** from `git log <last>..origin/main --format=%s` (strip a leading `T-<NNN> ` ticket code before reading the type, and keep it in the printed line): groups Features (`feat`), Fixes (`fix`,
-   `perf`), Other (the rest, one line summarising counts if long), each line the commit subject with its `(#N)`.
-   Mark breaking changes first. Notes carry no AI mentions ("Security & Privacy" in `CLAUDE.md`).
-5. **Upgrade checklist** from `docs/deploy.md` (the Upgrade lines) plus what the range changed:
-   - new files under `crates/core/migrations/` (migrations run on start and are additive; say how many),
-   - new or changed keys in `config.example.toml` and new environment variables,
-   - changes under `deploy/` (unit files to reinstall, `systemctl daemon-reload`),
-   - new system packages or features (for example Chromium, a virtual display, CUDA).
-6. **Show the maintainer** the version, notes and checklist and ask for confirmation before creating anything. On a
-   yes: `gh release create <version> --target main --title <version> --notes-file <file>`. This creates the tag on
-   the server; do not push tags by hand. On a no or silence, create nothing.
-7. **Attach the macOS app** (maintainer's Mac only, see "macOS app" in `docs/deploy.md`). The newest release must
-   always carry a `latest.json`, or the app's update check gets a 404. `<version without the v>` is the number from
-   step 3 (the new tag); it is always higher than any installed build, which the updater needs.
-   - `desktop/` changed since the last tag (or no `.dmg` yet): `make desktop-dmg VERSION=<version without the v>`
-     (needs the updater key on the Mac; never read or print it), then
-     `gh release upload <version> Recapz.dmg Recapz.app.tar.gz Recapz.app.tar.gz.sig` and `latest.json` last.
-   - `desktop/` unchanged: `gh release download <last tag> -p latest.json` and
-     `gh release upload <version> latest.json` (its absolute URLs still point at the older assets).
-   - Not on the Mac: say that the release has no `latest.json` yet and stop; do not skip silently.
-8. Print the checklist once more as the install commands to run, and stop. Do not run them.
+1. **Releasable `main`:** CI passed on `origin/main`'s HEAD; otherwise stop and name the failed job. Open
+   `needs-review` tickets are reported, not blocking.
+2. **Range:** since the last `v0.*` tag (none yet: whole history, `v0.1.0`). Nothing merged since: stop.
+3. **Version (stays `v0`):** any `feat` or breaking `!` bumps the minor, anything else the patch.
+4. **Notes** from the merged subjects (read the type after the `T-<NNN>` code, keep the code in the line): breaking
+   changes first, then Features, Fixes (`fix`, `perf`), Other (summarised if long), each with its `(#N)`. No AI
+   mentions.
+5. **Upgrade checklist:** the deploy doc's upgrade steps plus what the range changed: new migrations (count them),
+   new or changed config keys and environment variables, changes under `deploy/`, new system requirements.
+6. **Confirm** version, notes and checklist with the maintainer before creating anything. On a yes, create the
+   GitHub release targeting `main` (it creates the tag; never push tags by hand). On a no or silence, create nothing.
+7. **macOS app:** the newest release must always carry a `latest.json`, or the app's update check gets a 404.
+   Build and upload it when `desktop/` changed since the last tag, otherwise copy the previous release's
+   `latest.json`, both as `docs/deploy.md` describes. Never read or print the updater key. Not on the maintainer's
+   Mac: say the release has no `latest.json` yet and stop; never skip silently.
+8. Print the checklist as the install commands to run, and stop. Do not run them.
 
 ## Escalate
 
-Failing CI on `main`, a tag that already exists, or notes that cannot be built: say why and stop without creating
-a release.
+Failing CI on `main`, an existing tag, or notes that cannot be built: say why and create nothing.

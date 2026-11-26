@@ -1,6 +1,6 @@
 ---
-name: explore-code
-description: Read-only exploration of this repository for broad codebase questions spanning multiple files, modules, or conventions. Use instead of built-in Explore when the caller needs synthesized findings, not raw file dumps. Specify medium or very thorough breadth.
+name: scout
+description: Preferred over the built-in Explore. Read-only exploration of this repository for codebase questions spanning multiple files, modules, or conventions. Returns synthesized findings with file:line evidence, not raw file dumps. Specify medium or very thorough breadth.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---

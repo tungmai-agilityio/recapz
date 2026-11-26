@@ -5,62 +5,39 @@ description: Turn a merged spec's ticket table into GitHub ticket issues with th
 
 # Plan tickets from a merged spec
 
-Input: a spec file in `docs/specs/`. Output: one ticket issue per row of its Tickets table, then the intent
-issue closed. Never invent tickets that are not in the table; if the table is wrong, stop and escalate.
+Input: a spec with a Tickets table. Output: one ticket issue per row, then the intent closed. Issue, label,
+milestone and title conventions are in `CONTRIBUTING.md` and the delivery pipeline doc; follow them exactly.
 
-## Planning rules (always)
+**The table is the plan.** Never invent, merge or split tickets. If the table is wrong, stop and escalate.
 
-- **Read first.** Before planning, read the topic's existing issues, PRs and milestones (`gh issue list --state all`,
-  `gh pr list --state all`, `gh api repos/{owner}/{repo}/milestones`) and the related docs and specs. Re-list the
-  milestones every time: they get renamed.
-- **Issue before code.** One issue per planned PR, created before implementation starts, with acceptance criteria,
-  dependencies (`Blocked by`), a `type:*` label and a milestone set at creation. Milestones are `M<n> <name>` in
-  shipping order; a new one continues the numbering. An umbrella (intent) issue links the children.
-- **New plan, new milestone.** Each new plan gets its own new milestone `M<next number> <name>`, numbered in
-  creation/shipping order, even when the topic relates to an older milestone. Never add new tasks to an older or
-  finished milestone. Close a milestone when its last issue closes, and say so in that PR.
-- **Ticket code in titles.** Right after creating an issue, rename it to `T-<NNN> <title>` (NNN = the issue number,
-  3 digits). PR titles are `T-<NNN> type(scope): summary` and branches `<type>/T-<NNN>-<slug>`; with no ticket use
-  `type: description` and `<type>/<slug>`.
-- **Close on merge.** Each PR says `Closes #N`; the issue is closed when it merges.
-- **Docs are done.** The spec, the decision record (`docs/decisions/`), the architecture notes and the README or
-  docs index are updated in the same PR or in a linked docs issue.
-- **Clean-room.** Never name competitors in issues, PRs, commits or repo files.
-- **Confirm bulk.** Ask the maintainer before creating more than about 10 issues in one go.
-- **After merge,** delete the local branch (see the `pull-request` skill).
+## Check first, create nothing until all hold
 
-## Checks before creating anything
-
-1. The spec is on `origin/main` (`git fetch origin main && git cat-file -e origin/main:docs/specs/<file>`). An
-   unmerged spec is not approved: stop.
-2. Its `Intent: #N` issue exists and its title has `intent:`. Tickets for this spec do not already exist
-   (`gh issue list --search "<spec file name>" --state all`); if some do, stop and say which.
-3. Every label the plan needs exists (`gh label list`): run `scripts/labels.sh` if any is missing.
-4. Each row has: title as `type(scope): summary`, area, blocked by, touches, size, testing scope. A row over about
-   600 source lines, or missing a field, is sent back: set the intent to `needs-review` with a comment and stop.
+- The spec is on `origin/main`. An unmerged spec is not approved.
+- Its intent issue exists, and no tickets for this spec exist yet; if some do, stop and say which.
+- Read the topic's existing issues, PRs and milestones fresh (milestones get renamed).
+- Every needed label exists; create missing ones only through the repository's label script.
+- Every row has title, area, blocked by, touches, size and testing scope, and none is over about 600 source lines.
+  Otherwise set the intent `needs-review` with a comment and stop.
+- More than about 10 tickets: confirm with the maintainer first.
 
 ## Create
 
-For each row, in table order (so blockers exist first):
+In table order, so blockers exist before the tickets they block:
 
-- Title: the row's title. Labels: `status:ready`, `type:<feat|bug|task>`, `priority:<high|medium|low>` (default
-  `priority:medium`) and one `area:` (the one closest to the commit scope). Refuse a ticket missing any required
-  label.
-- Body, with exactly these headings (same as `.github/ISSUE_TEMPLATE/ticket.yml`): Spec (link to the file on
-  `main`), Goal, Acceptance (a checkable list taken from the spec), Touches (one path per line), Blocked by
-  (`#N` issue numbers of earlier tickets, or `None`), Size, Testing scope.
-- Milestone: set it at creation (`--milestone "M<n> <name>"`), never afterwards.
-- Map the table's row numbers in "Blocked by" to the issue numbers you just created.
+- A new milestone for this plan, never an older or finished one; set it at creation.
+- Full label set at creation, starting at `status:ready`; refuse a ticket missing one.
+- Body with exactly the ticket template's headings (`.github/ISSUE_TEMPLATE/ticket.yml`), Acceptance as a checkable
+  list taken from the spec, and row numbers in "Blocked by" mapped to the issue numbers just created.
+- Rename each issue to its ticket code right after creating it.
 
-Then add the created issue numbers to the spec's Tickets table in a docs-only PR (`docs/<feature>-tickets`,
-title `docs(specs): link <feature> tickets`) with the `pull-request` skill, and close the intent:
-`gh issue close <intent> --comment "Tickets: #a, #b, #c"` after the last ticket exists.
+Then link the issue numbers into the spec's Tickets table in a docs-only PR (`pull-request` skill), and close the
+intent with a comment listing the tickets.
 
-## Stop and escalate
+## On failure
 
-On any failure part-way, do not delete issues already created. Set the intent to `needs-review` with a
-comment listing what exists and what is missing, and stop.
+Never delete issues already created. Set the intent `needs-review` with a comment listing what exists and what is
+missing, and stop.
 
 ## Next
 
-Unless the maintainer said "spec only", continue with the `ship-epic` skill for this spec ("Autonomy and escalation" in `docs/specs/delivery-pipeline.md`).
+Unless the maintainer said "spec only", continue with `ship-epic` for this spec.
