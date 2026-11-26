@@ -117,6 +117,9 @@ export const setMeetingShare = async (id: string, share: MeetingShare): Promise<
 export const setMeetingLanguage = async (id: string, language: MeetingLanguage): Promise<{ language: MeetingLanguage }> =>
   (await check(await fetch(`/api/meetings/${id}/language`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ language }) }))).json()
 
+/** Queues a fresh report; the server answers 409 unless the meeting is ready and 403 for a non-owner. */
+export const regenerateReport = async (id: string) => { await check(await fetch(`/api/meetings/${id}/report/regenerate`, { method: 'POST', headers: csrf() })) }
+
 export const deleteMeeting = async (id: string) => { await check(await fetch(`/api/meetings/${id}`, { method: 'DELETE', headers: csrf() })) }
 
 /** Sends the notetaker to a Meet or Zoom link; the server answers 400 for any other link. */

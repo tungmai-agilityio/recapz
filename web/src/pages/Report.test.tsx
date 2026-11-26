@@ -191,6 +191,43 @@ test('a failed delete keeps the dialog open and shows the server message in it',
   expect(screen.queryByText('Meetings home')).toBeNull()
 })
 
+const regenSetup = (m: typeof meeting, post: () => Response) => {
+  const f = vi.fn(async (u: string, init?: RequestInit) =>
+    init?.method === 'POST' ? post() : new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m)))
+  vi.stubGlobal('fetch', f)
+  show()
+  return () => f.mock.calls.filter(([, i]) => i?.method === 'POST').map(([u]) => u)
+}
+
+test('Regenerate asks first, then queues the report and confirms with a toast', async () => {
+  const posts = regenSetup({ ...meeting, can_edit: true }, () => new Response(null, { status: 202 }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Regenerate' }))
+  expect(posts()).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+  expect(await screen.findByText('Regenerating the report')).toBeTruthy()
+  expect(posts()).toEqual(['/api/meetings/m1/report/regenerate'])
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('a failed Regenerate shows the server message in the dialog', async () => {
+  regenSetup({ ...meeting, can_edit: true }, () => new Response('meeting is not ready', { status: 409 }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Regenerate' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('meeting is not ready')
+})
+
+test('Regenerate is hidden for a member who cannot edit and while the meeting is not ready', async () => {
+  regenSetup(meeting, () => new Response(null, { status: 202 }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  expect(screen.queryByRole('menuitem', { name: 'Regenerate' })).toBeNull()
+  cleanup()
+  regenSetup({ ...meeting, can_edit: true, status: 'reporting' }, () => new Response(null, { status: 202 }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  expect(screen.queryByRole('menuitem', { name: 'Regenerate' })).toBeNull()
+})
+
 const renameSetup = (patch: (body: string) => Response) => {
   const f = vi.fn(async (u: string, init?: RequestInit) =>
     init?.method === 'PATCH' ? patch(String(init.body)) : new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : meeting)))

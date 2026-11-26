@@ -135,6 +135,10 @@ pub fn router_with_llm(
         .route("/api/meetings/{id}/language", patch(set_meeting_language))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
+        .route(
+            "/api/meetings/{id}/report/regenerate",
+            post(regenerate_report),
+        )
         .route("/api/meetings/{id}/audio", get(meeting_audio))
         .route("/api/meetings/{id}/live", get(live::live))
         .route("/api/meetings/{id}/record", get(record::socket))
@@ -1013,6 +1017,39 @@ async fn delete_meeting(
     })
     .await??;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Queues a fresh report. The stored report stays until the job replaces it.
+async fn regenerate_report(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    let u = app.current_user(&jar).await?;
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        let Some(m) = visible_meeting(c, &u.id, &id)? else {
+            return Ok(Err(ApiError::NotFound));
+        };
+        let owner: Option<String> =
+            c.query_row("SELECT owner_id FROM meetings WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })?;
+        if owner.as_deref() != Some(u.id.as_str()) && u.role != "admin" {
+            return Ok(Err(ApiError::Denied(
+                "only the owner or an admin can regenerate",
+            )));
+        }
+        if m.status != "ready" {
+            return Ok(Err(ApiError::Conflict("meeting is not ready")));
+        }
+        // `reporting` also refuses a second click until the job has finished.
+        c.execute("UPDATE meetings SET status='reporting' WHERE id=?1", [&id])?;
+        jobs::enqueue(c, "report", Some(&id), None)?;
+        Ok(Ok(()))
+    })
+    .await??;
+    Ok(StatusCode::ACCEPTED)
 }
 
 #[derive(Serialize)]

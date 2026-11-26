@@ -12,7 +12,7 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, regenerateReport, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
 
 const SHARE_LABEL: Record<MeetingShare, string> = { attendees: 'Attendees', workspace: 'Whole team', owner: 'Only me' }
 
@@ -27,6 +27,7 @@ export function Report() {
     refetchInterval: (q) => (q.state.data?.status === 'reporting' ? 3000 : false),
   })
   const [confirming, setConfirming] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const toast = useToast()
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -36,6 +37,14 @@ export function Report() {
       toast('Meeting deleted')
       void qc.invalidateQueries({ queryKey: ['meetings'] })
       nav('/')
+    },
+  })
+  const regenerate = useMutation({
+    mutationFn: () => regenerateReport(id),
+    onSuccess: () => {
+      setRegenerating(false)
+      toast('Regenerating the report')
+      void qc.invalidateQueries({ queryKey: ['meeting', id] })
     },
   })
   const setLanguage = useMutation({
@@ -135,6 +144,7 @@ export function Report() {
         <Link to="/" className="text-sm text-mute hover:text-primary">← All meetings</Link>
         <Menu label="Meeting actions" side="below" trigger="⋯">
           <MenuItem onClick={() => { rename.reset(); setDraft(m.title) }}>Rename</MenuItem>
+          {m.can_edit && m.status === 'ready' && <MenuItem onClick={() => { regenerate.reset(); setRegenerating(true) }}>Regenerate</MenuItem>}
           <MenuItem className="text-bad" onClick={() => { del.reset(); setConfirming(true) }}>Delete</MenuItem>
         </Menu>
       </div>
@@ -182,6 +192,14 @@ export function Report() {
           error={del.error ? del.error.message.replace(/^\d+ /, '') : undefined}
           onConfirm={() => del.mutate()} onCancel={() => setConfirming(false)}>
           The audio, transcript, report and Ask search entries are removed permanently. This cannot be undone.
+        </ConfirmDialog>
+      )}
+
+      {regenerating && (
+        <ConfirmDialog title="Regenerate the report?" confirmLabel="Regenerate" busy={regenerate.isPending}
+          error={regenerate.error ? regenerate.error.message.replace(/^\d+ /, '') : undefined}
+          onConfirm={() => regenerate.mutate()} onCancel={() => setRegenerating(false)}>
+          A new report is written from the transcript. The current one stays until the new one is ready.
         </ConfirmDialog>
       )}
 

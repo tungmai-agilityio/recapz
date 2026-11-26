@@ -251,6 +251,21 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_regeneration_keeps_the_old_report() {
+        let (_d, c, job) = setup();
+        handle(&c, &job, &Fake(RefCell::new(vec![]))).unwrap();
+        assert!(handle(&c, &job, &Broken).is_err());
+        let s: String = c
+            .query_row(
+                "SELECT summary FROM reports WHERE meeting_id='m1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!((s.as_str(), count(&c, "llm_usage")), ("S", 1));
+    }
+
+    #[test]
     fn model_failure_stores_nothing_and_keeps_reporting_status() {
         let (_d, c, job) = setup();
         assert!(handle(&c, &job, &Broken).is_err());
