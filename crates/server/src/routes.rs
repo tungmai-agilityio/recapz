@@ -51,6 +51,7 @@ mod live;
 mod live_ask;
 mod members;
 mod record;
+mod workspaces;
 
 pub fn router(cfg: Config, control: Arc<Mutex<Connection>>) -> Router {
     let llm = crate::report_model::router_from_config(&cfg.llm)
@@ -106,6 +107,8 @@ pub fn router_with_llm(
             get(get_audio_retention).put(put_audio_retention),
         )
         .route("/api/usage", get(get_usage))
+        .route("/api/workspaces", get(workspaces::list))
+        .route("/api/workspaces/{id}/switch", post(workspaces::switch))
         .route("/api/members", get(members::list))
         .route("/api/members/invites", post(members::invite))
         .route(
@@ -477,16 +480,33 @@ async fn logout(State(app): State<App>, jar: CookieJar) -> Res<CookieJar> {
 // ---- api ----
 
 #[derive(Serialize)]
+struct Workspace {
+    id: String,
+    name: String,
+}
+
+#[derive(Serialize)]
 struct Me {
     email: String,
     name: Option<String>,
     role: String,
+    workspace: Workspace,
     /// Where finished recordings are kept: `object_storage` or `local_disk`.
     recording_storage: &'static str,
 }
 
 async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
     let u = app.current_user(&jar).await?;
+    let tid = u.tenant_id.clone();
+    let name = app
+        .control(move |c| {
+            Ok(
+                c.query_row("SELECT name FROM tenants WHERE id = ?1", [&tid], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .await?;
     // Sessions that began before CSRF tokens existed get theirs on the next page load.
     let jar = if jar.get(CSRF_COOKIE).is_none() {
         jar.add(csrf_cookie(app.secure()))
@@ -499,6 +519,10 @@ async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)
             email: u.email,
             name: u.name,
             role: u.role,
+            workspace: Workspace {
+                id: u.tenant_id,
+                name,
+            },
             recording_storage: if app.store.is_some() {
                 "object_storage"
             } else {
