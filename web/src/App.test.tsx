@@ -155,3 +155,31 @@ test('a member sees no Members item and never requests the members API', async (
   expect(screen.queryByRole('link', { name: 'Members' })).toBeNull()
   expect(calls.filter((c) => c.includes('/api/members')).length).toBe(0)
 })
+
+test('the account menu lists two workspaces, marks the current one and switching returns to the meetings list', async () => {
+  const calls: string[] = []
+  let current = 'w1'
+  const list = () => [{ id: 'w1', name: 'Alpha', role: 'admin', current: current === 'w1' }, { id: 'w2', name: 'Beta', role: 'member', current: current === 'w2' }]
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`)
+    if (url === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role: 'admin', workspace: { id: current, name: current === 'w1' ? 'Alpha' : 'Beta' } }))
+    if (url === '/api/workspaces') return new Response(JSON.stringify(list()))
+    if (url === '/api/workspaces/w2/switch') { current = 'w2'; return new Response(null, { status: 204 }) }
+    return new Response('[]')
+  }))
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/ask']}><App /></MemoryRouter></QueryClientProvider>)
+  expect((await screen.findByTestId('workspace-name')).textContent).toBe('Alpha')
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  const items = await screen.findAllByRole('menuitemradio')
+  expect(items.map((i) => [i.textContent, i.getAttribute('aria-checked')])).toEqual([['Alpha✓', 'true'], ['Beta', 'false']])
+  fireEvent.click(items[1])
+  await waitFor(() => expect(calls).toContain('POST /api/workspaces/w2/switch'))
+  await waitFor(() => expect(screen.getByTestId('workspace-name').textContent).toBe('Beta'))
+  expect(document.querySelector('header b')?.textContent).toBe('Meetings')
+})
+
+test('the account menu has no workspace list for a one-workspace person', async () => {
+  mount('/', signedIn())
+  fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+  expect(screen.queryByRole('menuitemradio')).toBeNull()
+})

@@ -1,6 +1,6 @@
 # Recapz spec
 
-Recapz is a private meeting notetaker for one team on one server. A notetaker joins Google Meet (Zoom has no
+Recapz is a private meeting notetaker for teams. One server can hold several workspaces (one per team), and a person can belong to more than one and switch from the account menu. A notetaker joins Google Meet (Zoom has no
 join path yet; Zoom calls are recorded from the macOS app or uploaded), transcribes mixed Vietnamese and English with a hosted speech provider, writes a meeting report, and lets the team
 search every meeting with cited answers. Everything ships as one Rust binary.
 

@@ -43,7 +43,7 @@ export interface ReportData {
 
 export class Unauthorized extends Error {}
 
-export interface Me { email: string; name: string | null; role: string; recording_storage?: 'object_storage' | 'local_disk' }
+export interface Me { email: string; name: string | null; role: string; workspace?: { id: string; name: string }; recording_storage?: 'object_storage' | 'local_disk' }
 
 /** Echoes the csrf cookie in a header on state-changing requests. */
 const csrf = () => ({ 'x-csrf-token': /(?:^|; )recapz_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' })
@@ -340,3 +340,12 @@ export const setMemberRole = async (id: string, role: Role) => {
 
 /** Their meetings move to the admin who removes them. */
 export const removeMember = async (id: string) => { await check(await fetch(`/api/members/${id}`, { method: 'DELETE', headers: csrf() })) }
+
+export interface Workspace { id: string; name: string; role: Role; current: boolean }
+
+/** The workspaces of the signed-in person; also accepts their pending invites. */
+export const getWorkspaces = async (): Promise<Workspace[]> => (await check(await fetch('/api/workspaces'))).json()
+
+export const switchWorkspace = async (id: string) => {
+  await check(await fetch(`/api/workspaces/${encodeURIComponent(id)}/switch`, { method: 'POST', headers: csrf() }))
+}
