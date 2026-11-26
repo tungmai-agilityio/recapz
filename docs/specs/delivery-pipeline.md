@@ -157,9 +157,9 @@ the guards against pushing to `main` are unchanged.
 
 **How the merge runs:** `scripts/automerge-check.sh` reads every condition above and prints `ELIGIBLE` or the
 reasons to escalate; any failure to read data counts as a reason. The caller passes the full reviewed commit id,
-both risk grades and, for the no-CI case, `--local-pass` with the `test-runner` PASS commit. `ship-ticket` then runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push
-after the check cannot slip in. Never `--auto`. Nothing server-side stops someone with push access from
-merging a red PR by hand.
+both risk grades and, for the no-CI case, `--local-pass` with the `test-runner` PASS commit. `ship-ticket` then
+runs `gh pr merge --squash --match-head-commit <that id>` itself, so a push after the check cannot slip in. Never `--auto`.
+Nothing server-side stops someone with push access from merging a red PR by hand.
 
 **Safety net:** every auto-merged PR gets a comment listing what was checked. If an auto-merged PR is
 reverted, auto-merge pauses until the maintainer resumes it. The audit comment starts with `Auto-merged:`; the

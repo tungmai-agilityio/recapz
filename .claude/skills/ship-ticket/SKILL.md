@@ -16,14 +16,13 @@ not critical. The ticket is the plan: do not write a separate one.
 ## 1. Set up and claim
 
 - Run `scripts/automerge-pause.sh detect`. If auto-merge is paused, still ship the ticket, but hand the PR to the
-  maintainer at step 6. When the detected revert is of a PR whose ticket you hold, reopen that ticket as
-  `needs-review` with a comment.
+  maintainer at step 6. Reopen the ticket of the reverted PR as `needs-review` with a comment.
 - No number given: list open `status:ready` ticket issues (titles without `intent:`), sort by `priority:high` first
   through `priority:low`, then lowest number, and skip any whose "Blocked by" lists an open issue. Stop if none.
 - Refuse the ticket (comment, leave it `status:ready`) if its `Touches` paths overlap an open `status:in-progress`
   ticket, or three tickets are already `status:in-progress`.
 - Claim: `gh issue edit <n> --remove-label status:ready --add-label status:in-progress`.
-- In the main checkout, create your own worktree: `git fetch origin main && git worktree add -b <type>/<short-name>
+- Unless you already run in a worktree, create your own: `git fetch origin main && git worktree add -b <type>/<short-name>
   .claude/worktrees/<short-name> origin/main`, and work only there. Branch name as the `pull-request` skill says;
   `type` from the `type:` label (`bug` is `fix`; for `task` use the kind the ticket title names).
 - Read the issue, the linked spec in `docs/specs/`, `CLAUDE.md` and every file in `Touches`.
@@ -40,7 +39,8 @@ not critical. The ticket is the plan: do not write a separate one.
 
 ## 3. Test and review loop
 
-Every new commit restarts this loop on the new HEAD; a PASS or APPROVE counts only for the HEAD it names.
+Every new commit restarts this loop on the new HEAD; a PASS or APPROVE counts only for the HEAD it names. A
+docs-only PR (Markdown and `CLAUDE.md` only) skips this step and uses `--reviewer-risk na` at step 6.
 
 1. `test-runner` with the worktree folder and the ticket's Testing scope. On FAIL fix the code, never the test.
    **At most 3 failed fix cycles**, then "Escalate". A failure that looks like infrastructure (network, runner,

@@ -23,7 +23,7 @@ description: Use for the full PR lifecycle: branch, push, open, merge checklist 
 
 ## Merge
 
-Ticket PRs merge through `ship-ticket` section 4. For any other PR (for example a docs-only PR), check every item
+Ticket PRs merge through `ship-ticket` section 6. For any other PR (for example a docs-only PR), check every item
 before merging:
 
 1. `gh pr view <n> --json state,isDraft,baseRefName,mergeable,labels,title` — must be open, not draft, target `main`, and be mergeable.
