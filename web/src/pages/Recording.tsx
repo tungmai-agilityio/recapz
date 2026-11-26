@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { disconnectCalendar, getCalendar, getJoinSettings, getParticipants, purgeParticipant, putAudioRetention, putJoinSettings, type JoinSettings, type Participant } from '../api'
+import { disconnectCalendar, getCalendar, getJoinSettings, getParticipants, purgeParticipant, putAudioRetention, putJoinSettings, putTranscriptRetention, type JoinSettings, type Participant } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -147,6 +147,10 @@ export function Recording() {
     mutationFn: putAudioRetention,
     onSuccess: () => { toast('Audio retention saved'); qc.invalidateQueries({ queryKey: ['audio-retention'] }) },
   })
+  const keepMeetings = useMutation({
+    mutationFn: putTranscriptRetention,
+    onSuccess: () => { toast('Meeting retention saved'); qc.invalidateQueries({ queryKey: ['transcript-retention'] }) },
+  })
   const join = useQuery({ queryKey: ['join-settings'], queryFn: getJoinSettings })
   const [asking, setAsking] = useState(false)
   const off = useMutation({
@@ -213,7 +217,7 @@ export function Recording() {
             <p className="text-sm @2xl:col-start-2">
               Finished recordings are kept {storage.where === 'object_storage' ? 'in private object storage' : 'on this server\'s disk'}
               {storage.days === undefined ? '.' : storage.days === 0 ? ' and their audio is kept until someone deletes the meeting.' : <> and their audio is deleted after <b>{storage.days} days</b>.</>}
-              {' '}Transcripts and reports stay.
+              {' '}{storage.meetingDays ? <>Transcripts and reports are deleted with the meeting after <b>{storage.meetingDays === 365 ? '1 year' : `${storage.meetingDays} days`}</b>.</> : 'Transcripts and reports stay.'}
             </p>
           )}
           {storage.isAdmin && storage.days !== undefined && (
@@ -226,6 +230,19 @@ export function Recording() {
               </select>
               <p className="mt-1 text-mute">Audio older than this is deleted at the next hourly sweep. Transcripts and reports stay.</p>
               {keep.isError && <p role="alert" className="mt-1 text-bad">{keep.error.message.replace(/^\d+ /, '')}</p>}
+            </div>
+          )}
+          {storage.isAdmin && storage.meetingDays !== undefined && (
+            <div className="text-sm @2xl:col-start-2">
+              <label htmlFor="meeting-retention" className="block font-medium">Delete meetings after</label>
+              <select id="meeting-retention" className={`${inputClass} mt-1 w-full`} value={storage.meetingDays} disabled={keepMeetings.isPending}
+                onChange={(e) => keepMeetings.mutate(Number(e.target.value))}>
+                <option value={90}>90 days</option>
+                <option value={365}>1 year</option>
+                <option value={0}>Keep until the meeting is deleted</option>
+              </select>
+              <p className="mt-1 text-mute">Past this, the whole meeting (transcript, report, search and audio) is permanently deleted at the next hourly sweep.</p>
+              {keepMeetings.isError && <p role="alert" className="mt-1 text-bad">{keepMeetings.error.message.replace(/^\d+ /, '')}</p>}
             </div>
           )}
         </div>

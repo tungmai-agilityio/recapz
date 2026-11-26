@@ -1,8 +1,10 @@
 //! Audio retention: past the workspace's retention period a finished meeting's audio is deleted
 //! (the object in the store, or the local file). Transcript, report and search rows stay.
+//! Transcript retention, when set, hard deletes the whole meeting past its period.
 use crate::{
     blobs::{audio_key, Blobs},
     db::tenant_dir,
+    purge::purge_meeting,
     settings,
 };
 use anyhow::Result;
@@ -50,6 +52,40 @@ pub fn sweep(
             [&id],
         )?;
         n += 1;
+    }
+    Ok(n)
+}
+
+/// Hard deletes finished meetings older than the transcript retention period (audio, transcript,
+/// report, action items and search rows, through `purge_meeting`); returns how many. 0 days keeps
+/// everything. A remote recording with no store configured is skipped, never forgotten.
+pub fn sweep_meetings(
+    c: &Connection,
+    data_dir: &Path,
+    tenant_id: &str,
+    blobs: Option<&dyn Blobs>,
+    now_ms: i64,
+) -> Result<usize> {
+    let days = settings::transcript_retention_days(c)?;
+    if days == 0 {
+        return Ok(0);
+    }
+    let cutoff = now_ms - i64::from(days) * DAY_MS;
+    let old: Vec<(String, bool)> = c
+        .prepare(
+            "SELECT id, COALESCE(audio_remote, 0) FROM meetings
+             WHERE status IN ('ready','failed') AND COALESCE(ended_at, created_at) < ?1",
+        )?
+        .query_map([cutoff], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut n = 0;
+    for (id, remote) in old {
+        if remote && blobs.is_none() {
+            continue;
+        }
+        if purge_meeting(c, data_dir, tenant_id, &id, blobs)? {
+            n += 1;
+        }
     }
     Ok(n)
 }
@@ -128,5 +164,60 @@ mod tests {
         // keep-forever switch
         settings::set_audio_retention_days(&c, 0).unwrap();
         assert_eq!(sweep(&c, dir.path(), "t1", None, now * 10).unwrap(), 0);
+    }
+
+    #[test]
+    fn transcript_sweep_hard_deletes_only_old_finished_meetings_with_everything_attached() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        let now = 500 * DAY_MS;
+        // (id, status, ended days ago)
+        for (id, status, ago) in [
+            ("old", "ready", 91),
+            ("old-failed", "failed", 400),
+            ("fresh", "ready", 89),
+            ("busy", "transcribing", 500),
+        ] {
+            let a = tenant_dir(dir.path(), "t1").join(format!("audio/{id}"));
+            fs::create_dir_all(&a).unwrap();
+            fs::write(a.join("r.wav"), b"x").unwrap();
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status, audio_path, audio_remote, ended_at, created_at)
+                 VALUES (?1,'t','meet',?2,?3,0,?4,0)",
+                rusqlite::params![id, status, format!("audio/{id}/r.wav"), now - ago * DAY_MS],
+            )
+            .unwrap();
+            c.execute(
+                "INSERT INTO segments (meeting_id, start_ms, end_ms, text) VALUES (?1,0,1,'words')",
+                [id],
+            )
+            .unwrap();
+        }
+        // keep (the default) deletes nothing, however old
+        assert_eq!(sweep_meetings(&c, dir.path(), "t1", None, now).unwrap(), 0);
+        settings::set_transcript_retention_days(&c, 90).unwrap();
+        assert_eq!(sweep_meetings(&c, dir.path(), "t1", None, now).unwrap(), 2);
+        let left: Vec<String> = c
+            .prepare("SELECT id FROM meetings ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(left, vec!["busy", "fresh"]);
+        let segs: i64 = c
+            .query_row("SELECT count(*) FROM segments", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(segs, 2, "transcripts of deleted meetings are gone");
+        for gone in ["old", "old-failed"] {
+            assert!(!tenant_dir(dir.path(), "t1")
+                .join("audio")
+                .join(gone)
+                .exists());
+        }
+        assert!(tenant_dir(dir.path(), "t1")
+            .join("audio/fresh/r.wav")
+            .exists());
+        assert_eq!(sweep_meetings(&c, dir.path(), "t1", None, now).unwrap(), 0);
     }
 }

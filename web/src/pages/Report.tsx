@@ -9,6 +9,7 @@ import { Ribbon, SpeakerBar } from '../ui/Ribbon'
 import { colour, speakerIndex } from '../ui/speaker-colour'
 import { Tabs } from '../ui/Tabs'
 import { Menu, MenuItem } from '../ui/Menu'
+import { useTranscriptRetention } from '../speech'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
@@ -86,6 +87,12 @@ export function Report() {
     enabled: meeting.isSuccess,
     refetchInterval: meeting.data?.status === 'reporting' ? 3000 : false,
   })
+  const keepDays = useTranscriptRetention().data?.days
+  // Same clock as the sweep: the end of the meeting, else its creation. Only finished meetings are swept.
+  const md = meeting.data
+  const deletion = md && keepDays && (md.status === 'ready' || md.status === 'failed')
+    ? new Date((md.ended_at ?? md.created_at) + keepDays * 86_400_000).toLocaleDateString([], { dateStyle: 'medium' })
+    : null
   const seek = (ms: number, play = true) => {
     if (!audio.current) return
     audio.current.currentTime = ms / 1000
@@ -248,7 +255,7 @@ export function Report() {
       {tab === 'summary' ? (
         <div role="tabpanel" className="mt-6">
           {report.data ? (
-            <ReportSections id={id} r={report.data} talk={talk} language={m.language} sharing={sharing} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+            <ReportSections id={id} r={report.data} talk={talk} language={m.language} sharing={sharing} deletion={deletion} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
           ) : (
             <p className="text-mute">
               {m.status === 'ready' ? 'No report was written for this meeting.'
@@ -294,7 +301,7 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ id, r, talk, language, sharing, seek, open }: { id: string; sharing: ReactNode; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ id, r, talk, language, sharing, deletion, seek, open }: { id: string; sharing: ReactNode; deletion: string | null; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
   const qc = useQueryClient()
   const toast = useToast()
@@ -380,6 +387,7 @@ function ReportSections({ id, r, talk, language, sharing, seek, open }: { id: st
         <section className="space-y-1">
           <Heading>Details</Heading>
           <p className="text-sm text-mute">Language: {language}</p>
+          {deletion && <p className="text-sm text-mute">Deleted automatically on {deletion}</p>}
           {sharing}
         </section>
       </aside>

@@ -142,8 +142,9 @@ function retention(role: string, put?: Response) {
     return new Response(JSON.stringify(
       u === '/api/me' ? { email: 'a@b.c', name: null, role, recording_storage: 'local_disk' }
         : u === '/api/settings/audio-retention' ? { days: 90 }
-          : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
-            : { connected: false, needs_reconnect: false },
+          : u === '/api/settings/transcript-retention' ? { days: 0 }
+            : u === '/api/usage' ? { speech_micro_usd: 0, llm_micro_usd: 0, total_micro_usd: 0, cap_micro_usd: 0, paused: false, meetings: [] }
+              : { connected: false, needs_reconnect: false },
     ))
   }))
   render(
@@ -153,6 +154,23 @@ function retention(role: string, put?: Response) {
   )
   return calls
 }
+
+test('admin picks when whole meetings are deleted: PUT carries the days', async () => {
+  const calls = retention('admin')
+  const sel = (await screen.findByLabelText('Delete meetings after')) as HTMLSelectElement
+  expect(sel.value).toBe('0')
+  expect([...sel.options].map((o) => o.value)).toEqual(['90', '365', '0'])
+  expect(screen.getByText(/Finished recordings are kept.*Transcripts and reports stay\./)).toBeTruthy()
+  fireEvent.change(sel, { target: { value: '365' } })
+  expect(await screen.findByText('Meeting retention saved')).toBeTruthy()
+  expect(calls.filter((c) => c.m === 'PUT').map((c) => [c.u, c.body])).toEqual([['/api/settings/transcript-retention', '{"days":365}']])
+})
+
+test('members see no meeting retention select', async () => {
+  retention('member')
+  await screen.findByText(/deleted after/)
+  expect(screen.queryByLabelText('Delete meetings after')).toBeNull()
+})
 
 test('admin picks a retention period: PUT carries the days and a toast says saved', async () => {
   const calls = retention('admin')
