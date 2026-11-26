@@ -298,7 +298,7 @@ Recorded 2026-11-12 and 2026-11-13.
 
 ## Implementation notes
 
-Assumptions made while building, moved from `docs/review-notes.md`. Items marked unverified, and every page
+Assumptions made while building, moved from the former review notes. Items marked unverified, and every page
 label, must be confirmed in the live check (row 16).
 
 ### Meet notetaker loop (assumptions)

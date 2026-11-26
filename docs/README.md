@@ -14,7 +14,7 @@ Which document owns what. When two disagree, the one named here wins; fix the ot
 | How ideas become releases, merge rules | `docs/specs/delivery-pipeline.md` |
 | Branches, commits, PRs | `CONTRIBUTING.md` |
 | Engineering contract | `CLAUDE.md` |
-| Assumptions, open issues, what was not verified | `docs/review-notes.md` (history; the top block is the current status) |
+| Open work and checks not yet run | GitHub issues; what each feature has not verified is in its spec's Status line |
 | Coding-session agents and skills | `.claude/agents/`, `.claude/skills/` |
 
 ## Keeping docs current
