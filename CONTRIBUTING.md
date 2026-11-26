@@ -52,4 +52,4 @@
 - CI runs `guards`, `rust` and `web` on every PR. Commit, title, branch and size rules are not checked in CI: before opening a PR run the scoped checks in
   `CLAUDE.md` (Testing & Verification), `./scripts/check-commits.sh origin/main..HEAD "<PR title>" "<branch>"` and
   `node scripts/pr-size.mjs origin/main`.
-- Merge with **squash**; the PR title becomes the commit subject on `main`.
+- Merge with **squash**; the PR title becomes the commit subject on `main`. Pass the message explicitly so the commit body is short, not the branch's commit list: `gh pr merge <n> --squash --subject "<PR title>" --body "<2-3 line summary>\n\nCloses #<N>"`. The PR body (review record, attribution lines) is not copied. The repository default is the PR title and body, so a merge from the web UI uses the PR body: keep it short there.
