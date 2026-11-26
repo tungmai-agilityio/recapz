@@ -107,6 +107,9 @@ paths the ticket changes. Testing scope follows "Testing & Verification" in `CLA
    `invite` (refuses an existing member), `set_role` and `remove` with the last-admin guard, and `remove` doing
    what Decisions say in one transaction per database, reusing `purge::purge_document` for documents. Tests assert
    exact rows left in both databases and that removing the guard makes them fail.
+   Built in #430: `remove` runs the tenant side first (so a failed call can be repeated), then the control side;
+   upcoming means events that have not ended. It leaves `members.status = 'removed'`: #431's `ensure_member` upsert
+   must set it back to `'active'` when an invited person signs in again. `cancel_invite` lives here too.
 3. `GET /api/members`, `POST /api/members/invites` (email, role; returns the link), `DELETE
    /api/members/invites/{email}`, `PATCH /api/members/{id}` (role), `DELETE /api/members/{id}`. Admin only (403
    otherwise), CSRF as every route; `ensure_member` becomes an upsert of name and role. Tests per route for admin,

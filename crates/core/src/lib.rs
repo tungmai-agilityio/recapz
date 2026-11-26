@@ -10,6 +10,7 @@ pub mod google_tokens;
 pub mod index_job;
 pub mod jobs;
 pub mod label_job;
+pub mod members;
 pub mod purge;
 pub mod report_job;
 pub mod retention;
