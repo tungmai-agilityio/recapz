@@ -28,4 +28,4 @@ public repository needs no token in the app.
 ## Unverified
 
 No quarantine attribute after an update, grants surviving an update, overwriting `/Applications` as a non-admin, and the
-full build with the key passed as content (#372) are not recorded as verified (`docs/review-notes.md`).
+full build with the key passed as content (#372) are not recorded as verified (#426).

@@ -1,6 +1,6 @@
 # Deploy (systemd)
 
-**Status (2026-11-25):** the Droplet was deleted to save cost (stated in `docs/review-notes.md`, "make desktop-run"; not
+**Status (2026-11-25):** the Droplet was deleted to save cost (stated by the maintainer; not
 verified from the repository). `https://recapz.tungmai.com/api/health` did not answer within 8 seconds when checked on
 2026-11-25, while the DNS name still resolved (to the old host, unverified). Nothing is deployed now, so "today" and "current Droplet" below
 describe the last host. To run again, follow "Destroy and rebuild the Droplet", "Rebuild from scratch". Also: the
