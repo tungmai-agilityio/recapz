@@ -23,7 +23,7 @@ const show = (path = '/meetings/m1') =>
     </QueryClientProvider>,
   )
 
-const meeting = { id: 'm1', title: 'Weekly sync', platform: 'upload', status: 'ready', language: 'vi+en', started_at: null, ended_at: null, created_at: 1, error: null }
+const meeting = { id: 'm1', title: 'Weekly sync', platform: 'upload', status: 'ready', language: 'vi+en', started_at: null, ended_at: null, created_at: 1, error: null, share: 'attendees', can_edit: false }
 
 test('shows the meeting and its transcript lines with times', async () => {
   const segs = [
@@ -337,4 +337,25 @@ test('a scheduled meeting lets the member pick the spoken language, a recorded o
   show()
   await screen.findByText('Weekly sync')
   expect(screen.queryByLabelText('Spoken language')).toBeNull()
+})
+
+test('the owner changes who the meeting is shared with; anyone else only reads it', async () => {
+  const calls: { u: string; body?: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    calls.push({ u, body: init?.body as string | undefined })
+    if (init?.method === 'PATCH') return new Response(JSON.stringify({ share: 'owner' }))
+    return new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? withReport : { ...meeting, can_edit: true }))
+  }))
+  show()
+  const pick = (await screen.findByLabelText('Shared with')) as HTMLSelectElement
+  expect(pick.value).toBe('attendees')
+  fireEvent.change(pick, { target: { value: 'owner' } })
+  await vi.waitFor(() => expect(pick.value).toBe('owner'))
+  expect(calls.find((c) => c.body)).toEqual({ u: '/api/meetings/m1', body: '{"share":"owner"}' })
+  cleanup()
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? withReport : meeting))))
+  show()
+  await screen.findByText('Weekly sync')
+  expect(screen.queryByRole('combobox', { name: 'Shared with' })).toBeNull()
+  expect((await screen.findByText(/Shared with/)).textContent).toContain('Attendees')
 })

@@ -1225,3 +1225,103 @@ async fn the_language_changes_only_before_the_notetaker_joins_and_only_by_owner_
     let (_, _, detail) = send(&app, get("/api/meetings/soon", &amy)).await;
     assert!(detail.contains(r#""language":"en""#), "{detail}");
 }
+
+#[tokio::test]
+async fn sharing_decides_who_reaches_every_meeting_route() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let mut cookies = vec![];
+    for e in ["amy@example.com", "bob@example.com", "cat@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+        cookies.push(send(&app, login(e)).await.1.unwrap());
+    }
+    let (amy, bob, cat) = (&cookies[0], &cookies[1], &cookies[2]);
+    for c in [&boss, amy, bob, cat] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let amy_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email = 'amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let id = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    // Bob is invited (upper case on the invite), cat is not.
+    t.execute(
+        "INSERT INTO calendar_events (id, member_id, external_id, title, starts_at, ends_at, meeting_id, attendees)
+         VALUES ('e1', ?1, 'x', 'Sync', 0, 1, ?2, '[{\"email\":\"BOB@example.com\"}]')",
+        rusqlite::params![amy_id, id],
+    )
+    .unwrap();
+    let routes = [
+        format!("/api/meetings/{id}"),
+        format!("/api/meetings/{id}/transcript"),
+        format!("/api/meetings/{id}/report"),
+        format!("/api/meetings/{id}/audio"),
+    ];
+    let reach = |who: &str| {
+        let who = who.to_string();
+        let (app, routes, id) = (app.clone(), routes.clone(), id.clone());
+        async move {
+            let mut codes = vec![];
+            for r in &routes {
+                codes.push(send(&app, get(r, &who)).await.0);
+            }
+            let (_, _, list) = send(&app, get("/api/meetings", &who)).await;
+            (codes, list.contains(&id))
+        }
+    };
+    let ok = vec![StatusCode::OK; 4];
+    let nf = vec![StatusCode::NOT_FOUND; 4];
+    // Default `attendees`: the owner and the invited member, nobody else (not even the admin).
+    assert_eq!(reach(amy).await, (ok.clone(), true));
+    assert_eq!(reach(bob).await, (ok.clone(), true));
+    assert_eq!(reach(cat).await, (nf.clone(), false));
+    assert_eq!(reach(&boss).await, (nf.clone(), false));
+
+    let patch = |c: &str, b: &str| json_req("PATCH", &format!("/api/meetings/{id}"), c, b);
+    let share = || -> String {
+        t.query_row("SELECT share FROM meetings WHERE id = ?1", [&id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+    // An attendee may not change it; a bad value is rejected; nothing moved.
+    let (s, ..) = send(&app, patch(bob, r#"{"share":"workspace"}"#)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, ..) = send(&app, patch(cat, r#"{"share":"workspace"}"#)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, ..) = send(&app, patch(amy, r#"{"share":"everyone"}"#)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, ..) = send(&app, patch(amy, "{}")).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert_eq!(share(), "attendees");
+
+    // Only me: the attendee loses it.
+    let (s, _, body) = send(&app, patch(amy, r#"{"share":"owner"}"#)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, r#"{"share":"owner"}"#));
+    assert_eq!(reach(bob).await, (nf.clone(), false));
+    assert_eq!(reach(amy).await, (ok.clone(), true));
+    // Whole team: everyone sees it; the admin may then change it back.
+    send(&app, patch(amy, r#"{"share":"workspace"}"#)).await;
+    assert_eq!(reach(cat).await, (ok.clone(), true));
+    let (_, _, detail) = send(&app, get(&format!("/api/meetings/{id}"), cat)).await;
+    assert!(
+        detail.contains(r#""share":"workspace","can_edit":false"#),
+        "{detail}"
+    );
+    let (s, ..) = send(&app, patch(&boss, r#"{"share":"attendees"}"#)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(share(), "attendees");
+}

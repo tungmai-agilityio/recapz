@@ -141,7 +141,8 @@ non-owners once the list returns the owner.
 - [ ] Sidebar: Chapters (click seeks and opens the transcript), Talk time bars, Details (language, sharing,
       deletion date)
       (Chapters, Details language and Talk time done: bars and percent from real segment durations, sorted, hidden
-      when no segment has a speaker, shown in the Summary tab with the report; sharing and deletion date are not in
+      when no segment has a speaker, shown in the Summary tab with the report; Shared with is built (a select for the owner or an admin, read-only text for others; no prototype screenshot, so
+      not ticked); the deletion date is not in
       the meeting API. Not ticked: Chapters and Details language checked by eye on 2026-11-20 (#327) at 1280 and
       390 px, but Talk time could not be seen (the test meeting has no speakers), the prototype uses uppercase
       muted labels for Chapters, Talk time and Details, and its Details also show Shared with and the deletion date)

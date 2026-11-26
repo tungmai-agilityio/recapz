@@ -129,7 +129,7 @@ pub fn router_with_llm(
         .route(
             "/api/meetings/{id}",
             get(meeting_detail)
-                .patch(rename_meeting)
+                .patch(update_meeting)
                 .delete(delete_meeting),
         )
         .route("/api/meetings/{id}/language", patch(set_meeting_language))
@@ -721,14 +721,15 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
     let rows = app
         .tenant(u.tenant_id.clone(), move |c| {
             ensure_member(c, &u)?;
-            // Visible to the owner, or to everyone when shared with the workspace.
-            let mut s = c.prepare(
+            // Visible by `MEETING_VISIBLE`: owner, workspace share, or an attendee of its calendar event.
+            let mut s = c.prepare(&format!(
                 "SELECT id, title, platform, status, started_at, created_at,
                         CASE WHEN started_at IS NOT NULL AND ended_at >= started_at THEN ended_at - started_at END,
-                        (SELECT count(*) FROM action_items a WHERE a.meeting_id = meetings.id)
-                 FROM meetings
-                 WHERE owner_id = ?1 OR share = 'workspace' ORDER BY COALESCE(started_at, created_at) DESC",
-            )?;
+                        (SELECT count(*) FROM action_items a WHERE a.meeting_id = m.id)
+                 FROM meetings m
+                 WHERE {} ORDER BY COALESCE(started_at, created_at) DESC",
+                db::MEETING_VISIBLE
+            ))?;
             let mut rows = s
                 .query_map([&uid], |r| {
                     Ok(MeetingRow {
@@ -745,13 +746,14 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             // One query for every listed meeting's speakers, with the same visibility rule.
-            let mut sp = c.prepare(
+            let mut sp = c.prepare(&format!(
                 "SELECT meeting_id, id, name FROM (
                    SELECT p.meeting_id, p.id, COALESCE(NULLIF(p.display_name, ''), p.label) AS name,
                           row_number() OVER (PARTITION BY p.meeting_id ORDER BY p.rowid) AS n
                    FROM speakers p JOIN meetings m ON m.id = p.meeting_id
-                   WHERE m.owner_id = ?1 OR m.share = 'workspace') WHERE n <= ?2",
-            )?;
+                   WHERE {}) WHERE n <= ?2",
+                db::MEETING_VISIBLE
+            ))?;
             let mut by: std::collections::HashMap<String, Vec<ListSpeaker>> = Default::default();
             for x in sp.query_map(params![uid, LIST_SPEAKER_CAP], |r| {
                 Ok((r.get::<_, String>(0)?, ListSpeaker { id: r.get(1)?, name: r.get(2)? }))
@@ -779,17 +781,25 @@ struct MeetingDetail {
     ended_at: Option<i64>,
     created_at: i64,
     error: Option<String>,
+    /// `attendees` (default), `workspace` or `owner`.
+    share: String,
+    /// The member may rename, re-share and delete: the owner, or an admin (set by the detail route).
+    can_edit: bool,
     /// Same order, cap and names as the list rows: the colour index every screen derives from.
     speakers: Vec<ListSpeaker>,
 }
 
-/// The one meeting access rule: the owner, or anyone when shared with the workspace.
+/// The one meeting access rule (`db::MEETING_VISIBLE`): the owner, an attendee, or anyone when shared with the workspace.
 /// A meeting the member may not see is reported as missing, so its existence does not leak.
 fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option<MeetingDetail>> {
     Ok(c.query_row(
-        "SELECT id, title, platform, status, language, started_at, ended_at, created_at, error
-         FROM meetings WHERE id = ?1 AND (owner_id = ?2 OR share = 'workspace')",
-        params![id, uid],
+        &format!(
+            "SELECT id, title, platform, status, language, started_at, ended_at, created_at, error, share,
+                    m.owner_id = ?1
+             FROM meetings m WHERE id = ?2 AND {}",
+            db::MEETING_VISIBLE
+        ),
+        params![uid, id],
         |r| {
             Ok(MeetingDetail {
                 id: r.get(0)?,
@@ -801,6 +811,8 @@ fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option
                 ended_at: r.get(6)?,
                 created_at: r.get(7)?,
                 error: r.get(8)?,
+                share: r.get(9)?,
+                can_edit: r.get(10)?,
                 speakers: Vec::new(),
             })
         },
@@ -815,6 +827,7 @@ async fn meeting_detail(
 ) -> Res<Json<MeetingDetail>> {
     let u = app.current_user(&jar).await?;
     let uid = u.id.clone();
+    let role = u.role.clone();
     let m = app
         .tenant(u.tenant_id.clone(), move |c| {
             ensure_member(c, &u)?;
@@ -822,6 +835,7 @@ async fn meeting_detail(
             let Some(mut m) = visible_meeting(c, &uid, &id)? else {
                 return Ok(None);
             };
+            m.can_edit |= role == "admin";
             let mut sp = c.prepare(
                 "SELECT id, COALESCE(NULLIF(display_name, ''), label) FROM speakers
                  WHERE meeting_id = ?1 ORDER BY rowid LIMIT ?2",
@@ -843,23 +857,40 @@ async fn meeting_detail(
 const MAX_TITLE_CHARS: usize = 200;
 
 #[derive(Deserialize)]
-struct Rename {
-    title: String,
+struct UpdateMeeting {
+    title: Option<String>,
+    share: Option<String>,
 }
 
-/// Owner or admin only, like delete. Allowed in any status: a title is not part of processing.
-async fn rename_meeting(
+/// Owner or admin only, like delete. Renames and re-shares (`attendees`, `workspace`, `owner`); allowed
+/// in any status: neither is part of processing.
+async fn update_meeting(
     State(app): State<App>,
     jar: CookieJar,
     Path(id): Path<String>,
-    Json(body): Json<Rename>,
+    Json(body): Json<UpdateMeeting>,
 ) -> Res<Json<serde_json::Value>> {
-    let title = body.title.trim().to_string();
-    if title.is_empty() || title.chars().count() > MAX_TITLE_CHARS {
+    let title = body.title.map(|t| t.trim().to_string());
+    if title
+        .as_ref()
+        .is_some_and(|t| t.is_empty() || t.chars().count() > MAX_TITLE_CHARS)
+    {
         return Err(ApiError::BadRequest("title must be 1 to 200 characters"));
     }
+    if title.is_none() && body.share.is_none() {
+        return Err(ApiError::BadRequest("send a title or a share"));
+    }
+    if body
+        .share
+        .as_deref()
+        .is_some_and(|s| !matches!(s, "attendees" | "workspace" | "owner"))
+    {
+        return Err(ApiError::BadRequest(
+            "share must be attendees, workspace or owner",
+        ));
+    }
     let u = app.current_user(&jar).await?;
-    let saved = title.clone();
+    let (saved_title, saved_share) = (title.clone(), body.share.clone());
     app.tenant(u.tenant_id.clone(), move |c| {
         ensure_member(c, &u)?;
         if visible_meeting(c, &u.id, &id)?.is_none() {
@@ -871,17 +902,24 @@ async fn rename_meeting(
             })?;
         if owner.as_deref() != Some(u.id.as_str()) && u.role != "admin" {
             return Ok(Err(ApiError::Denied(
-                "only the owner or an admin can rename",
+                "only the owner or an admin can change this meeting",
             )));
         }
         c.execute(
-            "UPDATE meetings SET title = ?1 WHERE id = ?2",
-            params![title, id],
+            "UPDATE meetings SET title = COALESCE(?1, title), share = COALESCE(?2, share) WHERE id = ?3",
+            params![title, body.share, id],
         )?;
         Ok(Ok(()))
     })
     .await??;
-    Ok(Json(serde_json::json!({ "title": saved })))
+    let mut out = serde_json::Map::new();
+    if let Some(t) = saved_title {
+        out.insert("title".into(), t.into());
+    }
+    if let Some(s) = saved_share {
+        out.insert("share".into(), s.into());
+    }
+    Ok(Json(out.into()))
 }
 
 #[derive(Deserialize)]
