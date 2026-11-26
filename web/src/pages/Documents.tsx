@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { deleteDocument, getDocuments, getDocumentUsage, setDocumentLlmOk, uploadDocument, type Doc } from '../api'
 import { Badge } from '../ui/Badge'
+import { fileClass } from '../ui/Field'
 import { Button } from '../ui/Button'
 import { Columns } from '../ui/Columns'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -88,11 +89,21 @@ export function Documents() {
             <Icon name="upload" size={22} />
             <b>{add.isPending ? 'Uploading…' : 'Drop files or choose some'}</b>
             <span className="text-[.82rem] text-mute">MD · TXT · up to 20 MB each</span>
-            <input id="docs" type="file" multiple className="max-w-full text-[.8rem]" accept={EXTENSIONS.map((e) => `.${e}`).join(',')}
+            <input id="docs" type="file" multiple className={fileClass} accept={EXTENSIONS.map((e) => `.${e}`).join(',')}
               onChange={(e) => { pick(e.target.files); e.target.value = '' }} />
           </label>
           {errors.map((m) => <p key={m} role="alert" className="text-sm text-bad">{m}</p>)}
           {docs.isError && <p role="alert" className="text-sm text-bad">Could not load your documents.</p>}
+        </div>
+        <aside className="frame flex flex-col gap-4 text-sm text-ink-2">
+          {usage.data && <Meter used={usage.data.used_bytes} cap={usage.data.cap_bytes} />}
+          <b className="text-ink">May be sent to the language model</b>
+          <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
+          <p>On: the passages that match a question you ask can be sent to the language model to write the answer.</p>
+        </aside>
+      </Columns>
+      {(docs.data?.length === 0 || !!docs.data?.length) && (
+        <div className="frame flex flex-col gap-4">
           {docs.data?.length === 0 && <p className="text-sm text-mute">No documents yet.</p>}
           {!!docs.data?.length && (
             <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
@@ -115,13 +126,7 @@ export function Documents() {
           )}
           {toggle.isError && <p role="alert" className="text-sm text-bad">Could not change that setting.</p>}
         </div>
-        <aside className="frame flex flex-col gap-4 text-sm text-ink-2">
-          {usage.data && <Meter used={usage.data.used_bytes} cap={usage.data.cap_bytes} />}
-          <b className="text-ink">May be sent to the language model</b>
-          <p>Off (the default): the document is only searched on your server and is never sent anywhere.</p>
-          <p>On: the passages that match a question you ask can be sent to the language model to write the answer.</p>
-        </aside>
-      </Columns>
+      )}
       {del && (
         <ConfirmDialog title="Delete this document?" confirmLabel="Delete" busy={remove.isPending}
           error={remove.isError ? 'Could not delete. Try again.' : undefined}

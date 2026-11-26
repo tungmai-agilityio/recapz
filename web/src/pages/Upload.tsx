@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { getMeeting, retryMeeting, uploadRecording, type MeetingLanguage } from '../api'
 import { Button } from '../ui/Button'
 import { Columns } from '../ui/Columns'
-import { Field, inputClass } from '../ui/Field'
+import { Field, fileClass, inputClass } from '../ui/Field'
 import { Icon } from '../ui/Icon'
 import { PageHead } from '../ui/PageHead'
 
@@ -57,7 +57,7 @@ export function Upload() {
             <span className="text-[.82rem] text-mute">
               {EXTENSIONS.map((e) => e.toUpperCase()).join(' · ')} · up to 2 GB
             </span>
-            <input id="file" type="file" className="max-w-full text-[.8rem]" accept={EXTENSIONS.map((e) => `.${e}`).join(',')}
+            <input id="file" type="file" className={fileClass} accept={EXTENSIONS.map((e) => `.${e}`).join(',')}
               onChange={(e) => { setFile(e.target.files?.[0] ?? null); send.reset() }} />
           </label>
           {bad && <p role="alert" className="text-sm text-bad">{bad}</p>}
