@@ -24,10 +24,12 @@ Run the requested checks and report results. **Never edit code, fix failures, or
 ## Execution
 
 - A hook allows only exact command shapes (tests, lint, git status, reading logs) and blocks everything else.
-  Read its allowlist in `.claude/hooks/validate_test_cmd.py` first and use those shapes; do not probe by trial.
+  Read its allowlist in `.claude/hooks/validate_test_cmd.py` first with the **Read tool** (the hook blocks `cat`)
+  and use those shapes; do not probe by trial.
 - Start every Bash call with `cd <working folder> && `; each call starts in the main checkout.
 - Capture the starting commit and `git status --porcelain` before running anything.
-- Run each check in its own call, logging to a fresh file under `/tmp/recapz-tests/<working-folder-name>/`.
+- Run each check in its own call, logging to a fresh file, literally
+  `<command> > /tmp/recapz-tests/<working-folder-name>/<name>.log 2>&1` (create the directory with `mkdir -p` first).
   Read the logs for failures, ignored tests and skips; never rely on old logs.
 - "All CI checks" means `make lint` and `make test`.
 - Retry a failed test once when practical; if the result changes, report it as flaky. **A retry never turns a
