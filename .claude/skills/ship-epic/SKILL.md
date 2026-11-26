@@ -7,7 +7,7 @@ description: Run all open tickets of one spec in the background - start up to 3 
 
 Input: a spec file in `docs/specs/` whose tickets exist (created by `plan-tickets`), plus optional limits:
 `max-tickets` (default 10 tickets started in this run) and `max-parallel` (default 3, never above 3).
-The run stops only on `needs-review`; the spec merge and every critical PR ("Autonomy and escalation" in `docs/specs/delivery-pipeline.md`) still need the maintainer. No worker asks the maintainer a question; see "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`.
+The run stops only on `needs-review`; the spec merge and every critical PR ("Autonomy and escalation" in `docs/specs/delivery-pipeline.md`) still need the maintainer. Workers merge with the explicit `--subject`/`--body` form in `ship-ticket` section 6. No worker asks the maintainer a question; see "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`.
 
 ## Before starting
 

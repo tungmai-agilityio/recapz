@@ -1,5 +1,5 @@
 ## Summary
-<!-- What changed and why. One concern per PR. -->
+<!-- 2-3 lines: what changed and why. One concern per PR. Agents merge with `--subject`/`--body` so `main` gets only the title, a short summary and the issue line. -->
 
 ## Testing
 <!-- What ran (make lint test, scoped tests) and what did not. -->
