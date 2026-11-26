@@ -142,6 +142,23 @@ test('shows a failed meeting with its error and no report', async () => {
   expect(screen.getByText('No report, because processing failed.')).toBeTruthy()
 })
 
+test('Retry on a failed meeting posts the retry and is hidden from non-owners', async () => {
+  const calls: string[] = []
+  const m = { ...meeting, status: 'failed', error: 'transcription failed', can_edit: true }
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    if (init?.method === 'POST') { calls.push(`POST ${u}`); return new Response('', { status: 202 }) }
+    return new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m))
+  }))
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+  await vi.waitFor(() => expect(calls).toEqual(['POST /api/meetings/m1/retry']))
+  cleanup()
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : { ...m, can_edit: false }))))
+  show()
+  await screen.findByRole('alert')
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+})
+
 test('tells the member the report is on its way while the meeting is being reported', async () => {
   const m = { ...meeting, status: 'reporting' }
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m))))

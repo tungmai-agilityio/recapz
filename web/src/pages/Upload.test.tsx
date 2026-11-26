@@ -11,6 +11,7 @@ function run(statuses: string[], calls: string[] = []) {
   vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
     if (u === '/api/me') return new Response(JSON.stringify({ email: 'a@b.c', name: null, role: 'admin' }))
     calls.push(`${init?.method ?? 'GET'} ${u}`)
+    if (init?.method === 'POST' && u.endsWith('/retry')) return new Response('', { status: 202 })
     if (init?.method === 'POST') {
       calls.push(`title=${(init.body as FormData).get('title')}`)
       calls.push(`language=${(init.body as FormData).get('language')}`)
@@ -69,14 +70,16 @@ test('pressing Process recording again clears the old failed message while the n
   expect(screen.queryByText(/Processing failed/)).toBeNull()
 })
 
-test('failed shows the error; pressing the button again re-uploads', async () => {
+test('failed shows the error; Retry re-queues the meeting without a second upload', async () => {
   const calls: string[] = []
-  run(['failed'], calls)
+  run(['failed', 'transcribing'], calls)
   pick('call.mp3')
   fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
-  expect((await screen.findByText(/Processing failed: bad audio/)).textContent).toMatch(/try again/)
-  fireEvent.click(screen.getByRole('button', { name: 'Process recording' }))
-  await waitFor(() => expect(calls.filter((c) => c === 'POST /api/uploads').length).toBe(2))
+  await screen.findByText(/Processing failed: bad audio/)
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await waitFor(() => expect(calls).toContain('POST /api/meetings/m9/retry'))
+  expect(calls.filter((c) => c === 'POST /api/uploads').length).toBe(1)
+  await waitFor(() => expect(document.querySelector('[data-state="run"]')?.textContent).toBe('Transcribing'))
 })
 
 test('the lede names no speech provider', async () => {

@@ -770,6 +770,92 @@ async fn regenerate_queues_one_report_job_for_a_ready_meeting_owner_or_admin_onl
 }
 
 #[tokio::test]
+async fn retry_requeues_the_failed_job_for_owner_or_admin_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let amy_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email='amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let failed = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "failed");
+    let ready = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    t.execute(
+        "UPDATE jobs SET state='failed', attempts=3 WHERE meeting_id=?1",
+        [&failed],
+    )
+    .unwrap();
+    t.execute("UPDATE meetings SET error='boom' WHERE id=?1", [&failed])
+        .unwrap();
+    let url = |id: &str| format!("/api/meetings/{id}/retry");
+    let job = || -> (String, i64) {
+        t.query_row(
+            "SELECT state, attempts FROM jobs WHERE meeting_id=?1",
+            [&failed],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    };
+
+    let (s, ..) = send(&app, json_req("POST", &url(&failed), &bob, "")).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, body) = send(&app, json_req("POST", &url(&ready), &amy, "")).await;
+    assert_eq!(
+        (s, body.as_str()),
+        (StatusCode::CONFLICT, "meeting has not failed")
+    );
+    assert_eq!(job(), ("failed".to_string(), 3), "refusals queue nothing");
+
+    t.execute(
+        "UPDATE meetings SET share='workspace' WHERE id=?1",
+        [&failed],
+    )
+    .unwrap();
+    let (s, ..) = send(&app, json_req("POST", &url(&failed), &bob, "")).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    let (s, ..) = send(&app, json_req("POST", &url(&failed), &amy, "")).await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    assert_eq!(job(), ("queued".to_string(), 0));
+    let m: (String, Option<String>) = t
+        .query_row(
+            "SELECT status, error FROM meetings WHERE id=?1",
+            [&failed],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(m, ("reporting".to_string(), None));
+    let (s, ..) = send(&app, json_req("POST", &url(&failed), &boss, "")).await;
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "a second click finds nothing failed"
+    );
+}
+
+#[tokio::test]
 async fn delete_meeting_is_owner_or_admin_only_and_removes_everything() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(dir.path());
