@@ -47,8 +47,8 @@ function JoinForm({ saved, admin }: { saved: JoinSettings; admin: boolean }) {
   const known = /notetaker name|join message|join rule/
   const set = (k: keyof JoinSettings) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value } as JoinSettings)
   return (
-    <div className="mt-4 rounded-lg border border-hair bg-sheet">
-      <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+    <div className="mt-4 frame frame-row">
+      <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
         <div>
           <h2 className="font-semibold">Joining and the chat notice</h2>
           <p className="mt-1 text-sm text-mute">When the notetaker joins, what it is called, and what it tells the call.</p>
@@ -123,8 +123,8 @@ export function Recording() {
           <button type="button" onClick={dismiss} className="font-medium underline">Dismiss</button>
         </p>
       )}
-      <div className="mt-6 rounded-lg border border-hair bg-sheet">
-        <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+      <div className="mt-6 frame frame-row">
+        <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Calendar</h2>
             <p className="mt-1 text-sm text-mute">Recapz reads your Google Calendar to find meetings with a video link. It never changes your calendar.</p>
@@ -157,8 +157,8 @@ export function Recording() {
       {join.isError && <p role="alert" className="mt-4 text-sm text-bad">Could not load the join settings.</p>}
       {join.isPending && <p className="mt-4 text-sm text-mute">Loading join settings...</p>}
       {join.data?.join_rule && <JoinForm key={JSON.stringify(join.data)} saved={join.data} admin={storage.isAdmin} />}
-      <div className="mt-4 rounded-lg border border-hair bg-sheet">
-        <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+      <div className="mt-4 frame frame-row">
+        <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Where audio goes</h2>
             <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
@@ -185,8 +185,8 @@ export function Recording() {
         </div>
       </div>
       {usage && (
-        <div className="mt-4 rounded-lg border border-hair bg-sheet">
-          <div className="grid gap-x-8 gap-y-3 p-5 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+        <div className="mt-4 frame frame-row">
+          <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
             <div>
               <h2 className="font-semibold">Usage this month</h2>
               <p className="mt-1 text-sm text-mute">Estimated from list prices, not an invoice. Only admins see this.</p>
