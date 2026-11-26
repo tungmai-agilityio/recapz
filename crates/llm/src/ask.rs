@@ -6,8 +6,8 @@ use crate::{
 };
 use serde::Deserialize;
 
-pub const PROMPT_VERSION: u32 = 2;
-pub const ASK: &str = include_str!("../prompts/ask.v2.txt");
+pub const PROMPT_VERSION: u32 = 3;
+pub const ASK: &str = include_str!("../prompts/ask.v3.txt");
 pub const LIVE_PROMPT_VERSION: u32 = 1;
 pub const LIVE_ANSWER: &str = include_str!("../prompts/live_answer.v1.txt");
 /// Upper bound on excerpt text sent per question.
@@ -105,10 +105,60 @@ fn cited(citations: Vec<usize>, used: usize) -> Vec<usize> {
     cited
 }
 
+/// Drops every `[n]` marker for which `keep(n)` is false. Anything else, including an unfinished
+/// `[1`, is text.
+fn strip_markers(s: &str, keep: impl Fn(usize) -> bool) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(i) = rest.find('[') {
+        out.push_str(&rest[..i]);
+        rest = &rest[i..];
+        let end = 1 + rest[1..].bytes().take_while(u8::is_ascii_digit).count();
+        if end > 1 && rest[end..].starts_with(']') {
+            // An unparsable (huge) number is out of range.
+            if keep(rest[1..end].parse().unwrap_or(0)) {
+                out.push_str(&rest[..=end]);
+            }
+            rest = &rest[end + 1..];
+        } else {
+            out.push('[');
+            rest = &rest[1..];
+        }
+    }
+    out + rest
+}
+
+/// Streams answer text with out-of-range `[n]` markers removed; a trailing `[` or `[12` waits for
+/// the next piece, since it may still become a marker.
+struct Markers {
+    used: usize,
+    held: String,
+}
+
+impl Markers {
+    fn feed(&mut self, piece: &str) -> String {
+        let s = std::mem::take(&mut self.held) + piece;
+        let at = s
+            .rfind('[')
+            .filter(|&i| s[i + 1..].chars().all(|c| c.is_ascii_digit()));
+        let (ready, held) = s.split_at(at.unwrap_or(s.len()));
+        self.held = held.into();
+        strip_markers(ready, |n| (1..=self.used).contains(&n))
+    }
+
+    fn flush(&mut self) -> String {
+        std::mem::take(&mut self.held)
+    }
+}
+
+/// The final answer keeps only markers whose excerpt is in `citations`.
 fn finish(reply: Reply, used: usize) -> Answer {
+    let cited = cited(reply.citations, used);
     Answer {
-        answer: reply.answer,
-        cited: cited(reply.citations, used),
+        answer: strip_markers(&reply.answer, |n| {
+            n.checked_sub(1).is_some_and(|i| cited.contains(&i))
+        }),
+        cited,
     }
 }
 
@@ -187,15 +237,24 @@ pub async fn answer_stream(
     }
     let (prompt, used) = build(question, excerpts);
     let (mut text, mut sent) = (AnswerText::default(), false);
+    let mut markers = Markers {
+        used,
+        held: String::new(),
+    };
     let out = router
         .run_stream(Task::AskAnswer, ASK, &prompt, &mut |d| {
-            let t = text.feed(d);
+            let t = markers.feed(&text.feed(d));
             if !t.is_empty() {
                 sent = true;
                 on_text(&t);
             }
         })
         .await?;
+    let tail = markers.flush();
+    if !tail.is_empty() {
+        sent = true;
+        on_text(&tail);
+    }
     match serde_json::from_str::<Reply>(json_slice(&out.completion.text)) {
         Ok(reply) => Ok(Generated {
             value: finish(reply, used),
@@ -556,5 +615,64 @@ mod tests {
             .unwrap();
         assert_eq!(got, NOT_FOUND);
         assert!(stub.requests().is_empty());
+    }
+
+    #[test]
+    fn strip_markers_keeps_wanted_numbers_and_ordinary_brackets() {
+        let keep = |n: usize| n == 1 || n == 3;
+        assert_eq!(
+            strip_markers(
+                "A [1] b [2] c [3]. [x] [] [01] [99999999999999999999] [4",
+                keep
+            ),
+            "A [1] b  c [3]. [x] [] [01]  [4"
+        );
+    }
+
+    #[tokio::test]
+    async fn markers_cut_across_pieces_are_kept_or_dropped_whole() {
+        let stub = Arc::new(Stub::texts(&[
+            r#"{"answer":"May [1]. Not [7]. Tag [x] [2","citations":[1]}"#,
+        ]));
+        let mut got = String::new();
+        let g = answer_stream(&router(stub), "q", &[ex(0, "a")], &mut |t| got.push_str(t))
+            .await
+            .unwrap();
+        assert_eq!(got, "May [1]. Not . Tag [x] [2");
+        assert_eq!(g.value.answer, "May [1]. Not . Tag [x] [2");
+    }
+
+    #[tokio::test]
+    async fn the_final_answer_drops_markers_of_excerpts_not_cited_but_the_stream_keeps_them() {
+        let stub = Arc::new(Stub::texts(&[
+            r#"{"answer":"A [1] b [2].","citations":[2]}"#,
+        ]));
+        let mut got = String::new();
+        let ex = [ex(0, "a"), ex(5000, "b")];
+        let g = answer_stream(&router(stub), "q", &ex, &mut |t| got.push_str(t))
+            .await
+            .unwrap();
+        assert_eq!(got, "A [1] b [2].", "streamed before citations are known");
+        assert_eq!(g.value.answer, "A  b [2].");
+        assert_eq!(g.value.cited, vec![1]);
+    }
+
+    #[test]
+    fn markers_split_in_every_place_stream_the_same_text() {
+        let text = "x [1] y [12] [2] z [";
+        for cut in 0..=text.len() {
+            let mut m = Markers {
+                used: 2,
+                held: String::new(),
+            };
+            let got = m.feed(&text[..cut]) + &m.feed(&text[cut..]) + &m.flush();
+            assert_eq!(got, "x [1] y  [2] z [", "cut {cut}");
+        }
+    }
+
+    #[test]
+    fn prompt_asks_for_inline_markers() {
+        assert_eq!(PROMPT_VERSION, 3);
+        assert!(ASK.contains("square brackets"));
     }
 }

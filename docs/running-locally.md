@@ -64,7 +64,7 @@ CSRF=$(awk '$6=="recapz_csrf"{print $7}' cj.txt)
 curl -s -b cj.txt -H "x-csrf-token: $CSRF" -H "Origin: http://localhost:8080" -F title=Sample -F file=@sample.wav localhost:8080/api/uploads
 ```
 
-Then look at `GET /api/meetings`, `/api/meetings/{id}/transcript` and `/report`. Ask is `POST /api/ask` with `{"question": "..."}`; it answers with citations.
+Then look at `GET /api/meetings`, `/api/meetings/{id}/transcript` and `/report`. Ask is `POST /api/ask` with `{"question": "..."}`; it streams the answer with inline `[n]` markers (prompt `ask.v3`), then a `citations` event: per card `n` (the marker), and for meetings `speaker`, `duration_ms` and a 60-part `ribbon`; null for documents. Markers for excerpts the model was not shown are removed while streaming; markers whose excerpt ends up not cited stay in the stream and the web app drops them.
 
 ## Simulate a live call (no real meeting)
 
