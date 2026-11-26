@@ -1,0 +1,24 @@
+{
+  "meetings": [
+    {
+      "name": "en-launch-planning",
+      "transcript": "[00:00] Maya: Thanks for joining. We need to settle the launch plan for the Orchard mobile app.\n[00:20] Jonas: The beta has been stable for two weeks, so I would like to ship on 12 May.\n[00:45] Maya: Agreed, we ship on 12 May. Nobody objects?\n[01:05] Priya: No objection, but marketing needs the final screenshots first.\n[01:30] Jonas: I will send the final screenshots to Priya by Friday.\n[02:00] Maya: Next topic, pricing. Do we offer a free tier or only a trial?\n[02:25] Priya: Customers asked for a free tier, but I do not know what it costs us in support.\n[02:50] Maya: Then we start with a 14 day trial and no free tier for now.\n[03:15] Jonas: Fine. Who tells the support team about the trial?\n[03:30] Maya: I will brief the support team on Monday.\n[03:50] Priya: One thing nobody answered: do we need a separate privacy notice for the beta users?\n[04:10] Maya: Good question, we will come back to it. That is all for today.\n",
+      "decisions": ["12 may", "14 day trial"],
+      "open_questions": ["privacy notice"],
+      "action_items": [
+        {"owner": "Jonas", "must": "screenshots"},
+        {"owner": "Maya", "must": "support team"}
+      ]
+    },
+    {
+      "name": "vi-hop-ke-hoach-quy",
+      "transcript": "[00:00] Lan: Chào mọi người, hôm nay chúng ta chốt kế hoạch quý ba cho cửa hàng trực tuyến.\n[00:25] Hùng: Em đề xuất mở thêm kho ở Đà Nẵng, vì đơn miền Trung đang giao chậm.\n[00:55] Lan: Đồng ý, chúng ta mở kho Đà Nẵng trong quý ba.\n[01:20] Mai: Còn ngân sách quảng cáo thì sao? Tháng này chi hơi nhiều.\n[01:45] Lan: Giữ ngân sách quảng cáo ở mức 50 triệu mỗi tháng, không tăng.\n[02:10] Hùng: Em sẽ gửi bảng so sánh ba địa điểm kho cho chị Lan trước thứ Sáu.\n[02:40] Mai: Em sẽ làm lại trang chính sách đổi trả và gửi bản nháp vào tuần sau.\n[03:05] Lan: Còn một việc chưa ai trả lời được: có nên nhận thanh toán bằng ví điện tử không?\n[03:30] Hùng: Em chưa biết phí là bao nhiêu, để em hỏi thêm.\n[03:50] Lan: Vậy để lần sau. Cảm ơn mọi người.\n",
+      "decisions": ["đà nẵng", "50 triệu"],
+      "open_questions": ["ví điện tử"],
+      "action_items": [
+        {"owner": "Hùng", "must": "so sánh"},
+        {"owner": "Mai", "must": "đổi trả"}
+      ]
+    }
+  ]
+}

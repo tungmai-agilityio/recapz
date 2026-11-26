@@ -4,6 +4,7 @@ use recapz_llm::{openai_compat::OpenAiCompat, Price, Route, Router, Task};
 use std::sync::Arc;
 
 const LIVE_SET: &str = include_str!("../fixtures/live-answer-set.json");
+const REPORT_SET: &str = include_str!("../fixtures/report-set.json");
 
 fn print(prefix: &str, r: &AskReport) -> Result<()> {
     println!("{prefix}_total {}", r.total);
@@ -31,23 +32,27 @@ fn live_config(env: impl Fn(&str) -> Option<String>) -> Result<(String, String, 
 }
 
 /// OpenAI (or any OpenAI-compatible server), configured from the environment (never printed or stored).
+/// One route shared by every task, as the server does.
 fn live_router() -> Result<Router> {
     let (key, model, base) = live_config(|k| std::env::var(k).ok())?;
+    let route = |_| Route {
+        provider: "openai".into(),
+        model: model.clone(),
+        // Reasoning models spend max_tokens on thinking before the reply.
+        max_tokens: 8192,
+        price: Price::default(),
+    };
     Ok(Router::new()
         .provider("openai", Arc::new(OpenAiCompat::new(base, key)))
-        .route(
-            Task::LiveAnswer,
-            Route {
-                provider: "openai".into(),
-                model,
-                // Reasoning models spend max_tokens on thinking before the reply.
-                max_tokens: 8192,
-                price: Price::default(),
-            },
-        ))
+        .route(Task::LiveAnswer, route(()))
+        .route(Task::Summary, route(()))
+        .route(Task::Decisions, route(()))
+        .route(Task::Chapters, route(()))
+        .route(Task::ActionItems, route(())))
 }
 
 /// `cargo run -p eval` or `-- live [set.json]`: score live answers with a model (needs RECAPZ_LLM_KEY, RECAPZ_EVAL_MODEL; RECAPZ_EVAL_BASE_URL is optional)
+/// `cargo run -p eval -- report [set.json]`: score the report prompts (same variables as `live`; exits 1 below 80%)
 /// `cargo run -p eval -- wer <reference.txt> <hypothesis.txt>`
 /// `cargo run -p eval -- ask <set.json>` (retrieval only, exits 1 below the 80% pass rate)
 #[tokio::main(flavor = "current_thread")]
@@ -60,6 +65,14 @@ async fn main() -> Result<()> {
             return print("ask", &eval::ask::run(&set)?);
         }
     }
+    if args.first().map(String::as_str) == Some("report") && args.len() <= 2 {
+        let set = match args.get(1) {
+            Some(p) => std::fs::read_to_string(p).context("read set")?,
+            None => REPORT_SET.to_string(),
+        };
+        let set = serde_json::from_str(&set).context("parse set")?;
+        return print("report", &eval::report::run(&set, &live_router()?).await?);
+    }
     if args.is_empty() || (args[0] == "live" && args.len() <= 2) {
         let set = match args.get(1) {
             Some(p) => std::fs::read_to_string(p).context("read set")?,
@@ -69,7 +82,7 @@ async fn main() -> Result<()> {
         return print("live", &eval::live::run(&set, &live_router()?).await?);
     }
     let [cmd, reference, hypothesis] = args.as_slice() else {
-        bail!("usage: eval [live [set.json]] | eval wer <reference.txt> <hypothesis.txt> | eval ask <set.json>");
+        bail!("usage: eval [live [set.json]] | eval report [set.json] | eval wer <reference.txt> <hypothesis.txt> | eval ask <set.json>");
     };
     if cmd != "wer" {
         bail!("unknown command {cmd}; try `wer`");
