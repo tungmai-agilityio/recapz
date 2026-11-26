@@ -1,6 +1,6 @@
 # Workspaces
 
-Status: **agreed with the maintainer (2026-11-25)**
+Status: **agreed with the maintainer (2026-11-25); built and merged (#594, #595, #598 to #605), all tickets closed (2026-11-26).**
 Intent: #428
 
 ## Problem

@@ -1,6 +1,6 @@
 # Browser recording
 
-Status: **agreed with the maintainer (2026-11-19)**
+Status: **agreed with the maintainer (2026-11-19); built and merged (#296 to #298, #302), all tickets closed.**
 Intent: #289
 
 ## Problem

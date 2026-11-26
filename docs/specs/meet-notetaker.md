@@ -1,4 +1,4 @@
-# Google Meet notetaker plan
+# Google Meet notetaker
 
 Status: **maintainer decisions recorded (2026-11-12/13); plan approved. Rows 2 to 15 of the PR table in
 section 10 are merged (#105 to #119); row 16, the live check with the maintainer, is the only open row.**
