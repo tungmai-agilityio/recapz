@@ -302,7 +302,7 @@ Assumptions made while building, moved from `docs/review-notes.md`. Items marked
 label, must be confirmed in the live check (row 16).
 
 ### Meet notetaker loop (assumptions)
-- The notetaker claims every `scheduled` meeting that has a join link, oldest first, up to `max_concurrent_calls` minus the calls already `joining` or `recording`. Calendar booking already creates the row about when the call starts, so the loop does not re-check the start time. Revisit if booking moves earlier than one minute.
+- The notetaker claims every `scheduled` meeting that has a join link, oldest first within a workspace and one call per workspace in turn (the workspace that has gone longest without a call first), up to `max_concurrent_calls` minus the calls already `joining` or `recording`. Calendar booking already creates the row about when the call starts, so the loop does not re-check the start time. Revisit if booking moves earlier than one minute.
 - Opt-out calls `purge_meeting`, which deletes the meeting row, so no `opted_out` status remains to show. Confirm that is the intended outcome; keeping a stub row would need a purge variant.
 - The "may be cut short" note set on a recovered recording is cleared by the transcribe job when it succeeds (it resets `error`). Say so if the note should survive.
 
