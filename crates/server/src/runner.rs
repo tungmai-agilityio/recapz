@@ -110,13 +110,16 @@ fn requeue_stale(data_dir: &std::path::Path, embedder_id: &str) -> anyhow::Resul
     Ok(n)
 }
 
-/// Deletes expired audio in every tenant; returns how many meetings were cleared.
+/// Deletes expired audio, and meetings past the transcript retention, in every tenant; returns how
+/// many were cleared.
 fn retention_sweep(data_dir: &std::path::Path, blobs: Option<&dyn Blobs>) -> anyhow::Result<usize> {
     let control = db::open_control(data_dir)?;
     let mut n = 0;
     for tenant in db::tenant_ids(&control)? {
         let conn = db::open_tenant(data_dir, &tenant)?;
-        n += recapz_core::retention::sweep(&conn, data_dir, &tenant, blobs, db::now_ms())?;
+        let now = db::now_ms();
+        n += recapz_core::retention::sweep(&conn, data_dir, &tenant, blobs, now)?;
+        n += recapz_core::retention::sweep_meetings(&conn, data_dir, &tenant, blobs, now)?;
     }
     Ok(n)
 }
@@ -148,7 +151,7 @@ pub fn spawn(
                 let (d, b) = (data_dir.clone(), blobs.clone());
                 match tokio::task::spawn_blocking(move || retention_sweep(&d, b.as_deref())).await {
                     Ok(Ok(n)) if n > 0 => {
-                        tracing::info!("retention: deleted audio of {n} meetings")
+                        tracing::info!("retention: cleared {n} meetings")
                     }
                     Ok(Ok(_)) => {}
                     Ok(Err(e)) => tracing::error!("retention sweep: {e:#}"),

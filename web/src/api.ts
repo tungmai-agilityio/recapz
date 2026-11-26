@@ -73,6 +73,15 @@ export const putAudioRetention = async (days: number): Promise<{ days: number }>
     method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ days }),
   }))).json()
 
+export const getTranscriptRetention = async (): Promise<{ days: number }> =>
+  (await check(await fetch('/api/settings/transcript-retention'))).json()
+
+/** Admin only: 90, 365, or 0 to keep. Meetings past the period are hard deleted. */
+export const putTranscriptRetention = async (days: number): Promise<{ days: number }> =>
+  (await check(await fetch('/api/settings/transcript-retention', {
+    method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ days }),
+  }))).json()
+
 export interface JoinSettings { join_rule: 'manual' | 'auto'; notetaker_name: string; join_message: string }
 
 export const getJoinSettings = async (): Promise<JoinSettings> =>

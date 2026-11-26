@@ -135,6 +135,38 @@ pub fn set_audio_retention_days(c: &Connection, days: u32) -> Result<()> {
     Ok(())
 }
 
+const TRANSCRIPT_RETENTION_DAYS: &str = "transcript_retention_days";
+/// The periods an admin can pick for transcripts and reports: 90 days, one year, or 0 for keep.
+pub const TRANSCRIPT_RETENTION_CHOICES: [u32; 3] = [0, 90, 365];
+
+/// Days a finished meeting (transcript, report, search rows and audio) is kept before it is hard
+/// deleted; 0 keeps it forever. The default and any missing or unreadable value mean keep, so
+/// nothing is ever deleted unasked.
+pub fn transcript_retention_days(c: &Connection) -> Result<u32> {
+    let v: Option<String> = c
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [TRANSCRIPT_RETENTION_DAYS],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(v.and_then(|v| v.parse().ok())
+        .filter(|d| TRANSCRIPT_RETENTION_CHOICES.contains(d))
+        .unwrap_or(0))
+}
+
+pub fn set_transcript_retention_days(c: &Connection, days: u32) -> Result<()> {
+    if !TRANSCRIPT_RETENTION_CHOICES.contains(&days) {
+        bail!("transcript retention is 90, 365 or 0 days");
+    }
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![TRANSCRIPT_RETENTION_DAYS, days.to_string()],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +246,24 @@ mod tests {
             90,
             "junk means the default"
         );
+    }
+
+    #[test]
+    fn transcript_retention_defaults_to_keep_and_only_takes_the_offered_periods() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        assert_eq!(transcript_retention_days(&c).unwrap(), 0);
+        set_transcript_retention_days(&c, 90).unwrap();
+        assert_eq!(transcript_retention_days(&c).unwrap(), 90);
+        set_transcript_retention_days(&c, 365).unwrap();
+        assert_eq!(transcript_retention_days(&c).unwrap(), 365);
+        assert!(set_transcript_retention_days(&c, 30).is_err());
+        assert_eq!(transcript_retention_days(&c).unwrap(), 365);
+        c.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('transcript_retention_days','7')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(transcript_retention_days(&c).unwrap(), 0, "junk means keep");
     }
 }

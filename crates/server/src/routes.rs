@@ -106,6 +106,10 @@ pub fn router_with_llm(
             "/api/settings/audio-retention",
             get(get_audio_retention).put(put_audio_retention),
         )
+        .route(
+            "/api/settings/transcript-retention",
+            get(get_transcript_retention).put(put_transcript_retention),
+        )
         .route("/api/usage", get(get_usage))
         .route("/api/workspaces", get(workspaces::list))
         .route("/api/workspaces/{id}/switch", post(workspaces::switch))
@@ -574,6 +578,45 @@ async fn put_audio_retention(
     })
     .await??;
     Ok(Json(AudioRetention { days: body.days }))
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct TranscriptRetention {
+    /// Days a finished meeting is kept before it is hard deleted: 90, 365, or 0 to keep it.
+    days: u32,
+}
+
+async fn get_transcript_retention(
+    State(app): State<App>,
+    jar: CookieJar,
+) -> Res<Json<TranscriptRetention>> {
+    let u = app.current_user(&jar).await?;
+    let days = app
+        .tenant(u.tenant_id.clone(), |c| {
+            recapz_core::settings::transcript_retention_days(c)
+        })
+        .await?;
+    Ok(Json(TranscriptRetention { days }))
+}
+
+/// Admin only. Meetings past the period are hard deleted at the next hourly sweep.
+async fn put_transcript_retention(
+    State(app): State<App>,
+    jar: CookieJar,
+    Json(body): Json<TranscriptRetention>,
+) -> Res<Json<TranscriptRetention>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can change retention"));
+    }
+    app.tenant(u.tenant_id.clone(), move |c| {
+        Ok(
+            recapz_core::settings::set_transcript_retention_days(c, body.days)
+                .map_err(|_| ApiError::BadRequest("transcript retention is 90, 365 or 0 days")),
+        )
+    })
+    .await??;
+    Ok(Json(TranscriptRetention { days: body.days }))
 }
 
 #[derive(Serialize, serde::Deserialize)]

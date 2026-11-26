@@ -439,3 +439,25 @@ test('action items save done, owner and due date, and show the owner and the cou
     ['PATCH', '/api/action-items/a2', '{"due_date":"2026-12-05"}'],
   ]))
 })
+
+test('Details shows the deletion date from the retention period, and nothing when meetings are kept', async () => {
+  const report = { summary: 'Plan.', decisions: [], open_questions: [], chapters: [], action_items: [], members: [] }
+  const day = 86_400_000
+  const ended = Date.UTC(2026, 0, 10, 12)
+  const run = (days: number, m = { ...meeting, ended_at: ended }) => {
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(
+      u.endsWith('/transcript') ? [] : u.endsWith('/report') ? report : u === '/api/settings/transcript-retention' ? { days } : m))))
+    show()
+  }
+  run(90)
+  const expected = new Date(ended + 90 * day).toLocaleDateString([], { dateStyle: 'medium' })
+  expect((await screen.findByText(/Deleted automatically on/)).textContent).toBe(`Deleted automatically on ${expected}`)
+  cleanup()
+  run(0)
+  await screen.findByText('Plan.')
+  expect(screen.queryByText(/Deleted automatically/)).toBeNull()
+  cleanup()
+  run(90, { ...meeting, ended_at: ended, status: 'transcribing' })
+  await screen.findByText('Weekly sync')
+  expect(screen.queryByText(/Deleted automatically/)).toBeNull()
+})
