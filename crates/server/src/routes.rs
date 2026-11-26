@@ -156,6 +156,8 @@ pub fn router_with_llm(
         )
         .route("/api/meetings/{id}/live-ask", post(live_ask::live_ask))
         .route("/api/ask", post(ask::ask))
+        .route("/api/participants", get(list_participants))
+        .route("/api/participants/purge", post(purge_participant))
         .route(
             "/api/documents",
             get(documents::list)
@@ -698,6 +700,68 @@ fn ensure_member(c: &Connection, u: &db::User) -> anyhow::Result<()> {
         params![u.id, u.email, u.name, u.role],
     )?;
     Ok(())
+}
+
+#[derive(Serialize)]
+struct Participant {
+    name: String,
+    meetings: i64,
+}
+
+/// Admin only. Named speakers (the person, not "Speaker 1") with the meetings they spoke in.
+async fn list_participants(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<Participant>>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can see participants"));
+    }
+    let out = app
+        .tenant(u.tenant_id.clone(), |c| {
+            Ok(c.prepare(
+                "SELECT min(trim(display_name)), count(DISTINCT meeting_id) FROM speakers
+                 WHERE trim(COALESCE(display_name, '')) <> '' GROUP BY lower(trim(display_name))
+                 ORDER BY lower(trim(display_name))",
+            )?
+            .query_map([], |r| {
+                Ok(Participant {
+                    name: r.get(0)?,
+                    meetings: r.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?)
+        })
+        .await?;
+    Ok(Json(out))
+}
+
+#[derive(Deserialize)]
+struct PurgeBody {
+    name: String,
+}
+
+/// Admin only. Hard deletes everything one participant said; reports and search are rebuilt by jobs.
+async fn purge_participant(
+    State(app): State<App>,
+    jar: CookieJar,
+    Json(body): Json<PurgeBody>,
+) -> Res<Json<serde_json::Value>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied(
+            "only an admin can delete a participant's speech",
+        ));
+    }
+    if body.name.trim().is_empty() {
+        return Err(ApiError::BadRequest("name is required"));
+    }
+    let (tenant, admin) = (u.tenant_id.clone(), u.id.clone());
+    let meetings = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            recapz_core::purge::purge_participant(c, &body.name)
+        })
+        .await?;
+    // IDs only, never the name or any transcript text.
+    tracing::info!(tenant = %tenant, member = %admin, meetings, "participant speech deleted");
+    Ok(Json(serde_json::json!({ "meetings": meetings })))
 }
 
 #[derive(Serialize)]

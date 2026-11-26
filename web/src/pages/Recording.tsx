@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { disconnectCalendar, getCalendar, getJoinSettings, putAudioRetention, putJoinSettings, type JoinSettings } from '../api'
+import { disconnectCalendar, getCalendar, getJoinSettings, getParticipants, purgeParticipant, putAudioRetention, putJoinSettings, type JoinSettings, type Participant } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -85,6 +85,52 @@ function JoinForm({ saved, admin }: { saved: JoinSettings; admin: boolean }) {
           </form>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Admin only: pick a named speaker and hard delete everything they said. */
+function ForgetPerson() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const people = useQuery({ queryKey: ['participants'], queryFn: getParticipants })
+  const [pick, setPick] = useState('')
+  const [asking, setAsking] = useState<Participant | null>(null)
+  const list = Array.isArray(people.data) ? people.data : []
+  const forget = useMutation({
+    mutationFn: purgeParticipant,
+    onSuccess: (r) => {
+      setAsking(null); setPick('')
+      toast(`Deleted everything ${asking?.name} said in ${r.meetings} ${r.meetings === 1 ? 'meeting' : 'meetings'}`)
+      qc.invalidateQueries()
+    },
+  })
+  return (
+    <div className="mt-4 frame frame-row">
+      <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+        <div>
+          <h2 className="font-semibold">Delete everything one participant said</h2>
+          <p className="mt-1 text-sm text-mute">Removes their lines from every transcript, then rebuilds reports and search without them. This cannot be undone.</p>
+        </div>
+        <div className="text-sm">
+          <label htmlFor="forget-person" className="block font-medium">Participant</label>
+          <select id="forget-person" className={`${inputClass} mt-1 w-full`} value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Choose a person</option>
+            {list.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+          {people.isError && <p role="alert" className="mt-1 text-bad">Could not load participants.</p>}
+          <div className="mt-3">
+            <Button variant="danger" disabled={!pick} onClick={() => setAsking(list.find((p) => p.name === pick) ?? null)}>Delete their speech</Button>
+          </div>
+        </div>
+      </div>
+      {asking && (
+        <ConfirmDialog title={`Delete everything ${asking.name} said?`} confirmLabel="Delete everything" busy={forget.isPending}
+          error={forget.isError ? 'Could not delete. Try again.' : undefined}
+          onConfirm={() => forget.mutate(asking.name)} onCancel={() => { setAsking(null); forget.reset() }}>
+          Their words are permanently removed from {asking.meetings} {asking.meetings === 1 ? 'meeting' : 'meetings'}, and those reports and search results are rebuilt without them. The recordings are not edited.
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
@@ -216,6 +262,7 @@ export function Recording() {
           </div>
         </div>
       )}
+      {storage.isAdmin && <ForgetPerson />}
       {asking && (
         <ConfirmDialog title="Disconnect Google Calendar?" confirmLabel="Disconnect" busy={off.isPending}
           error={off.isError ? 'Could not disconnect. Try again.' : undefined}
