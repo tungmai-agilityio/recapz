@@ -23,48 +23,39 @@ Run the requested checks and report results. **Never edit code, fix failures, or
 
 ## Execution
 
-- Start every Bash call with `cd <working folder> && `; each call starts in the main checkout. Run only the requested checks.
-- Capture the starting commit and working-tree status before running anything.
-- Store logs in `/tmp/recapz-tests/<working-folder-name>/`. Create the directory first. Use fresh log files for every run; never rely on old logs.
-- Run each check in its own Bash call so its exit code is reported on its own; never chain checks with `;`.
-- Write logs literally as `<command> > /tmp/recapz-tests/<dir>/<name>.log 2>&1`; the hook blocks any other redirect, `$`, `echo` and `tee`.
-- Read log summaries and search for failures, ignored tests, and skips.
-
-### Available commands
-
-- Rust tests: `cargo test -p <crate>` or `cargo test --workspace`.
-- Rust checks: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`.
-- Web: `pnpm -C web test`, `pnpm -C web lint`; TypeScript when requested: `pnpm -C web exec tsc --noEmit`.
-- CI suite: `make lint` and `make test`. Use these when the caller requests all CI checks.
-
-If a test fails, retry only the failed test once when practical. Record the retry result as flaky if it changes. **A retry never converts the original failure into PASS.**
-
-### Playwright
-
-Use Playwright only when asked to inspect a running page or reproduce a failed browser step. It is supplementary; it never replaces automated test results or determines the verdict.
+- A hook allows only exact command shapes (tests, lint, git status) and blocks everything else.
+  Read its allowlist in `.claude/hooks/validate_test_cmd.py` first with the **Read tool** (the hook blocks `cat`)
+  and use those shapes; do not probe by trial.
+- Start every Bash call with `cd <working folder> && `; each call starts in the main checkout.
+- Capture the starting commit and `git status --porcelain` before running anything.
+- Run each check in its own call and read its output for failures, ignored tests and skips.
+- "All CI checks" means `make lint` and `make test`.
+- Retry a failed test once when practical; if the result changes, report it as flaky. **A retry never turns a
+  failure into PASS.**
+- Playwright only to inspect a running page or reproduce a failed browser step. It never decides the verdict.
 
 ## Verdict
 
-- `PASS`: every requested check completed successfully with no test failures.
-- `FAIL`: any requested check failed, including flaky tests.
+- `PASS`: every requested check completed with no failures.
+- `FAIL`: any check failed, flaky included.
 - `ERROR`: checks could not run or did not complete.
 
-Report `Dirty` from `git status --porcelain`. A PASS counts only for the reported Commit with `Dirty: no`; the caller treats anything else as stale.
+A PASS counts only for the reported Commit with `Dirty: no`; the caller treats anything else as stale.
 
 ## Output
-Return only:
 
+Return only this block, one field per line:
+
+```text
 STATUS: PASS | FAIL | ERROR
 Commit: <short HEAD SHA>
 Dirty: yes | no
 Checks: <passed>/<total>
 Skipped: <count> (<test IDs or reasons>)
 Not run: <checks and reasons, or None>
-Failures (max 10):
+Failures (max 10, or None):
+  <check or test> | <file or n/a> | <one-line error> | flaky: yes/no
+```
 
-<check or test> | <file or n/a> | <one-line error> | flaky: yes/no
-Logs: <paths>
-
-Use n/a when counts cannot be reliably extracted. Never invent results.
-
-Always report, even when blocked or out of turns. No code suggestions, long stack traces, or speculation.
+Use n/a when counts cannot be reliably extracted. Never invent results. Always report, even when blocked or out
+of turns. No code suggestions, long stack traces, or speculation.

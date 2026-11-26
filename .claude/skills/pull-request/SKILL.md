@@ -1,45 +1,42 @@
 ---
 name: pull-request
-description: Use for the full PR lifecycle: branch, push, open, merge checklist and post-merge local cleanup, including the gh account rule.
+description: Use for the full PR lifecycle: branch, push, open, merge checklist and post-merge local cleanup.
 ---
 
 # Pull request
 
-## Rules for branches
+Naming, commit, title, description and merge-message conventions live in `CONTRIBUTING.md`; autonomy and the
+critical-change rules live in the delivery pipeline doc. This skill adds only the gates and the order.
 
-- Merge your own PRs under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`; escalate only when the change is critical.
-- Docs-only PRs (Markdown and `CLAUDE.md` only; `.claude/`, config and scripts count as code) skip `test-runner` and `code-reviewer`.
-- Branch names are `<type>/<short-kebab-name>` with the Conventional Commit type, plus the ticket code when there is a ticket: `<type>/T-<NNN>-<slug>` (`feat/T-042-google-sign-in`; `feat/google-sign-in`, `fix/upload-size-limit`, `chore/ci-cache`, `docs/spec-update`). Never a user prefix or a tool-suggested name: rename the branch before the first push.
-- Branch names, titles, bodies and commits carry no AI mentions or tool trailers ("Security & Privacy" in `CLAUDE.md`).
-- One task, one concern, one PR. Do not deliver a milestone in one PR.
+## Open
 
-## Create
-
-1. `git fetch origin main && git switch -c <type>/<short-name> origin/main`
-2. Before pushing: confirm the handoff cites a `test-runner` `STATUS: PASS` for the current HEAD with `Dirty: no`, and a `code-reviewer` `APPROVE` (docs-only PRs skip both; check `git diff --name-only origin/main` lists only docs); if HEAD moved since, stop and return to the main session. This skill never runs tests. Then `node scripts/pr-size.mjs origin/main`. Over 800 source lines: stop and split, or ask for the `size-exception` label.
-3. `git push -u origin <branch>`, then `gh pr create` (ready for review, not draft; `gh pr edit` to update) with the title `T-<NNN> type(scope): summary` for a ticket (`type: description` with no ticket; Conventional Commits, at most 72 characters, no trailing period); it becomes the squashed commit on `main`. Commit subjects on the branch use the same format.
-4. Body sections, in plain words, written as bullet points rather than paragraphs: Summary (what and why, as bullet points, one per change), Testing (what ran and what did not, also as bullets), and a one-line reason for every new dependency.
-5. If review fixes change the code after the PASS, re-run `test-runner` and the reviewer before the merge.
+1. Branch from a fresh `origin/main`. Rename a tool-suggested branch name before the first push.
+2. Gate before pushing: a `test-runner` `STATUS: PASS` and a `code-reviewer` `APPROVE` for the current HEAD with
+   `Dirty: no`. Docs-only changes (Markdown and `CLAUDE.md` only) skip both; anything under `.claude/`, config or
+   scripts is code. If HEAD moved since the gate, stop. This skill never runs tests.
+3. Run the size and commit checks `CONTRIBUTING.md` lists. Over 800 source lines: split, or ask for `size-exception`.
+4. Push and open the PR ready for review (not draft). Body in bullets: Summary (one per change), Testing (what ran
+   and what did not), a one-line reason per new dependency, and "Decisions needing the maintainer" (exactly `None`
+   unless one is open; the auto-merge check refuses a PR without it).
+5. Any code change after the gate re-runs `test-runner` and the reviewer.
 
 ## Merge
 
-Ticket PRs merge through `ship-ticket` section 6. For any other PR (for example a docs-only PR), check every item
-before merging:
+Ticket PRs merge through `ship-ticket`. For any other PR, merge only when all hold:
 
-1. `gh pr view <n> --json state,isDraft,baseRefName,mergeable,labels,title` — must be open, not draft, target `main`, and be mergeable.
-2. `gh pr checks <n>` shows every check passing, and the recorded `test-runner` PASS matches the PR's HEAD (docs-only PRs skip the PASS). If it says "no checks reported" and `gh run list --commit <HEAD>` is empty about 2 minutes after the last push, there is no CI: the local PASS stands in (`--local-pass` below).
-3. The PR body confirms `code-reviewer` approved, or that every blocker raised is fixed (docs-only PRs skip this).
-4. Size is within the guide (about 300 small, 600 medium, warning above 800 source lines), or the PR has the `size-exception` label.
-5. The branch, title and every commit subject follow CONTRIBUTING.md and no commit carries a tool trailer.
-6. The change is not critical under "Autonomy and escalation" in `docs/specs/delivery-pipeline.md`, and `scripts/automerge-check.sh` either printed `ELIGIBLE` for this PR's current HEAD (`--reviewer-risk na` for a docs-only PR; `--local-pass <sha>` when there is no CI) or gave only non-critical denylisted-path reasons, which you name in the audit comment.
+- Open, not draft, targets `main`, mergeable.
+- CI passes on the HEAD. No CI (no checks and no runs about 2 minutes after the last push) means the local PASS
+  stands in.
+- Reviewer approved or every blocker is fixed (docs-only skips), size is within limits, conventions hold.
+- The change is not critical, and `scripts/automerge-check.sh` says `ELIGIBLE` for this HEAD, or gives only
+  non-critical denylisted-path reasons that you name in the audit comment.
 
-Only if all hold, run `gh pr merge <n> --squash --delete-branch --match-head-commit <the full sha you checked> --subject "<PR title>" --body "$(printf '%s\n\nCloses #%s' "<2-3 line summary>" <issue>)"` (`Refs` instead of `Closes` for a partial PR; `<issue>` is the ticket number, not the PR number). The explicit subject and body keep `main` to the title, a short summary and the issue line; the PR body is the review record and is not copied. Never use `--admin`, `--auto`, a merge commit or rebase merge, or any flag that skips checks.
+Merge with the explicit squash message from `CONTRIBUTING.md`, plus `--delete-branch` and
+`--match-head-commit <the sha you checked>`. Never `--admin`, `--auto`, a merge commit, a rebase merge, or any
+flag that skips checks.
 
 ## After the merge
 
-The squash commit on `main` is the only record; the branch is spent. Clean up the local checkout:
-
-1. `git switch main && git fetch origin main --prune && git merge --ff-only origin/main` (fast-forward only, never commit on `main`).
-2. `git branch -D <branch>` (squash merges are never seen as merged by `git branch -d`).
-3. Delete the remote branch only if GitHub did not already: `git push origin --delete <branch>`.
-4. If a worktree was created: `git worktree remove <path>`, `git worktree prune`, and check `git worktree list` shows no leftovers.
+- Fast-forward local `main` to `origin/main`; never commit on `main`.
+- Delete the local branch with `-D` (git never sees a squash-merged branch as merged), the remote branch if GitHub
+  did not, and any worktree used, leaving `git worktree list` clean.
