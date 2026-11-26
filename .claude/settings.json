@@ -3,7 +3,13 @@
     "allow": [
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)",
+      "Bash(scripts/automerge-check.sh *)",
+      "Bash(scripts/automerge-pause.sh *)",
+      "Bash(./scripts/check-commits.sh *)",
+      "Bash(node scripts/pr-size.mjs *)"
     ],
     "deny": [
       "Bash(git push origin main*)",
