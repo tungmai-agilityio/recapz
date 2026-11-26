@@ -56,6 +56,9 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 - Members (admin only, 403 otherwise): `GET /api/members`, `POST /api/members/invites` (email, role; returns the
   sign-in link), `DELETE /api/members/invites/{email}`, `PATCH /api/members/{id}` (role), `DELETE /api/members/{id}`.
   Removing the last admin or yourself is refused.
+- Workspaces: `GET /api/workspaces` (accepts pending invites for the person's email, then lists id, name, role and which
+  one is current), `POST /api/workspaces/{id}/switch` (403 without a membership; sets the session's workspace and the one
+  used at the next sign-in). `GET /api/me` includes `workspace { id, name }`.
 - `POST /api/ask`, documents, settings, usage, calendar connect. The list above is a guide, not exhaustive: the
   router is `crates/server/src/routes.rs`. Not found there on 2026-11-25: `GET /api/events`, participant purge (*unverified*: only a text search of `routes.rs`).
 
