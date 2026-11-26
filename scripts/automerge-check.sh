@@ -1,26 +1,32 @@
 #!/usr/bin/env bash
 # Decides whether a ticket PR may be merged without the maintainer, per docs/specs/delivery-pipeline.md (Merge).
 # Usage: scripts/automerge-check.sh <pr> --reviewed-sha <full 40-char sha> --implementer-risk low|high --reviewer-risk low|high|na
+#        [--local-pass <full sha of the test-runner PASS>]
 # `--reviewer-risk na` is accepted only when every changed file is Markdown (docs-only PRs skip the reviewer).
+# No CI (no check reported and no run for HEAD): the local test-runner PASS on HEAD plus the reviewer approval of HEAD
+# stand in; a docs-only PR needs neither. When CI reports, --local-pass is ignored. Right after a push a repo with
+# CI can briefly report nothing, so callers wait about 2 minutes after the last push before running this.
 # Prints ELIGIBLE (exit 0) or one ESCALATE line per reason (exit 1). Never merges. Needs gh, jq, perl and GH_TOKEN.
 # Every failure to read data counts as a reason to escalate. Merge only with `gh pr merge --match-head-commit <sha>`.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . scripts/automerge-lib.sh
 
-pr="${1:?usage: automerge-check.sh <pr> --reviewed-sha <sha> --implementer-risk low|high --reviewer-risk low|high|na}"
+pr="${1:?usage: automerge-check.sh <pr> --reviewed-sha <sha> --implementer-risk low|high --reviewer-risk low|high|na [--local-pass <sha>]}"
 shift
-sha="" impl="" rev=""
+sha="" impl="" rev="" localpass=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --reviewed-sha) sha="${2:-}"; shift 2 ;;
     --implementer-risk) impl="${2:-}"; shift 2 ;;
     --reviewer-risk) rev="${2:-}"; shift 2 ;;
+    --local-pass) localpass="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 reasons=()
+nondoc=1
 no() { reasons+=("$1"); }
 
 if automerge_paused; then no "auto-merge is paused or its state cannot be read (AUTOMERGE_PAUSED)"; fi
@@ -60,17 +66,28 @@ else
   [ "$rev" = low ] || no "reviewer did not grade the risk low"
 fi
 
-checks=$(gh pr checks "$pr" --json name,bucket) || checks=""
-while IFS= read -r c; do
-  [ -n "$c" ] && no "CI check did not pass on HEAD: $c"
-done < <(ci_failures <<<"${checks:-null}")
+noci=""
+if checks=$(gh pr checks "$pr" --json name,bucket 2>/dev/null); then
+  while IFS= read -r c; do
+    [ -n "$c" ] && no "CI check did not pass on HEAD: $c"
+  done < <(ci_failures <<<"$checks")
+elif [[ "$(gh pr checks "$pr" 2>&1)" == *"no checks reported"* ]] &&
+  [ "$(gh run list --commit "$head" --json databaseId --jq length 2>/dev/null)" = 0 ]; then
+  noci=1
+  if [ "$rev" != na ] || [ "$nondoc" != 0 ]; then
+    [ "$localpass" = "$head" ] || no "no CI result for HEAD and no local test-runner PASS for it (--local-pass)"
+  fi
+else
+  no "unreadable check results"
+fi
 
 # The head must not have moved while the checks above were read.
 head2=$(gh pr view "$pr" --json headRefOid --jq .headRefOid) || head2=""
 [ "$head2" = "$head" ] || no "HEAD changed while checking ($head -> ${head2:-unknown})"
 
 if [ ${#reasons[@]} -eq 0 ]; then
-  echo ELIGIBLE
+  if [ -n "$noci" ]; then echo "ELIGIBLE (no CI result for HEAD: local test-runner PASS and code-reviewer APPROVE stand in)"
+  else echo ELIGIBLE; fi
   exit 0
 fi
 printf 'ESCALATE: %s\n' "${reasons[@]}"

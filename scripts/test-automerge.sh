@@ -56,7 +56,11 @@ case "$1 $2" in
       if [ -f "$F/head2" ]; then cat "$F/head2"; else jq -r .headRefOid "$F/view.json"; fi
     else cat "$F/view.json"; fi ;;
   "api --paginate") [ -f "$F/files.fail" ] && exit 1; cat "$F/files.txt" ;;
-  "pr checks") [ -f "$F/checks.fail" ] && exit 1; cat "$F/checks.json" ;;
+  "pr checks")
+    [ -f "$F/checks.fail" ] && exit 1
+    [ -f "$F/checks.none" ] && { echo "no checks reported on the 'x' branch" >&2; exit 1; }
+    cat "$F/checks.json" ;;
+  "run list") [ -f "$F/runs.fail" ] && exit 1; cat "$F/runs" 2>/dev/null || echo 0 ;;
   "variable list") [ -f "$F/varlist.fail" ] && exit 1; exit 0 ;;
   "pr list") exit 0 ;;
   *) echo "stub gh: unexpected: $*" >&2; exit 99 ;;
@@ -100,6 +104,15 @@ scenario "reviewer risk high" 1 ':' --reviewed-sha "$sha" --implementer-risk low
 scenario "docs-only PR, no reviewer" 0 'echo "F docs/ui-parity.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
 scenario "reviewer na with code" 1 ':' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
 scenario "reviewer na with CLAUDE.md" 1 'echo "F CLAUDE.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
+L=(--reviewed-sha "$sha" --implementer-risk low --reviewer-risk low)
+scenario "no CI, local pass on HEAD" 0 'touch $F/checks.none' "${L[@]}" --local-pass "$sha"
+scenario "no CI, no local pass" 1 'touch $F/checks.none'
+scenario "no CI, local pass for another commit" 1 'touch $F/checks.none' "${L[@]}" --local-pass "$sha2"
+scenario "no check yet but a run exists for HEAD" 1 'touch $F/checks.none; echo 1 > $F/runs' "${L[@]}" --local-pass "$sha"
+scenario "no check and run list fails" 1 'touch $F/checks.none; touch $F/runs.fail' "${L[@]}" --local-pass "$sha"
+scenario "no CI, docs-only PR" 0 'touch $F/checks.none; echo "F docs/deploy.md" > $F/files.txt' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na
+scenario "no CI, na with code, local pass" 1 'touch $F/checks.none' --reviewed-sha "$sha" --implementer-risk low --reviewer-risk na --local-pass "$sha"
+scenario "CI fails, local pass ignored" 1 'echo "${all_pass/\"rust\",\"bucket\":\"pass\"/\"rust\",\"bucket\":\"fail\"}" > $F/checks.json' "${L[@]}" --local-pass "$sha"
 # scripts/ci-changes.sh: which changed paths let ci.yml skip the rust and web steps.
 changes() { printf '%s\n' "$@" | scripts/ci-changes.sh; }
 want_changes() { # expected path...
@@ -118,6 +131,6 @@ want_changes true Cargo.lock
 want_changes true docs/old.md scripts/x.sh
 want_changes true NOTES.md
 n=$((n + 1)); [ "$(scripts/ci-changes.sh </dev/null)" = code=true ] || { echo "empty list must run CI"; fail=1; }
-[ "$n" = 91 ] || { echo "ran $n cases, want 91"; fail=1; }
+[ "$n" = 99 ] || { echo "ran $n cases, want 99"; fail=1; }
 [ "$fail" = 0 ] && echo "automerge: $n cases pass"
 exit "$fail"
