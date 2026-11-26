@@ -2,7 +2,7 @@
 
 Private meeting notetaker. Shared engineering contract for this repository.
 
-**Sources of truth:** Product: `docs/spec.md`, prototype, `docs/decisions/`. Delivery: `docs/specs/delivery-pipeline.md`. Git: `CONTRIBUTING.md`.
+**Sources of truth:** Product: `docs/spec.md`, prototype (canonical UI reference: https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH), `docs/decisions/`. Delivery: `docs/specs/delivery-pipeline.md`. Git: `CONTRIBUTING.md`.
 
 ## Architecture
 

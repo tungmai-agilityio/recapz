@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Read-only review of a completed branch or PR. Checks correctness, security, regressions, scope, and the CLAUDE.md rules. Run after test-runner passes on the current HEAD and before opening a PR. Re-review fixes in the same session. Skip docs-only changes and small direct edits.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Artifact
 model: sonnet
 effort: medium
 maxTurns: 25
@@ -20,7 +20,7 @@ Review one branch or PR. **Read-only:** never edit, commit, or push.
    - **Data integrity:** additive migrations only; never edit merged migrations; hard-delete user data and associated search/audio records.
    - **LLM changes:** prompt/model-routing changes require reported `cargo run -p eval` results and a prompt version bump where applicable.
    - **Regressions:** inspect callers of changed shared functions, API types, migrations, and shared UI components.
-   - **Product/UI:** follow Recapz specs and prototype; use design tokens, no hex colors; amber `signal` only for playhead, recording state and focus. If the prototype is unavailable, mark visual verification unverified.
+   - **Product/UI:** follow Recapz specs and prototype; use design tokens, no hex colors; amber `signal` only for playhead, recording state and focus. Read the canonical prototype with the Artifact tool (`action: "read"`, https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH); it is read-only for you, never publish. If the prototype is unavailable, mark visual verification unverified.
    - **Repository rules:** check `CLAUDE.md`, clean-room requirements, branch/PR naming, and scope limits. Always run `./scripts/check-commits.sh <range> "<PR title>" "<branch>"` (for a PR, take title and branch from `gh pr view`).
 5. Review only changed code and affected callers. Do not report formatter, lint, or Clippy issues already covered by quality gates.
 

@@ -72,10 +72,10 @@ function JoinForm({ saved, admin }: { saved: JoinSettings; admin: boolean }) {
               {field(/join rule/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
             </fieldset>
             <label htmlFor="notetaker-name" className="mt-4 block font-medium">Notetaker name</label>
-            <input id="notetaker-name" className={`${inputClass} mt-1`} value={v.notetaker_name} onChange={set('notetaker_name')} />
+            <input id="notetaker-name" className={`${inputClass} mt-1 w-full`} value={v.notetaker_name} onChange={set('notetaker_name')} />
             {field(/notetaker name/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
             <label htmlFor="join-message" className="mt-4 block font-medium">Join message</label>
-            <textarea id="join-message" rows={3} className={`${inputClass} mt-1`} value={v.join_message} onChange={set('join_message')} />
+            <textarea id="join-message" rows={3} className={`${inputClass} mt-1 w-full`} value={v.join_message} onChange={set('join_message')} />
             <p className="mt-1 text-mute">{'{name}'} is filled in. The "opt out" wording is always kept.</p>
             {field(/join message/) && <p role="alert" className="mt-1 text-bad">{err}</p>}
             <p className="mt-2 font-medium">Preview</p>
@@ -173,7 +173,7 @@ export function Recording() {
           {storage.isAdmin && storage.days !== undefined && (
             <div className="text-sm @2xl:col-start-2">
               <label htmlFor="audio-retention" className="block font-medium">Delete audio after</label>
-              <select id="audio-retention" className={`${inputClass} mt-1`} value={storage.days} disabled={keep.isPending}
+              <select id="audio-retention" className={`${inputClass} mt-1 w-full`} value={storage.days} disabled={keep.isPending}
                 onChange={(e) => keep.mutate(Number(e.target.value))}>
                 {[...new Set([30, 90, 180, 365, storage.days])].sort((a, b) => a - b).filter((d) => d > 0).map((d) => <option key={d} value={d}>{d} days</option>)}
                 <option value={0}>Keep until the meeting is deleted</option>
