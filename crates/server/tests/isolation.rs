@@ -167,6 +167,15 @@ async fn fixture() -> Fixture {
                 [text],
             )
             .unwrap();
+            // A real recording, so the audio route's 404 can only come from the workspace boundary.
+            t.execute(
+                "UPDATE meetings SET audio_path = 'a.wav' WHERE id = 'm2'",
+                [],
+            )
+            .unwrap();
+            let dir = db::tenant_dir(dir.path(), tid);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("a.wav"), b"RIFF").unwrap();
             t.execute(
                 "INSERT INTO calendar_events (id, member_id, external_id, title, starts_at, ends_at) VALUES ('e2', ?1, 'x', 'Title', 0, 1)",
                 [&uid],
@@ -282,6 +291,7 @@ async fn every_id_route_answers_404_for_the_other_workspace_and_changes_nothing(
     for uri in [
         "/api/meetings/m2",
         "/api/meetings/m2/transcript",
+        "/api/meetings/m2/audio",
         "/api/meetings/m2/live",
     ] {
         // Status only: the live view is a stream that never ends.
