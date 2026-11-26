@@ -36,6 +36,7 @@ export interface ActionItem {
   due_date: string | null
   done: boolean
   source_ms: number | null
+  owner_id: string | null
 }
 
 export interface ReportData {
@@ -44,6 +45,8 @@ export interface ReportData {
   open_questions: string[]
   chapters: { start_ms: number; title: string }[]
   action_items: ActionItem[]
+  /** Members who can see the meeting: the owner choices. */
+  members: { id: string; name: string }[]
 }
 
 export class Unauthorized extends Error {}
@@ -116,6 +119,11 @@ export const setMeetingShare = async (id: string, share: MeetingShare): Promise<
 /** Only before the notetaker joins; the server answers 409 afterwards and 403 for a non-owner. */
 export const setMeetingLanguage = async (id: string, language: MeetingLanguage): Promise<{ language: MeetingLanguage }> =>
   (await check(await fetch(`/api/meetings/${id}/language`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ language }) }))).json()
+
+/** Send only the fields that change; `null` clears the owner or the due date. 404 when the meeting is not visible. */
+export const updateActionItem = async (id: string, patch: { done?: boolean; owner_id?: string | null; due_date?: string | null }) => {
+  await check(await fetch(`/api/action-items/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify(patch) }))
+}
 
 /** Queues a fresh report; the server answers 409 unless the meeting is ready and 403 for a non-owner. */
 export const regenerateReport = async (id: string) => { await check(await fetch(`/api/meetings/${id}/report/regenerate`, { method: 'POST', headers: csrf() })) }

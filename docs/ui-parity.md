@@ -133,7 +133,7 @@ non-owners once the list returns the owner.
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
 - [ ] Summary: prose, Decisions, Open questions with timestamp link, Action items "n/m done" with checkbox, owner
       face, due date, strike-through when done
-      (built except owner face: the report API has no owner. Done state is shown read-only: no endpoint saves it)
+      (built: checkbox, owner select with face, due date input and "n/m done" save through PATCH /api/action-items/{id} (#410); no prototype screenshot compared yet)
       Checked by eye on 2026-11-20 (#327): prose, Decisions and Open questions show real data at 1280 and 390 px.
       Not ticked: the prototype uses small uppercase muted section labels, a blue square bullet with a hairline
       between Decisions, and an amber dot with a mono timestamp link on Open questions; the app uses larger

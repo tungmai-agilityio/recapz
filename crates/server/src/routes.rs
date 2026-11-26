@@ -132,6 +132,7 @@ pub fn router_with_llm(
                 .patch(update_meeting)
                 .delete(delete_meeting),
         )
+        .route("/api/action-items/{id}", patch(update_action_item))
         .route("/api/meetings/{id}/language", patch(set_meeting_language))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
         .route("/api/meetings/{id}/report", get(meeting_report))
@@ -1136,6 +1137,8 @@ struct ReportOut {
     open_questions: Vec<String>,
     chapters: Vec<serde_json::Value>,
     action_items: Vec<ActionItemOut>,
+    /// Members who can see the meeting: the owner choices.
+    members: Vec<MemberOut>,
     model: Option<String>,
     created_at: Option<i64>,
 }
@@ -1147,6 +1150,94 @@ struct ActionItemOut {
     due_date: Option<String>,
     done: bool,
     source_ms: Option<i64>,
+    owner_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct MemberOut {
+    id: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct ActionItemPatch {
+    done: Option<bool>,
+    /// `null` clears the owner; absent leaves it.
+    #[serde(default, deserialize_with = "some_null")]
+    owner_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "some_null")]
+    due_date: Option<Option<String>>,
+}
+
+fn some_null<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(d).map(Some)
+}
+
+/// Any member who can see the meeting may edit its action items.
+async fn update_action_item(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    Json(b): Json<ActionItemPatch>,
+) -> Res<Json<serde_json::Value>> {
+    let u = app.current_user(&jar).await?;
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        let mid: Option<String> = c
+            .query_row(
+                "SELECT meeting_id FROM action_items WHERE id = ?1",
+                [&id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let mid = match mid {
+            Some(m) if visible_meeting(c, &u.id, &m)?.is_some() => m,
+            _ => return Ok(Err(ApiError::NotFound)),
+        };
+        if let Some(Some(o)) = &b.owner_id {
+            if visible_meeting(c, o, &mid)?.is_none() {
+                return Ok(Err(ApiError::BadRequest(
+                    "owner must be a member who can see the meeting",
+                )));
+            }
+        }
+        if let Some(Some(d)) = &b.due_date {
+            let ok = d.len() == 10
+                && d.char_indices().all(|(i, ch)| {
+                    if i == 4 || i == 7 {
+                        ch == '-'
+                    } else {
+                        ch.is_ascii_digit()
+                    }
+                });
+            if !ok {
+                return Ok(Err(ApiError::BadRequest("due_date must be YYYY-MM-DD")));
+            }
+        }
+        if let Some(done) = b.done {
+            c.execute(
+                "UPDATE action_items SET done = ?1 WHERE id = ?2",
+                params![done as i64, id],
+            )?;
+        }
+        if let Some(o) = &b.owner_id {
+            c.execute(
+                "UPDATE action_items SET owner_member_id = ?1 WHERE id = ?2",
+                params![o, id],
+            )?;
+        }
+        if let Some(d) = &b.due_date {
+            c.execute(
+                "UPDATE action_items SET due_date = ?1 WHERE id = ?2",
+                params![d, id],
+            )?;
+        }
+        Ok(Ok(serde_json::json!({})))
+    })
+    .await?
+    .map(Json)
 }
 
 fn json_list<T: serde::de::DeserializeOwned>(raw: Option<String>) -> Vec<T> {
@@ -1189,7 +1280,7 @@ async fn meeting_report(
                 return Ok(Some(None));
             };
             let mut s = c.prepare(
-                "SELECT id, text, due_date, done, source_ms FROM action_items
+                "SELECT id, text, due_date, done, source_ms, owner_member_id FROM action_items
                  WHERE meeting_id = ?1 ORDER BY source_ms, id",
             )?;
             let action_items = s
@@ -1200,15 +1291,32 @@ async fn meeting_report(
                         due_date: r.get(2)?,
                         done: r.get::<_, i64>(3)? != 0,
                         source_ms: r.get(4)?,
+                        owner_id: r.get(5)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
+            let mut members = Vec::new();
+            let mut s = c.prepare(
+                "SELECT id, COALESCE(name, email) FROM members WHERE status = 'active' ORDER BY 2",
+            )?;
+            for m in s.query_map([], |r| {
+                Ok(MemberOut {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                })
+            })? {
+                let m = m?;
+                if visible_meeting(c, &m.id, &id)?.is_some() {
+                    members.push(m);
+                }
+            }
             Ok(Some(Some(ReportOut {
                 summary: summary.unwrap_or_default(),
                 decisions: json_list(dec),
                 open_questions: json_list(q),
                 chapters: json_list(ch),
                 action_items,
+                members,
                 model,
                 created_at,
             })))
