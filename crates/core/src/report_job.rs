@@ -98,10 +98,17 @@ pub fn handle(c: &Connection, job: &Job, model: &dyn ReportModel) -> Result<()> 
                 now
             ],
         )?;
-        c.execute("DELETE FROM action_items WHERE meeting_id=?1", [mid])?;
+        // Items a member marked done or gave an owner stay as they are; a regenerated item with the
+        // same text is not added again. ponytail: a due-date-only edit is not tracked (needs a column), so it is replaced.
+        c.execute(
+            "DELETE FROM action_items WHERE meeting_id=?1 AND done=0 AND owner_member_id IS NULL",
+            [mid],
+        )?;
         for a in &data.action_items {
             c.execute(
-                "INSERT INTO action_items (id, meeting_id, text, due_date, source_ms) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO action_items (id, meeting_id, text, due_date, source_ms)
+                 SELECT ?1, ?2, ?3, ?4, ?5
+                 WHERE NOT EXISTS (SELECT 1 FROM action_items WHERE meeting_id=?2 AND text=?3)",
                 params![new_id(), mid, a.text, a.due, a.source_ms],
             )?;
         }
@@ -248,6 +255,37 @@ mod tests {
             })
             .unwrap();
         assert_eq!(st, "ready");
+    }
+
+    #[test]
+    fn regenerating_keeps_edited_action_items_and_replaces_untouched_ones() {
+        let (_d, c, job) = setup();
+        handle(&c, &job, &Fake(RefCell::new(vec![]))).unwrap();
+        c.execute("UPDATE action_items SET done=1, owner_member_id='u1'", [])
+            .unwrap();
+        handle(&c, &job, &Fake(RefCell::new(vec![]))).unwrap();
+        let rows: Vec<(i64, Option<String>)> = c
+            .prepare("SELECT done, owner_member_id FROM action_items")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(
+            rows,
+            vec![(1, Some("u1".to_string()))],
+            "edited item kept once"
+        );
+        c.execute("UPDATE action_items SET done=0, owner_member_id=NULL", [])
+            .unwrap();
+        let old: String = c
+            .query_row("SELECT id FROM action_items", [], |r| r.get(0))
+            .unwrap();
+        handle(&c, &job, &Fake(RefCell::new(vec![]))).unwrap();
+        let new: String = c
+            .query_row("SELECT id FROM action_items", [], |r| r.get(0))
+            .unwrap();
+        assert_ne!(old, new, "untouched item is replaced");
     }
 
     #[test]

@@ -87,7 +87,8 @@ test('shows the report sections and chapter and action-item times seek the audio
     decisions: ['Ship on Friday'],
     open_questions: ['Who owns QA?'],
     chapters: [{ start_ms: 65000, title: 'Planning' }],
-    action_items: [{ id: 'a1', text: 'Write the notes', due_date: '2026-12-01', done: false, source_ms: 125000 }],
+    action_items: [{ id: 'a1', text: 'Write the notes', due_date: '2026-12-01', done: false, source_ms: 125000, owner_id: null }],
+    members: [],
   }
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? report : meeting))))
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
@@ -95,7 +96,7 @@ test('shows the report sections and chapter and action-item times seek the audio
   expect(await screen.findByText('We agreed the plan.')).toBeTruthy()
   expect(screen.getByText('Ship on Friday')).toBeTruthy()
   expect(screen.getByText('Who owns QA?')).toBeTruthy()
-  expect(screen.getByText('due 2026-12-01')).toBeTruthy()
+  expect((screen.getByLabelText('Due date of Write the notes') as HTMLInputElement).value).toBe('2026-12-01')
   expect(screen.getByText('Action items · 0/1 done')).toBeTruthy()
   const audio = container.querySelector('audio')!
   fireEvent.click(screen.getByText('2:05'))
@@ -308,7 +309,7 @@ const people = [
   { id: 3, speaker_id: 'a', speaker_name: 'Khoa', start_ms: 40000, end_ms: 50000, text: 'Bye' },
   { id: 4, speaker_id: null, speaker_name: null, start_ms: 50000, end_ms: 100000, text: 'Unlabelled' },
 ]
-const withReport = { summary: 'Plan agreed', decisions: [], open_questions: [], chapters: [], action_items: [] }
+const withReport = { summary: 'Plan agreed', decisions: [], open_questions: [], chapters: [], action_items: [], members: [] }
 // Meeting order is Sarah then Khoa, while Khoa speaks first in the transcript.
 const speakers = [{ id: 'b', name: 'Sarah' }, { id: 'a', name: 'Khoa' }]
 const serve = (segs: unknown[]) =>
@@ -412,4 +413,29 @@ test('the owner changes who the meeting is shared with; anyone else only reads i
   await screen.findByText('Weekly sync')
   expect(screen.queryByRole('combobox', { name: 'Shared with' })).toBeNull()
   expect((await screen.findByText(/Shared with/)).textContent).toContain('Attendees')
+})
+
+test('action items save done, owner and due date, and show the owner and the count', async () => {
+  const report = {
+    summary: 'S', decisions: [], open_questions: [], chapters: [],
+    action_items: [{ id: 'a1', text: 'Write the notes', due_date: null, done: true, source_ms: null, owner_id: 'u2' }, { id: 'a2', text: 'Send it', due_date: null, done: false, source_ms: null, owner_id: null }],
+    members: [{ id: 'u1', name: 'Amy' }, { id: 'u2', name: 'Bob' }],
+  }
+  const calls: [string, string | undefined, string | undefined][] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    if (init?.method === 'PATCH') { calls.push([init.method, u, init.body as string]); return new Response('{}') }
+    return new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? report : meeting))
+  }))
+  show()
+  expect(await screen.findByText('Action items · 1/2 done')).toBeTruthy()
+  expect((screen.getByLabelText('Owner of Write the notes') as HTMLSelectElement).value).toBe('u2')
+  expect(screen.getByRole('img', { name: 'Bob' })).toBeTruthy()
+  fireEvent.click(screen.getByLabelText('Done: Send it'))
+  fireEvent.change(screen.getByLabelText('Owner of Send it'), { target: { value: 'u1' } })
+  fireEvent.change(screen.getByLabelText('Due date of Send it'), { target: { value: '2026-12-05' } })
+  await vi.waitFor(() => expect(calls).toEqual([
+    ['PATCH', '/api/action-items/a2', '{"done":true}'],
+    ['PATCH', '/api/action-items/a2', '{"owner_id":"u1"}'],
+    ['PATCH', '/api/action-items/a2', '{"due_date":"2026-12-05"}'],
+  ]))
 })

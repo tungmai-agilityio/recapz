@@ -1499,3 +1499,100 @@ async fn sharing_decides_who_reaches_every_meeting_route() {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(share(), "attendees");
 }
+
+#[tokio::test]
+async fn action_items_are_edited_by_members_who_see_the_meeting() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    for e in ["amy@example.com", "bob@example.com"] {
+        control
+            .execute(
+                "INSERT INTO invites (email, tenant_id, role) VALUES (?1, ?2, 'member')",
+                rusqlite::params![e, tid],
+            )
+            .unwrap();
+    }
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, bob, _) = send(&app, login("bob@example.com")).await;
+    let bob = bob.unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    for c in [&boss, &amy, &bob] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let mid = |e: &str| -> String {
+        t.query_row("SELECT id FROM members WHERE email=?1", [e], |r| r.get(0))
+            .unwrap()
+    };
+    let (amy_id, bob_id) = (mid("amy@example.com"), mid("bob@example.com"));
+    let m = seed_full_meeting(&t, dir.path(), &tid, &amy_id, "ready");
+    t.execute_batch(&format!(
+        "INSERT OR REPLACE INTO reports (meeting_id, summary) VALUES ('{m}', 'S');
+         INSERT INTO action_items (id, meeting_id, text) VALUES ('ai1', '{m}', 'write');"
+    ))
+    .unwrap();
+    let row = || -> (i64, Option<String>, Option<String>) {
+        t.query_row(
+            "SELECT done, owner_member_id, due_date FROM action_items WHERE id='ai1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap()
+    };
+    let patch = |c: &str, b: &str| json_req("PATCH", "/api/action-items/ai1", c, b);
+
+    let (s, ..) = send(&app, patch(&bob, r#"{"done":true}"#)).await;
+    assert_eq!(
+        (s, row().0),
+        (StatusCode::NOT_FOUND, 0),
+        "bob cannot see it"
+    );
+    let (s, ..) = send(
+        &app,
+        patch(&amy, r#"{"done":true,"due_date":"2026-12-01"}"#),
+    )
+    .await;
+    assert_eq!(
+        (s, row()),
+        (StatusCode::OK, (1, None, Some("2026-12-01".into())))
+    );
+    let own_bob = format!(r#"{{"owner_id":"{bob_id}"}}"#);
+    let (s, ..) = send(&app, patch(&amy, &own_bob)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "owner must see the meeting");
+    t.execute("UPDATE meetings SET share='workspace'", [])
+        .unwrap();
+    let (s, ..) = send(&app, patch(&amy, &own_bob)).await;
+    assert_eq!(
+        (s, row()),
+        (
+            StatusCode::OK,
+            (1, Some(bob_id.clone()), Some("2026-12-01".into()))
+        ),
+        "done and due are kept when only the owner is sent"
+    );
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{m}/report"), &bob)).await;
+    let r: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let ai = r["action_items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "ai1")
+        .unwrap();
+    assert_eq!(ai["owner_id"], bob_id.as_str());
+    assert_eq!(r["members"].as_array().unwrap().len(), 3);
+    let (s, ..) = send(&app, patch(&amy, r#"{"owner_id":null,"due_date":null}"#)).await;
+    assert_eq!((s, row()), (StatusCode::OK, (1, None, None)));
+    let (s, ..) = send(&app, patch(&amy, r#"{"due_date":"soon"}"#)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let no_csrf = Request::patch("/api/action-items/ai1")
+        .header(header::COOKIE, format!("{amy}; recapz_csrf=t"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"done":false}"#))
+        .unwrap();
+    let (s, ..) = send(&app, no_csrf).await;
+    assert_eq!((s, row().0), (StatusCode::FORBIDDEN, 1), "csrf required");
+}

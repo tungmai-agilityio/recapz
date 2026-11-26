@@ -12,7 +12,7 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, updateActionItem, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
 
 const SHARE_LABEL: Record<MeetingShare, string> = { attendees: 'Attendees', workspace: 'Whole team', owner: 'Only me' }
 
@@ -248,7 +248,7 @@ export function Report() {
       {tab === 'summary' ? (
         <div role="tabpanel" className="mt-6">
           {report.data ? (
-            <ReportSections r={report.data} talk={talk} language={m.language} sharing={sharing} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+            <ReportSections id={id} r={report.data} talk={talk} language={m.language} sharing={sharing} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
           ) : (
             <p className="text-mute">
               {m.status === 'ready' ? 'No report was written for this meeting.'
@@ -294,8 +294,15 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ r, talk, language, sharing, seek, open }: { sharing: ReactNode; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ id, r, talk, language, sharing, seek, open }: { id: string; sharing: ReactNode; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
+  const qc = useQueryClient()
+  const toast = useToast()
+  const edit = useMutation({
+    mutationFn: (v: { item: string; patch: Parameters<typeof updateActionItem>[1] }) => updateActionItem(v.item, v.patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['report', id] }),
+    onError: () => toast('Could not save the action item'),
+  })
   const time = (ms: number) => (
     <button type="button" onClick={() => seek(ms)} className="font-mono text-xs text-mute hover:text-primary">{clock(ms)}</button>
   )
@@ -321,10 +328,17 @@ function ReportSections({ r, talk, language, sharing, seek, open }: { sharing: R
             <ul>
               {r.action_items.map((a) => (
                 <li key={a.id} className="flex items-start gap-2.5 border-t border-hair-2 py-2.5 first:border-t-0">
-                  <span aria-hidden className={`mt-1 size-3.5 flex-none rounded-sm border ${a.done ? 'border-ink bg-ink' : 'border-mute'}`} />
+                  <input type="checkbox" aria-label={`Done: ${a.text}`} checked={a.done} onChange={(e) => edit.mutate({ item: a.id, patch: { done: e.target.checked } })} className="mt-1 size-3.5 flex-none accent-ink" />
                   <span className={a.done ? 'text-mute line-through' : ''}>
-                    {a.done && <span className="sr-only">Done: </span>}{a.text}
-                    {a.due_date && <span className="block font-mono text-xs text-mute">due {a.due_date}</span>}
+                    {a.text}
+                    <span className="mt-1 flex flex-wrap items-center gap-2 font-mono text-xs text-mute">
+                      {a.owner_id && <Face name={r.members.find((m) => m.id === a.owner_id)?.name ?? '?'} speaker={null} size={18} />}
+                      <select aria-label={`Owner of ${a.text}`} value={a.owner_id ?? ''} onChange={(e) => edit.mutate({ item: a.id, patch: { owner_id: e.target.value || null } })} className="bg-transparent">
+                        <option value="">No owner</option>
+                        {r.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                      <input type="date" aria-label={`Due date of ${a.text}`} value={a.due_date ?? ''} onChange={(e) => edit.mutate({ item: a.id, patch: { due_date: e.target.value || null } })} className="bg-transparent" />
+                    </span>
                   </span>
                   {a.source_ms !== null && <span className="ml-auto">{time(a.source_ms)}</span>}
                 </li>
