@@ -1,6 +1,6 @@
 # Live Ask
 
-Status: **design agreed with the maintainer (2026-11-17), speech changed to hosted streaming (2026-11-18); built and merged (#206 to #208, #254 to #257, #259, #265 to #266).** Ticket 9 (#192) is still open on GitHub although the prompt merged in #208. The 6 s bar, the 80% eval and the real-call checks are *unverified*: no real key or live Meet call has run them. Meet only until the Zoom notetaker exists.
+Status: **design agreed with the maintainer (2026-11-17), speech changed to hosted streaming (2026-11-18); built and merged (#206 to #208, #254 to #257, #259, #265 to #266).** All tickets are closed. The 6 s bar, the 80% eval and the real-call checks are *unverified*: no real key or live Meet call has run them. Meet only until the Zoom notetaker exists.
 Intent: #184
 
 ## What it is
