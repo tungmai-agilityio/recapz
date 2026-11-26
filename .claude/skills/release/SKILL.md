@@ -16,7 +16,7 @@ Never touch the production host, its config or secrets. The maintainer runs the 
    is the whole history and the version is `v0.1.0`. Nothing merged since the last tag: stop.
 3. **Pick the version** (still `v0`): any `feat` or a breaking `!` bumps the minor (`v0.3.2` to `v0.4.0`); only
    `fix`, `perf`, `refactor`, `chore`, `docs`, `test`, `ci` bumps the patch.
-4. **Build the notes** from `git log <last>..origin/main --format=%s`: groups Features (`feat`), Fixes (`fix`,
+4. **Build the notes** from `git log <last>..origin/main --format=%s` (strip a leading `T-<NNN>: ` ticket code before reading the type, and keep it in the printed line): groups Features (`feat`), Fixes (`fix`,
    `perf`), Other (the rest, one line summarising counts if long), each line the commit subject with its `(#N)`.
    Mark breaking changes first. Notes carry no AI mentions ("Security & Privacy" in `CLAUDE.md`).
 5. **Upgrade checklist** from `docs/deploy.md` (the Upgrade lines) plus what the range changed:

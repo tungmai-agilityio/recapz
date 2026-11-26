@@ -19,7 +19,7 @@ Input: a ticket issue number, or none for "the next ticket". One ticket is one P
 
 ## 2. Implement
 
-- Branch from `origin/main` as the `pull-request` skill says: `<type>/<short-name>`, `type` from the `type:` label (`bug` is `fix`; for `task` use the kind the ticket title names).
+- Branch from `origin/main` as the `pull-request` skill says: `<type>/T-<NNN>-<short-name>` (NNN = the ticket number), `type` from the `type:` label (`bug` is `fix`; for `task` use the kind the ticket title names).
 - Build only what the ticket's Acceptance list asks, inside `Touches`. Follow the web rule in `CLAUDE.md` (prototype
   first, `web/src/ui/`, `docs/ui-parity.md`) and the test rules under "Testing & Verification".
 - **Drift:** if the spec is wrong, the ticket is too big (over about 600 source lines) or you need a path outside
@@ -35,7 +35,7 @@ Input: a ticket issue number, or none for "the next ticket". One ticket is one P
 - On `STATUS: PASS` for the current HEAD with `Dirty: no`, run `code-reviewer` with the ticket number so it checks
   each Acceptance item and grades risk. Fix blockers; a nit is fixed if trivial and otherwise ignored, and never counts as a round. **At most 2 CHANGES
   REQUESTED rounds** for blockers, then escalate.
-- Open the PR with the `pull-request` skill: title `type(scope): summary`, body ending `Closes #<n>` only if the PR
+- Open the PR with the `pull-request` skill: title `T-<NNN>: type(scope): summary`, body ending `Closes #<n>` only if the PR
   delivers the whole ticket, otherwise `Refs #<n>` (and create a ticket for the missing part first). Fill
   "Decisions made" with each choice you settled, and "Decisions needing the maintainer" with only a choice the spec
   does not settle that is costly to undo, or exactly `None`.
