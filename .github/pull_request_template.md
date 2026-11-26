@@ -1,8 +1,10 @@
 ## Summary
-<!-- What changed and why. One concern per PR. -->
+<!-- Bulleted list, one short point per change or reason. One concern per PR. -->
+- 
 
 ## Testing
-<!-- What ran (make lint test, scoped tests) and what did not. -->
+<!-- Bulleted list: one point per check that ran (make lint test, scoped tests) or did not. -->
+- 
 
 ## Dependencies
 <!-- One line of reason for each new dependency, or "None". -->
@@ -11,7 +13,7 @@
 <!-- `Closes #N` only when this PR delivers the whole ticket; `Refs #N` for part of it or a spec PR. -->
 
 ## Decisions made
-<!-- Choices you settled from the ticket, spec, decisions or code patterns, one line each, or "None". Informational:
+<!-- Choices you settled from the ticket, spec, decisions or code patterns, one bullet each, or "None". Informational:
 these do not block the merge. -->
 
 ## Decisions needing the maintainer
