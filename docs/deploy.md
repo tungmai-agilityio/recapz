@@ -126,6 +126,18 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
 
+## Health check and restore test
+
+`scripts/check-health.sh` runs hourly and posts to `ALERT_WEBHOOK` (the same webhook and `/etc/recapz/smoke.env` as the smoke test) when a notetaker join failed in the last 70 minutes or a job has been locked or queued for over 60 minutes (`WINDOW_MINUTES`, `STUCK_MINUTES`). It reads each tenant database read-only; messages hold meeting and job IDs only. A join that stays failed is reported once per window, not once per hour. `scripts/restore-test.sh` runs monthly (1st, 04:30 UTC): it copies the newest backup stamp into a temp dir, checks every SQLite file opens and passes `integrity_check`, and posts the result (ok or failed). Neither script has been run on a real host *(unverified)*; `scripts/test-health.sh` covers them against a temp data dir.
+
+```sh
+sudo install -m 0755 scripts/check-health.sh /usr/local/bin/recapz-check-health
+sudo install -m 0755 scripts/restore-test.sh /usr/local/bin/recapz-restore-test
+sudo install -m 0644 deploy/recapz-health.* deploy/recapz-restore-test.* /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now recapz-health.timer recapz-restore-test.timer
+sudo systemctl start recapz-restore-test.service   # run once now; check with journalctl -u recapz-restore-test
+```
+
 ## Daily join smoke test
 
 A timer sends the notetaker to a standing test call every day and alerts admins if the meeting does not reach `ready` (`scripts/smoke-join.sh`), so a Meet page change is caught before a team meeting is missed. Failures post to `ALERT_WEBHOOK`, the same webhook as the other alerts.

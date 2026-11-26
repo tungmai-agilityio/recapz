@@ -1,0 +1,8 @@
+[Unit]
+Description=Recapz backup restore test
+
+[Service]
+Type=oneshot
+User=recapz
+EnvironmentFile=/etc/recapz/smoke.env
+ExecStart=/usr/local/bin/recapz-restore-test /var/backups/recapz
