@@ -12,7 +12,7 @@ search every meeting with cited answers. Everything ships as one Rust binary.
 | Meeting report | Summary, decisions, open questions, chapters, action items, talk time |
 | Transcript | Timestamped, speaker-labelled text; clicking a line seeks the audio |
 | Speaker ribbon | Strip showing who spoke when; used as scrubber and in lists |
-| Ask | Question box over all accessible meetings, answers cite exact moments |
+| Ask | Question box over all accessible meetings, answers cite exact moments; each member's questions and answers are kept, private to them (`docs/specs/ask-history.md`) |
 | Live view | Running transcript and talk time during a call |
 | Live Ask | During a call, a cited answer from your documents and past meetings, private to you (`docs/specs/live-ask.md`) |
 | Browser recording | A member records a call from their own browser: the meeting tab's audio plus their microphone ("Meeting tab"), or the microphone only ("In-room"), streamed live to the server (`docs/specs/browser-recording.md`). In the macOS desktop app the same dialog records the Mac's system audio plus the microphone ("Meeting app") through native capture (`docs/specs/desktop-app.md`) |
@@ -61,6 +61,7 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 - Workspaces: `GET /api/workspaces` (accepts pending invites for the person's email, then lists id, name, role and which
   one is current), `POST /api/workspaces/{id}/switch` (403 without a membership; sets the session's workspace and the one
   used at the next sign-in). `GET /api/me` includes `workspace { id, name }`.
+- Ask history (`docs/specs/ask-history.md`, planned): `GET /api/ask/history` (the member's own turns, oldest first; turns citing a meeting the member can no longer see are left out), `DELETE /api/ask/history/{id}` (404 for another member's turn), `DELETE /api/ask/history` (clear); the `done` event of `POST /api/ask` carries the saved turn's `id`. Admins cannot read another member's history.
 - `POST /api/ask` (`question`, optional `from`, `to` as UTC dates and `speaker`; a filter keeps only meetings in that range where that person spoke, never widens access, and leaves documents out), documents, settings, usage, calendar connect. The list above is a guide, not exhaustive: the
   router is `crates/server/src/routes.rs`. Not found there on 2026-11-25: `GET /api/events`, participant purge (*unverified*: only a text search of `routes.rs`).
 
