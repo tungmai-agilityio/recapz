@@ -1257,6 +1257,7 @@ async fn audio_retention_defaults_to_90_days_and_only_an_admin_changes_it() {
     assert_eq!(body, r#"{"days":30}"#, "a rejected value changes nothing");
     let (_, _, me) = send(&app, get("/api/me", &boss)).await;
     assert!(me.contains(r#""recording_storage":"local_disk""#), "{me}");
+    assert!(!me.contains("storage_region"), "{me}");
 }
 
 #[tokio::test]

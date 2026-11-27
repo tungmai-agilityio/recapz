@@ -216,7 +216,12 @@ async fn a_recording_is_archived_played_in_ranges_behind_access_and_deleted_from
     let amy = cookie(&send(&app, login("amy@example.com")).await.1);
     send(&app, req("GET", "/api/meetings", &boss, None)).await; // creates the members row
     let (_, _, me) = send(&app, req("GET", "/api/me", &boss, None)).await;
-    assert!(String::from_utf8_lossy(&me).contains(r#""recording_storage":"object_storage""#));
+    let me = String::from_utf8_lossy(&me);
+    assert!(
+        me.contains(r#""recording_storage":"object_storage""#),
+        "{me}"
+    );
+    assert!(me.contains(r#""storage_region":"test""#), "{me}");
 
     // A finished meeting whose recording is 40 known bytes on local disk.
     let t = db::open_tenant(dir.path(), &tid).unwrap();

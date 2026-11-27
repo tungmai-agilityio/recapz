@@ -10,6 +10,7 @@ import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { useRecordingStorage, useUsage } from '../speech'
 import { usd } from '../money'
+import { whereDataLives } from '../where-data-lives'
 
 /** What the server redirects back with after Google's consent screen. */
 const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {
@@ -244,19 +245,23 @@ export function Recording() {
       {join.isError && <p role="alert" className="mt-4 text-sm text-bad">Could not load the join settings.</p>}
       {join.isPending && <p className="mt-4 text-sm text-mute">Loading join settings...</p>}
       {join.data?.join_rule && <JoinForm key={JSON.stringify(join.data)} saved={join.data} admin={storage.isAdmin} />}
+      {storage.where && (
+        <div className="mt-4 frame frame-row">
+          <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
+            <div>
+              <h2 className="font-semibold">Where data lives</h2>
+              <p className="mt-1 text-sm text-mute">Read only. Set by how this server is configured.</p>
+            </div>
+            <p className="text-sm">{whereDataLives({ where: storage.where, region: storage.region, days: storage.days, meetingDays: storage.meetingDays })}</p>
+          </div>
+        </div>
+      )}
       <div className="mt-4 frame frame-row">
         <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Where audio goes</h2>
             <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
           </div>
-          {storage.where && (
-            <p className="text-sm @2xl:col-start-2">
-              Finished recordings are kept {storage.where === 'object_storage' ? 'in private object storage' : 'on this server\'s disk'}
-              {storage.days === undefined ? '.' : storage.days === 0 ? ' and their audio is kept until someone deletes the meeting.' : <> and their audio is deleted after <b>{storage.days} days</b>.</>}
-              {' '}{storage.meetingDays ? <>Transcripts and reports are deleted with the meeting after <b>{storage.meetingDays === 365 ? '1 year' : `${storage.meetingDays} days`}</b>.</> : 'Transcripts and reports stay.'}
-            </p>
-          )}
           {storage.isAdmin && storage.days !== undefined && (
             <div className="text-sm @2xl:col-start-2">
               <label htmlFor="audio-retention" className="block font-medium">Delete audio after</label>

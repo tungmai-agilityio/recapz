@@ -529,6 +529,9 @@ struct Me {
     workspace: Workspace,
     /// Where finished recordings are kept: `object_storage` or `local_disk`.
     recording_storage: &'static str,
+    /// The bucket's region from the config, only with object storage; never a provider name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    storage_region: Option<String>,
 }
 
 async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)> {
@@ -564,6 +567,11 @@ async fn me(State(app): State<App>, jar: CookieJar) -> Res<(CookieJar, Json<Me>)
             } else {
                 "local_disk"
             },
+            storage_region: app
+                .store
+                .as_ref()
+                .map(|_| app.cfg.storage.region.trim().to_owned())
+                .filter(|r| !r.is_empty()),
         }),
     ))
 }
