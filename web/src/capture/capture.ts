@@ -12,7 +12,11 @@ export const NO_TAB_AUDIO = 'Share a browser tab with "Share tab audio" turned o
 /** A refusal or a failure before recording starts; `message` is meant for the member. */
 export class CaptureError extends Error {
   /** Desktop app only: the missing permission ("microphone" or "audio_capture") whose System Settings pane can be opened. */
-  constructor(message: string, readonly pane?: string) { super(message) }
+  readonly pane?: string
+  constructor(message: string, pane?: string) {
+    super(message)
+    this.pane = pane
+  }
 }
 
 export type Capture = {
