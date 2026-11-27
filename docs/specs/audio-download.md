@@ -1,6 +1,6 @@
 # Audio download
 
-Status: **agreed with the maintainer (2026-11-27).** Spec merged (#704); the server route is built (#705, tests only, not run against a real bucket); the web item (#706) is open.
+Status: **shipped (2026-11-27).** #704 to #706 merged. Not verified in a running app: the save in Chrome, Safari and the desktop app, and download speed from the object store.
 Intent: #703. Docs ticket: #704.
 
 ## Problem
@@ -57,7 +57,7 @@ unticked until #706.
 
 ## Unverified
 
-- Whether the Tauri desktop app (WKWebView) saves a link with the `download` attribute. #706 checks it and records the result; the fallback is to open the URL in the default browser.
+- Whether the Tauri desktop app (WKWebView) saves a link with the `download` attribute. #706 added an `on_download` handler (own origin only, saves to ~/Downloads); it compiles but has not been run. Fallback: open the URL in the default browser.
 - Download speed of a long recording streamed from the object store through the droplet. Playback is chunked in 8 MiB ranges; a plain download streams the whole object.
 
 ## Tickets
