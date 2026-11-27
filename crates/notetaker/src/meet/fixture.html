@@ -59,8 +59,13 @@ const incall = () => {
   const chat = app.querySelector(`[aria-label="${L.chat}"]`);
   chat.onclick = () => {
     const render = () => {
+      // Chat turned off by the host: the panel shows a notice and no box.
+      if (s === 'vi_chat_off_panel') { document.getElementById('panel').innerHTML = '<p>Tính năng trò chuyện đã bị tắt</p>'; return; }
+      // How the box may be named: a label, only a placeholder (next to another named box), or nothing.
+      const box = s === 'chat_placeholder' ? `<input aria-label="Search for people"><textarea placeholder="${T.input}"></textarea>`
+        : s === 'chat_unnamed' ? '<input type="hidden"><textarea></textarea>' : `<textarea aria-label="${T.input}"></textarea>`;
       document.getElementById('panel').innerHTML =
-        `${s === 'log_unlabelled' ? '<div id="log"></div>' : '<ul aria-label="Chat messages" role="list"></ul>'}<textarea aria-label="${T.input}"></textarea>`
+        `${s === 'log_unlabelled' ? '<div id="log"></div>' : '<ul aria-label="Chat messages" role="list"></ul>'}${box}`
         + `<button aria-label="${T.send}">Send</button>`;
       const ta = document.querySelector('textarea');
       if (s === 'send_late') {
@@ -83,7 +88,8 @@ const incall = () => {
       };
     };
     // The live page draws the chat panel shortly after the click, not during it.
-    if (vi) setTimeout(render, 600); else render();
+    // `chat_slow_panel` is a slow host: the panel takes 5 s.
+    if (s === 'chat_slow_panel') setTimeout(render, 5000); else if (vi) setTimeout(render, 600); else render();
   };
 };
 prejoin();

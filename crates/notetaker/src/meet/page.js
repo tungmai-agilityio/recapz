@@ -25,15 +25,39 @@
     speaking: /^(.+), speaking$/i,
     removedText: /you.?ve been removed from the (call|meeting)/i,
     endedText: /the (call|meeting) has ended|you left the (call|meeting)/i,
-    chatOffText: /chat (is|has been) turned off|can.?t send messages/i,
+    // The Vietnamese words are our guess at the page, not yet seen live.
+    chatOffText: /chat (is|has been) turned off|can.?t send messages|trò chuyện (đã |đang )?(bị )?tắt|không thể gửi tin nhắn/i,
   };
   const roleOf = (el) =>
     el.getAttribute('role') || { BUTTON: 'button', A: 'link', TEXTAREA: 'textbox', INPUT: 'textbox' }[el.tagName] || '';
-  const nameOf = (el) => (el.getAttribute('aria-label') || el.textContent || '').trim();
+  // A box can be named by a label element or only by its placeholder, so read those too.
+  const labelledBy = (el) =>
+    (el.getAttribute('aria-labelledby') || '')
+      .split(/\s+/)
+      .map((id) => (id && document.getElementById(id)?.textContent) || '')
+      .join(' ')
+      .trim();
+  const nameOf = (el) =>
+    (
+      el.getAttribute('aria-label') ||
+      labelledBy(el) ||
+      el.getAttribute('placeholder') ||
+      el.getAttribute('aria-placeholder') ||
+      el.textContent ||
+      ''
+    ).trim();
   const find = (s) =>
     [...document.querySelectorAll('button,a,textarea,input,ul,ol,[role]')].find(
       (el) => roleOf(el) === s.role && s.name.test(nameOf(el)),
     );
+  // ponytail: with no box named like a message box, the page's only text box is taken as it (the
+  // call page has none other once admitted); with two unnamed boxes this still fails.
+  const chatBox = () => {
+    const boxes = [...document.querySelectorAll('textarea,input,[role="textbox"]')].filter(
+      (el) => roleOf(el) === 'textbox' && !/^(hidden|checkbox|radio|button|submit)$/.test(el.type || ''),
+    );
+    return find(S.chatInput) || (boxes.length === 1 ? boxes[0] : null);
+  };
   const text = () => document.body.innerText;
   const ok = (extra) => JSON.stringify({ ok: true, ...extra });
   const fail = (step) => JSON.stringify({ ok: false, step });
@@ -68,12 +92,13 @@
       if (!b) return fail('chat_button');
       if (disabled(b) || S.chatOffText.test(text())) return fail('chat_disabled');
       // The panel is drawn after the click, so the caller waits for the input (`focusChatInput`).
-      if (!find(S.chatInput)) b.click();
+      if (!chatBox()) b.click();
       return ok();
     },
     focusChatInput() {
-      const i = find(S.chatInput);
-      if (!i) return fail('chat_input');
+      const i = chatBox();
+      // Chat that the host turned off shows its notice in the panel instead of a box.
+      if (!i) return fail(S.chatOffText.test(text()) ? 'chat_disabled' : 'chat_input');
       i.focus();
       return ok();
     },
@@ -82,7 +107,7 @@
       if (!b) return fail('chat_send');
       // Off until the page has seen the text, and nothing to send once the box is empty. `clicked`
       // tells the caller whether this call sent it, so that it clicks only once.
-      const i = find(S.chatInput);
+      const i = chatBox();
       const clicked = !disabled(b) && !!i && !!i.value;
       if (clicked) b.click();
       return ok({ clicked });
@@ -135,7 +160,7 @@
           .join('');
         return `<${[tag, ...attrs].join(' ')}>${kids}</${tag}>`;
       };
-      let panel = find(S.chatInput);
+      let panel = chatBox();
       for (let i = 0; panel && i < 6 && panel.parentElement; i++) panel = panel.parentElement;
       return JSON.stringify({
         path: location.pathname,

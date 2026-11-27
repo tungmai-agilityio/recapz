@@ -14,6 +14,8 @@ pub use driver::{MeetConfig, MeetDriver};
 
 const SCRIPT: &str = include_str!("meet/page.js");
 const POLL: Duration = Duration::from_millis(250);
+/// How long the chat panel may take to show its input after the chat button is clicked.
+const CHAT_PANEL_WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageState {
@@ -215,12 +217,12 @@ impl MeetPage {
         }
         let prefix = serde_json::to_string(&notice.chars().take(24).collect::<String>()).unwrap();
         self.act("openChat()").await?;
-        // The panel is drawn a moment after the click: wait for its input before using it.
+        // The panel is drawn a moment after the click, and later on a slow host: wait for its input.
         let start = Instant::now();
         loop {
             match self.act("focusChatInput()").await {
                 Err(DriverError::UiChanged(s)) if s == "chat_input" => {
-                    if start.elapsed() >= Duration::from_secs(3) {
+                    if start.elapsed() >= CHAT_PANEL_WAIT {
                         return Err(DriverError::UiChanged(s));
                     }
                     tokio::time::sleep(POLL).await;
@@ -461,6 +463,30 @@ mod browser_tests {
         };
         assert_eq!(r, Ok(Joined::Admitted));
         assert_eq!(meet.state().await, Ok(PageState::Admitted));
+    }
+
+    #[tokio::test]
+    async fn the_chat_box_is_found_by_placeholder_alone_unnamed_or_late() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        for scenario in ["chat_placeholder", "chat_unnamed", "chat_slow_panel"] {
+            let Some((r, meet, _b)) = run(scenario, Duration::from_secs(30)).await else {
+                return;
+            };
+            assert_eq!(r, Ok(Joined::Admitted), "{scenario}");
+            let count = meet
+                .eval("window.__recapzMeet.chatCount('Recapz notetaker is reco')")
+                .await;
+            assert_eq!(count, Ok(serde_json::json!(1)), "{scenario}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_chat_panel_saying_chat_is_off_is_chat_off() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        let Some((r, ..)) = run("vi_chat_off_panel", Duration::from_secs(30)).await else {
+            return;
+        };
+        assert_eq!(r, Err(DriverError::ChatOff));
     }
 
     #[tokio::test]
