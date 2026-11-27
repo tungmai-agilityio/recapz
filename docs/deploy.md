@@ -40,7 +40,7 @@ Run on your machine unless a step says "on the host". Never paste a key into cha
 4. **Config and keys, on the host.** `config.toml` comes from `config.example.toml` with `data_dir = "/var/lib/recapz"`, `base_url = "https://recapz.tungmai.com"`, `dev_login = false`, `bootstrap_admin_email`, and the Google `client_id`/`client_secret` from your private copy. Put them in place and edit the env file in the editor, so no key is typed on a command line or sent through chat:
    ```bash
    scp -i $KEY config.example.toml root@$HOST:/etc/recapz/config.toml
-   ssh -t -i $KEY root@$HOST 'install -m 0640 -o recapz -g recapz /root/recapz/deploy/recapz.env.example /etc/recapz/recapz.env && chown recapz:recapz /etc/recapz/config.toml && chmod 0640 /etc/recapz/config.toml && nano /etc/recapz/config.toml'
+   ssh -t -i $KEY root@$HOST 'install -m 0640 -o root -g recapz /root/recapz/deploy/recapz.env.example /etc/recapz/recapz.env && chown root:recapz /etc/recapz/config.toml && chmod 0640 /etc/recapz/config.toml && nano /etc/recapz/config.toml'
    ssh -t -i $KEY root@$HOST 'nano /etc/recapz/recapz.env'   # RECAPZ_SECRET_KEY (reuse the old one to keep calendar connections, or `openssl rand -hex 32`), RECAPZ_SPEECH_KEY, RECAPZ_LLM_KEY
    ```
    The service refuses to start without `RECAPZ_SPEECH_KEY`.
@@ -64,9 +64,9 @@ Single host, one binary. `data_dir` in the config must be `/var/lib/recapz`.
 make release
 sudo install -m 0755 target/release/recapz /usr/local/bin/recapz
 sudo useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
-sudo install -d -m 0750 -o recapz -g recapz /etc/recapz
-sudo install -m 0640 -o recapz -g recapz config.toml /etc/recapz/config.toml   # never commit config.toml
-sudo install -m 0640 -o recapz -g recapz deploy/recapz.env.example /etc/recapz/recapz.env   # then fill in every key, see below
+sudo install -d -m 0750 -o root -g recapz /etc/recapz
+sudo install -m 0640 -o root -g recapz config.toml /etc/recapz/config.toml   # never commit config.toml
+sudo install -m 0640 -o root -g recapz deploy/recapz.env.example /etc/recapz/recapz.env   # then fill in every key, see below
 sudo install -m 0644 deploy/recapz.service deploy/recapz-xvfb.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
@@ -126,7 +126,7 @@ Restore: stop the service, copy a stamp directory's contents over `/var/lib/reca
 
 ### Offsite (encrypted)
 
-`recapz-offsite.timer` (04:00 UTC) pushes the newest stamp to an encrypted restic repository on any S3-compatible storage and keeps 7 daily and 4 weekly snapshots; the first run creates the repository. `scripts/provision-host.sh` installs restic, the script (`/usr/local/bin/recapz-offsite`) and the units. Use a private bucket of its own (not the recordings bucket) and, ideally, another provider than the host, so losing one account does not lose both. Create `/etc/recapz/offsite.env` (mode 0640, owner `recapz:recapz`, never commit it) by editing it on the host:
+`recapz-offsite.timer` (04:00 UTC) pushes the newest stamp to an encrypted restic repository on any S3-compatible storage and keeps 7 daily and 4 weekly snapshots; the first run creates the repository. `scripts/provision-host.sh` installs restic, the script (`/usr/local/bin/recapz-offsite`) and the units. Use a private bucket of its own (not the recordings bucket) and, ideally, another provider than the host, so losing one account does not lose both. Create `/etc/recapz/offsite.env` (mode 0600, owner `root:root`: the job runs as root so the app user cannot read the bucket key or the restic password; never commit it) by editing it on the host:
 
 ```sh
 RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>
@@ -140,7 +140,7 @@ sudo systemctl enable --now recapz-offsite.timer
 sudo systemctl start recapz-offsite.service && journalctl -u recapz-offsite -n 20   # run once now
 ```
 
-Restore on a rebuilt host: `systemctl stop recapz`, then as `recapz` with the same env (`set -a; . /etc/recapz/offsite.env`) run `restic restore latest --target /var/lib/recapz`, `chown -R recapz:recapz /var/lib/recapz` and start the service. The notetaker's sign-in is never backed up; run `notetaker-login` again. `scripts/test-offsite.sh` checks backup, prune and restore against a local repository (needs restic; skipped without it).
+Restore on a rebuilt host: `systemctl stop recapz`, then as root with the same env (`set -a; . /etc/recapz/offsite.env`) run `restic restore latest --target /var/lib/recapz`, `chown -R recapz:recapz /var/lib/recapz` and start the service. The notetaker's sign-in is never backed up; run `notetaker-login` again. `scripts/test-offsite.sh` checks backup, prune and restore against a local repository (needs restic; skipped without it).
 
 ## Health check and restore test
 
@@ -159,7 +159,7 @@ sudo systemctl start recapz-restore-test.service   # run once now; check with jo
 A timer sends the notetaker to a standing test call every day and alerts admins if the meeting does not reach `ready` (`scripts/smoke-join.sh`), so a Meet page change is caught before a team meeting is missed. Failures post to `ALERT_WEBHOOK`, the same webhook as the other alerts.
 
 1. Keep one Meet call open for the test (a link that stays valid, e.g. a recurring event) and note its URL.
-2. As a member (e.g. the admin) sign in on the web app, copy the `recapz_session` cookie value, and write `/etc/recapz/smoke.env` (mode 0640, owner `recapz:recapz`, never commit it):
+2. As a member (e.g. the admin) sign in on the web app, copy the `recapz_session` cookie value, and write `/etc/recapz/smoke.env` (mode 0600, owner `root:root`: systemd reads it for the units; never commit it):
 
 ```sh
 RECAPZ_URL=http://localhost:8080

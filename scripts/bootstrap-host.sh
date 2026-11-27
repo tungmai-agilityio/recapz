@@ -7,6 +7,8 @@
 #   config.toml   your config (data_dir, base_url, dev_login and, under 4 GB RAM, max_concurrent_calls are set here)
 #   recapz.env    RECAPZ_SECRET_KEY, RECAPZ_SPEECH_KEY, RECAPZ_LLM_KEY, ... (deploy/recapz.env.example)
 #   offsite.env   optional, restic settings (docs/deploy.md, "Offsite")
+#   smoke.env     optional, alert webhook and join test (docs/deploy.md, "Daily join smoke test"); turns on
+#                 the health, restore-test and smoke timers
 # A file missing locally but already on the host is kept. Other settings: RECAPZ_DOMAIN (recapz.tungmai.com),
 # RECAPZ_SSH_KEY (~/.ssh/recapz_do). Still by hand: the Droplet, the DNS A record, Google redirect URIs, buckets
 # and their keys, and the notetaker's Google sign-in.
@@ -26,14 +28,19 @@ git archive HEAD scripts deploy | "${host[@]}" 'rm -rf /root/recapz && mkdir -p 
 
 step "config and env files"
 pushed=0
-for f in config.toml recapz.env offsite.env; do
+for f in config.toml recapz.env offsite.env smoke.env; do
   if [ -f "$secrets/$f" ]; then # written through stdin: no secret on a command line
-    "${host[@]}" "umask 077 && cat > /etc/recapz/$f.new && chown recapz:recapz /etc/recapz/$f.new && chmod 0640 /etc/recapz/$f.new && mv /etc/recapz/$f.new /etc/recapz/$f" < "$secrets/$f"
+    "${host[@]}" "umask 077 && cat > /etc/recapz/$f.new && mv /etc/recapz/$f.new /etc/recapz/$f" < "$secrets/$f"
     pushed=1
-  elif [ "$f" != offsite.env ] && ! "${host[@]}" "test -s /etc/recapz/$f"; then
+  elif [ "$f" = config.toml ] || [ "$f" = recapz.env ] && ! "${host[@]}" "test -s /etc/recapz/$f"; then
     echo "missing $secrets/$f (and none on the host)" >&2; exit 1
   fi
 done
+# root owns the files: the app (and anything running as recapz) can read config.toml and recapz.env but not
+# change them; offsite.env and smoke.env are read only by systemd and root jobs, so recapz cannot read them
+"${host[@]}" 'set -e; cd /etc/recapz; chown root:recapz . && chmod 0750 .
+  for f in config.toml recapz.env; do [ ! -e $f ] || { chown root:recapz $f && chmod 0640 $f; }; done
+  for f in offsite.env smoke.env; do [ ! -e $f ] || { chown root:root $f && chmod 0600 $f; }; done'
 "${host[@]}" "f=/etc/recapz/config.toml
   sed -i -e '0,/^data_dir = .*/s||data_dir = \"/var/lib/recapz\"|' -e '0,/^base_url = .*/s||base_url = \"https://$domain\"|' -e 's|^dev_login = true|dev_login = false|' \$f
   [ \$(awk '/MemTotal/{print \$2}' /proc/meminfo) -ge 3500000 ] || sed -i 's|^max_concurrent_calls = [0-9]*|max_concurrent_calls = 1|' \$f
@@ -59,7 +66,10 @@ gh variable set DEPLOY_KNOWN_HOSTS --env production --body "$known"
 
 step "units"
 "${host[@]}" 'set -e; systemctl enable -q recapz; systemctl enable -q --now recapz-xvfb recapz-backup.timer
-  if [ -s /etc/recapz/offsite.env ]; then systemctl enable -q --now recapz-offsite.timer; fi'
+  if [ -s /etc/recapz/offsite.env ]; then systemctl enable -q --now recapz-offsite.timer; fi
+  # alerts and the daily join test need /etc/recapz/smoke.env (ALERT_WEBHOOK, ...: docs/deploy.md)
+  if [ -s /etc/recapz/smoke.env ]; then systemctl enable -q --now recapz-health.timer recapz-restore-test.timer recapz-smoke.timer
+  else echo "no /etc/recapz/smoke.env: health, restore-test and smoke timers left off" >&2; fi'
 # a pushed config or env file only takes effect after a restart (this ends a call in progress)
 [ "$pushed" = 0 ] || "${host[@]}" "systemctl is-active -q recapz && systemctl restart recapz || true"
 
