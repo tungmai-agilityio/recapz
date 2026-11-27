@@ -19,7 +19,8 @@ fn finish<T>(c: &Connection, done: Result<T>) -> Result<T> {
 }
 
 /// Folds the search indexes' delete markers into their data (an FTS5 delete only marks the old
-/// terms) and truncates the WAL. ponytail: `optimize` rewrites each whole index; use `merge` if a
+/// terms) and truncates the WAL when no reader blocks it: the delete is already committed, so a busy
+/// WAL is not an error for the caller, and the weekly vacuum truncates it later. ponytail: `optimize` rewrites each whole index; use `merge` if a
 /// workspace grows large enough for a purge to feel slow.
 fn scrub(c: &Connection) -> Result<()> {
     for t in ["chunks_fts", "document_chunks_fts"] {
@@ -29,14 +30,11 @@ fn scrub(c: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Empties the WAL. A busy answer (another connection is reading) leaves it in place, so it is an
-/// error: the delete is already committed and a retry of the purge finishes the job.
-fn truncate_wal(c: &Connection) -> Result<()> {
+/// Empties the WAL; true when it did. A busy answer (another connection is reading) leaves the WAL in
+/// place.
+fn truncate_wal(c: &Connection) -> Result<bool> {
     let busy: i64 = c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
-    if busy != 0 {
-        bail!("the WAL could not be truncated: the database is busy");
-    }
-    Ok(())
+    Ok(busy == 0)
 }
 
 /// Rewrites the database file so free pages (where deleted text may linger) are dropped, then
@@ -44,7 +42,9 @@ fn truncate_wal(c: &Connection) -> Result<()> {
 pub fn vacuum(c: &Connection) -> Result<()> {
     scrub(c)?;
     c.execute_batch("VACUUM")?;
-    truncate_wal(c)?;
+    if !truncate_wal(c)? {
+        bail!("the WAL could not be truncated: the database is busy");
+    }
     Ok(())
 }
 
@@ -254,6 +254,19 @@ mod tests {
             "text gone from the database file"
         );
         assert!(has(&db, b"walrus"), "the other meeting stays");
+    }
+
+    #[test]
+    fn a_purge_still_succeeds_when_a_reader_keeps_the_wal_from_truncating() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafish");
+        let reader = open_tenant(dir.path(), "t1").unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        count(&reader, "SELECT count(*) FROM meetings");
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap());
+        assert_eq!(count(&c, "SELECT count(*) FROM meetings"), 0);
+        assert!(vacuum(&c).is_err(), "vacuum reports a busy WAL");
     }
 
     #[test]
