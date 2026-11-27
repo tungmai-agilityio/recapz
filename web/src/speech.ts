@@ -12,7 +12,7 @@ export function useRecordingStorage() {
   const me = useQuery({ queryKey: ['me'], queryFn: getMe, retry: (n, e) => !(e instanceof Unauthorized) && n < 2 })
   const days = useQuery({ queryKey: ['audio-retention'], queryFn: getAudioRetention })
   const meetingDays = useTranscriptRetention().data?.days
-  return { where: me.data?.recording_storage, days: days.data?.days, meetingDays, isAdmin: me.data?.role === 'admin' }
+  return { where: me.data?.recording_storage, region: me.data?.storage_region, days: days.data?.days, meetingDays, isAdmin: me.data?.role === 'admin' }
 }
 
 /** Days a finished meeting is kept before it is deleted; 0 keeps it. */

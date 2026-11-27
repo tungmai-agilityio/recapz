@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ToastProvider } from '../ui/Toast'
+import { whereDataLives } from '../where-data-lives'
 import { Recording } from './Recording'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -85,7 +86,7 @@ test('names no speech provider', async () => {
 
 test('names where recordings are kept and the retention period', async () => {
   vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(
-    u === '/api/me' ? { email: 'a@b.c', name: null, role: 'admin', recording_storage: 'object_storage' }
+    u === '/api/me' ? { email: 'a@b.c', name: null, role: 'admin', recording_storage: 'object_storage', storage_region: 'eu-test-1' }
       : u === '/api/settings/audio-retention' ? { days: 90 } : { connected: false, needs_reconnect: false },
   ))))
   render(
@@ -94,8 +95,9 @@ test('names where recordings are kept and the retention period', async () => {
     </QueryClientProvider>,
   )
   expect((await screen.findByText(/Finished recordings are kept/)).textContent).toBe(
-    'Finished recordings are kept in private object storage and their audio is deleted after 90 days. Transcripts and reports stay.',
+    "Finished recordings are kept in private object storage in region eu-test-1. Backups are written to this server's disk. Audio is deleted after 90 days. Transcripts and reports stay.",
   )
+  expect(screen.getByRole('heading', { name: 'Where data lives' })).toBeTruthy()
 })
 
 function showAs(role: string, usage: object) {
@@ -160,7 +162,7 @@ test('admin picks when whole meetings are deleted: PUT carries the days', async 
   const sel = (await screen.findByLabelText('Delete meetings after')) as HTMLSelectElement
   expect(sel.value).toBe('0')
   expect([...sel.options].map((o) => o.value)).toEqual(['90', '365', '0'])
-  expect(screen.getByText(/Finished recordings are kept.*Transcripts and reports stay\./)).toBeTruthy()
+  expect(screen.getByText(/Finished recordings are kept on this server's disk\..*Transcripts and reports stay\./)).toBeTruthy()
   fireEvent.change(sel, { target: { value: '365' } })
   expect(await screen.findByText('Meeting retention saved')).toBeTruthy()
   expect(calls.filter((c) => c.m === 'PUT').map((c) => [c.u, c.body])).toEqual([['/api/settings/transcript-retention', '{"days":365}']])
@@ -350,4 +352,14 @@ test('members never request or see the notetaker status', async () => {
   expect(await screen.findByText('Where audio goes')).toBeTruthy()
   expect(calls).not.toContain('/api/notetaker/status')
   expect(screen.queryByText('Notetaker account')).toBeNull()
+})
+
+
+test.each([
+  [{ where: 'local_disk', days: 0, meetingDays: 365 } as const, "Finished recordings are kept on this server's disk. Backups are written to this server's disk. Audio is kept until someone deletes the meeting. Transcripts and reports are deleted with the meeting after 1 year."],
+  [{ where: 'object_storage', region: 'eu-test-1', days: 30, meetingDays: 90 } as const, "Finished recordings are kept in private object storage in region eu-test-1. Backups are written to this server's disk. Audio is deleted after 30 days. Transcripts and reports are deleted with the meeting after 90 days."],
+  [{ where: 'object_storage' } as const, "Finished recordings are kept in private object storage. Backups are written to this server's disk. Transcripts and reports stay."],
+])('where data lives text for a sample config %#', (cfg, text) => {
+  expect(whereDataLives(cfg)).toBe(text)
+  expect(text).not.toMatch(/Deepgram|OpenAI|Anthropic|S3/)
 })

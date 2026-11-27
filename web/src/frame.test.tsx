@@ -56,6 +56,6 @@ test('Ink separates settings rows with a hairline instead of a card', () => {
 
 test('Recording & privacy frames every section with the shared rule, not its own card classes', () => {
   const src = readFileSync('src/pages/Recording.tsx', 'utf8')
-  expect(src.match(/className="(?:mt-\d )?frame frame-row/g)?.length ?? 0).toBe(6)
+  expect(src.match(/className="(?:mt-\d )?frame frame-row/g)?.length ?? 0).toBe(7)
   expect(src).not.toContain('rounded-lg border border-hair bg-sheet')
 })
