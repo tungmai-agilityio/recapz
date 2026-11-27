@@ -53,6 +53,8 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 - `GET /api/me`, `GET /api/meetings`, `GET /api/meetings/upcoming`, `POST /api/meetings/join`, `POST /api/uploads`,
   `POST /api/recordings`, `GET /api/health`
 - Per meeting: `/transcript`, `/report`, `/audio`, `/live`, `/record` (WebSocket), `/live-ask`, `PATCH /language`, `PATCH /speakers/{speaker_id}` (`name`; any member who can see the meeting; 404 otherwise)
+- Meeting detail also returns `speech_micro_usd` and `llm_micro_usd` (the meeting's cost so far) to admins only; a member's response
+  has neither field. The report page shows it under Details.
 - Members (admin only, 403 otherwise): `GET /api/members`, `POST /api/members/invites` (email, role; returns the
   sign-in link and `email`: `sent`, `off` with no `[mail]` relay, or `failed`; the invite is saved either way), `DELETE /api/members/invites/{email}`, `PATCH /api/members/{id}` (role), `DELETE /api/members/{id}`.
   Removing the last admin, removing yourself or changing your own role is refused.
