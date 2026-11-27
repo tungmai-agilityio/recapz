@@ -10,6 +10,7 @@ WorkingDirectory=/var/lib/recapz
 Environment=RECAPZ_CONFIG=/etc/recapz/config.toml
 Environment=RUST_LOG=info
 Environment=DISPLAY=:99
+Environment=XAUTHORITY=/var/lib/recapz/xauthority
 # RECAPZ_SECRET_KEY (64 hex characters) lives here, not in config.toml.
 EnvironmentFile=/etc/recapz/recapz.env
 ExecStart=/usr/local/bin/recapz
