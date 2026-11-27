@@ -24,6 +24,8 @@ A DigitalOcean snapshot keeps the whole disk, so the rebuild is only a new Dropl
 
 ### Rebuild from scratch (clean Droplet)
 
+**One command:** after step 1 (Droplet) and step 2 (DNS), put `config.toml`, `recapz.env` and optionally `offsite.env` in `~/.config/recapz/` (mode 0700, never in the repo) and run `scripts/bootstrap-host.sh <ip>` from the repo root. It does steps 3 to 7 plus swap, the backups and the offsite timer, and can run again (a file missing in `~/.config/recapz/` but already on the host is kept; it deploys only when the site is not answering yet). It stops with a message if DNS does not point at the IP yet. It replaces the CI deploy key on every run. Still by hand: the Droplet, the A record, the Google redirect URIs, buckets and their keys, and step 8 (the notetaker's sign-in). Re-run on the live host 2026-11-27 with an empty secrets folder: all steps passed, the service kept running. A first run on a blank Droplet has not been done *(unverified)*. The steps below are what it runs.
+
 Run on your machine unless a step says "on the host". Never paste a key into chat or put it on a command line; edit files on the server.
 
 1. **Create the Droplet:** Debian 13, Singapore (`sgp1`, nearest the members), 1 vCPU / 2 GB for a demo (then add 2 GB swap and set `max_concurrent_calls = 1`) or 2 vCPU / 4 GB for a team; a CPU/RAM-only resize keeps the disk, so start small, your SSH key, enable the cloud firewall for 22, 80, 443. Note its IP.
