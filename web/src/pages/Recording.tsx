@@ -9,9 +9,7 @@ import { inputClass } from '../ui/Field'
 import { PageHead } from '../ui/PageHead'
 import { useToast } from '../ui/toast-context'
 import { useRecordingStorage, useUsage } from '../speech'
-
-/** Micro-USD (1,000,000 = $1) as dollars; sub-cent amounts keep four decimals. */
-const usd = (micro: number) => `$${(micro / 1e6).toFixed(micro !== 0 && micro < 10_000 ? 4 : 2)}`
+import { usd } from '../money'
 
 /** What the server redirects back with after Google's consent screen. */
 const outcomes: Record<string, { tone: 'good' | 'bad'; text: string }> = {

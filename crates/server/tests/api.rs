@@ -237,6 +237,23 @@ async fn meeting_detail_and_transcript_follow_the_access_rule() {
         .unwrap();
     let (s, ..) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &amy)).await;
     assert_eq!(s, StatusCode::OK);
+
+    // Cost: the admin gets the exact sums from the usage rows; a member's response has no cost fields.
+    t.execute_batch(&format!(
+        "INSERT INTO speech_usage (meeting_id, kind, audio_seconds, cost_micro_usd, at) VALUES ('{id}','batch',60,468000,1);
+         INSERT INTO llm_usage (meeting_id, task, provider, model, cost_micro_usd, at) VALUES
+           ('{id}','summary','p','m',1000,1), ('{id}','chapters','p','m',500,2)"
+    ))
+    .unwrap();
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &boss)).await;
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (&v["speech_micro_usd"], &v["llm_micro_usd"]),
+        (&json!(468_000), &json!(1_500))
+    );
+    let (s, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &amy)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(!body.contains("micro_usd"), "{body}");
 }
 
 #[tokio::test]
