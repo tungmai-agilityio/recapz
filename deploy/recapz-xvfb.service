@@ -10,6 +10,9 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=false
 ProtectHome=true
+ProtectSystem=strict
+# Xvfb creates its socket under /tmp/.X11-unix.
+ReadWritePaths=/tmp
 
 [Install]
 WantedBy=multi-user.target

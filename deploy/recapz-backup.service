@@ -5,4 +5,10 @@ Description=Recapz backup
 Type=oneshot
 User=recapz
 UMask=0027
+# sqlite may create -shm beside a live database, so the data dir stays writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/recapz /var/backups/recapz
 ExecStart=/usr/local/bin/recapz-backup /var/lib/recapz /var/backups/recapz

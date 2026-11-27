@@ -13,4 +13,10 @@ EnvironmentFile=/etc/recapz/offsite.env
 # keep restic's cache out of /var/lib/recapz, or the next local backup copies it
 CacheDirectory=recapz-offsite
 Environment=RESTIC_CACHE_DIR=/var/cache/recapz-offsite
+CacheDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Reads /var/backups/recapz only; restic writes just its cache (CacheDirectory is writable under strict).
 ExecStart=/usr/local/bin/recapz-offsite /var/backups/recapz
