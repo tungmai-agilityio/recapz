@@ -328,7 +328,7 @@ export const setDocumentLlmOk = async (id: string, llm_ok: boolean) => {
 export const deleteDocument = async (id: string) => { await check(await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: csrf() })) }
 
 export type LiveEvent =
-  | { type: 'final'; at_ms: number; text: string }
+  | { type: 'final'; at_ms: number; text: string; speaker?: number; label?: string; ms?: number }
   | { type: 'partial'; text: string }
   | { type: 'paused'; at_ms: number }
   | { type: 'resumed'; at_ms: number }

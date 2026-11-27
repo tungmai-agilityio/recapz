@@ -101,7 +101,14 @@ pub async fn start(
             hub().push(&play, Msg::Partial(half));
             tokio::time::sleep(every / 2).await;
             let at_ms = began.elapsed().as_millis() as i64;
-            hub().push(&play, Msg::Final { at_ms, text: line });
+            hub().push(
+                &play,
+                Msg::Final {
+                    at_ms,
+                    text: line,
+                    who: None,
+                },
+            );
             tokio::time::sleep(every / 2).await;
             // Stopped (or opted out) meanwhile: nothing left to play into.
             if hub().recent(&play, 0).is_none() {
