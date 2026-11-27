@@ -1092,11 +1092,11 @@ async fn rename_speaker(
     Path((id, speaker_id)): Path<(String, String)>,
     Json(body): Json<SpeakerName>,
 ) -> Res<Json<serde_json::Value>> {
+    let u = app.current_user(&jar).await?;
     let name = body.name.trim().to_owned();
     if name.is_empty() || name.chars().count() > 100 {
         return Err(ApiError::BadRequest("name must be 1 to 100 characters"));
     }
-    let u = app.current_user(&jar).await?;
     let saved = name.clone();
     app.tenant(u.tenant_id.clone(), move |c| {
         ensure_member(c, &u)?;
