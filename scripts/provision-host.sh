@@ -13,7 +13,7 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
-apt-get install -y chromium xvfb sqlite3 rsync restic curl jq ca-certificates gnupg ufw debian-keyring debian-archive-keyring apt-transport-https
+apt-get install -y chromium xvfb x11vnc sqlite3 rsync restic curl jq ca-certificates gnupg ufw debian-keyring debian-archive-keyring apt-transport-https
 # Chromium's browser sign-in (DICE) fails to get a token in Debian's build and then signs the notetaker's
 # Google account out on every start; turning browser sign-in off keeps the plain web sign-in.
 install -d -m 0755 /etc/chromium/policies/managed
@@ -23,6 +23,13 @@ if ! command -v caddy >/dev/null; then # the official Caddy apt repository
   curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -y && apt-get install -y caddy
+fi
+
+# under 4 GB RAM a call's Chromium needs room: 2 GB swap, used only under pressure
+if [ "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -lt 3500000 ] && ! swapon --show | grep -q /swapfile; then
+  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  echo vm.swappiness=10 > /etc/sysctl.d/99-recapz.conf && sysctl -p /etc/sysctl.d/99-recapz.conf >/dev/null
 fi
 
 id recapz >/dev/null 2>&1 || useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
