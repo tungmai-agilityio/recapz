@@ -49,6 +49,18 @@ make notetaker-login     # opens a browser window: sign in, then close it
 make notetaker-logout    # delete the saved sign-in
 ```
 
+## Deploy
+Production runs on one Debian host (details, secrets and recovery in `docs/deploy.md`). Needs `gh` logged in.
+
+```
+make deploy                                            # build main on CI, deploy, smoke test, wait for the run
+gh workflow run release-build.yml --ref main -f deploy=true   # same, without waiting
+scripts/bootstrap-host.sh <ip>                         # set up a fresh server from scratch
+scripts/host-notetaker-login.sh <ip>                   # sign the notetaker's Google account in on the host
+```
+
+A failed smoke test rolls the deploy back on its own. The deploy job waits for approval only while the `production` environment has a required reviewer (none now). `bootstrap-host.sh` reads `config.toml`, `recapz.env` and optional `offsite.env`, `smoke.env` from `.secrets/` (git-ignored); the Droplet, DNS and buckets stay manual.
+
 ## Contributing
 Read `CONTRIBUTING.md` (branch, commit and PR rules) and `CLAUDE.md` (engineering contract). Never commit
 `config.toml`, keys, recordings or real meeting data.
