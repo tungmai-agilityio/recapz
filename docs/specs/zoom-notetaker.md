@@ -1,6 +1,6 @@
 # Zoom notetaker
 
-Status: **draft** (join path agreed with the maintainer 2026-11-27, ticket list awaiting review)
+Status: **draft** (join path agreed with the maintainer 2026-11-27, tickets created, see the table)
 Intent: #693
 
 ## Problem
@@ -46,17 +46,17 @@ changes to the macOS app (Zoom is already a known mic-holder app).
 
 One ticket is one PR (about 300 source lines small, 600 medium). Order is by dependency.
 
-| # | Title (`type(scope): summary`) | Area | Blocked by | Touches | Size | Testing scope |
+| # (issue) | Title (`type(scope): summary`) | Area | Blocked by (row) | Touches | Size | Testing scope |
 |---|---|---|---|---|---|---|
-| 1 | `fix(notetaker): do not hand Zoom meetings to the Meet driver` | server | none | `crates/core/src/notetaker.rs`, `crates/server/src/notetaker_loop.rs` | small | core + server tests |
-| 2 | `docs(zoom): Zoom developer account and app review` (maintainer task) | tooling | none | `docs/decisions/zoom-join-path.md` | small | docs only |
-| 3 | `feat(notetaker): sidecar protocol and ZoomDriver` | notetaker | 1 | `crates/notetaker/src/zoom/`, `crates/server/src/notetaker_loop.rs` | medium | notetaker + server tests with a fake sidecar |
-| 4 | `feat(zoom-sidecar): join, waiting room and leave with the Meeting SDK` | tooling | 2, 3 | `zoom-sidecar/` | medium | sidecar build; live check on a real meeting |
-| 5 | `feat(zoom-sidecar): per-participant audio and active speaker` | tooling | 4 | `zoom-sidecar/` | medium | sidecar tests; live check |
-| 6 | `feat(zoom-sidecar): chat notice and opt-out chat events` | tooling | 4 | `zoom-sidecar/`, `crates/notetaker/src/zoom/` | small | sidecar + notetaker tests |
-| 7 | `feat(deploy): run the Zoom sidecar next to the server` | tooling | 5 | `deploy/`, `docs/running-locally.md` | small | deploy script check |
-| 8 | `feat(web): platform labels and Zoom copy` | web | none | `web/src/pages/Meetings.tsx`, `web/src/api.ts` | small | `pnpm -C web test`, UI parity rows |
-| 9 | `docs: Zoom is supported, update spec and decision record` | tooling | 7 | `docs/spec.md`, `docs/specs/meet-notetaker.md`, `docs/decisions/` | small | docs only |
+| 1 (#718) | `fix(notetaker): do not hand Zoom meetings to the Meet driver` | server | none | `crates/core/src/notetaker.rs`, `crates/server/src/notetaker_loop.rs` | small | core + server tests |
+| 2 (#719) | `docs(zoom): Zoom developer account and app review` (maintainer task) | tooling | none | `docs/decisions/zoom-join-path.md` | small | docs only |
+| 3 (#720) | `feat(notetaker): sidecar protocol and ZoomDriver` | notetaker | 1 | `crates/notetaker/src/zoom/`, `crates/server/src/notetaker_loop.rs` | medium | notetaker + server tests with a fake sidecar |
+| 4 (#721) | `feat(zoom-sidecar): join, waiting room and leave with the Meeting SDK` | tooling | 2, 3 | `zoom-sidecar/` | medium | sidecar build; live check on a real meeting |
+| 5 (#722) | `feat(zoom-sidecar): per-participant audio and active speaker` | tooling | 4 | `zoom-sidecar/` | medium | sidecar tests; live check |
+| 6 (#723) | `feat(zoom-sidecar): chat notice and opt-out chat events` | tooling | 4 | `zoom-sidecar/`, `crates/notetaker/src/zoom/` | small | sidecar + notetaker tests |
+| 7 (#724) | `feat(deploy): run the Zoom sidecar next to the server` | tooling | 5 | `deploy/`, `docs/running-locally.md` | small | deploy script check |
+| 8 (#725) | `feat(web): platform labels and Zoom copy` | web | none | `web/src/pages/Meetings.tsx`, `web/src/api.ts` | small | `pnpm -C web test`, UI parity rows |
+| 9 (#726) | `docs: Zoom is supported, update spec and decision record` | tooling | 7 | `docs/spec.md`, `docs/specs/meet-notetaker.md`, `docs/decisions/` | small | docs only |
 
 ## Open questions
 
