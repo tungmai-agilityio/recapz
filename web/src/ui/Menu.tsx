@@ -30,8 +30,9 @@ export function MenuItem({ className = '', ...props }: React.ButtonHTMLAttribute
     className={`rounded-md px-2.5 py-2 text-left text-sm hover:bg-hair-2 ${className}`} />
 }
 
-/** A `MenuItem` that is a plain link, e.g. a file download. */
-export function MenuLink({ className = '', ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
-  return <a role="menuitem" {...props}
+/** A `MenuItem` that is a plain link, e.g. a file download. The menu stays open on click: closing it would remove
+ * the link before the browser follows it, and a link that is no longer in the page may not be followed. */
+export function MenuLink({ className = '', onClick, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return <a role="menuitem" {...props} onClick={(e) => { e.stopPropagation(); onClick?.(e) }}
     className={`rounded-md px-2.5 py-2 text-left text-sm hover:bg-hair-2 ${className}`} />
 }

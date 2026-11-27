@@ -517,6 +517,8 @@ test('the ⋯ menu offers Download audio as a plain download link', async () => 
   expect(await menuItems()).toEqual(['Rename', 'Download audio', 'Delete'])
   const link = screen.getByRole('menuitem', { name: 'Download audio' })
   expect([link.tagName, link.getAttribute('href'), link.hasAttribute('download')]).toEqual(['A', '/api/meetings/m1/audio?download=1', true])
+  fireEvent.click(link) // the link must stay in the page for the browser to follow it
+  expect(link.isConnected).toBe(true)
 })
 
 test('the ⋯ menu has no Download audio when the audio cannot load', async () => {
