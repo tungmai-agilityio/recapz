@@ -135,6 +135,24 @@ fn retention_sweep(data_dir: &std::path::Path, blobs: Option<&dyn Blobs>) -> any
     Ok(n)
 }
 
+/// Quiet hours for the weekly vacuum: 19:00 to 21:59 UTC, 02:00 to 04:59 in Vietnam, when calls are
+/// rare. ponytail: fixed window, make it a setting if a workspace works in another time zone.
+fn in_vacuum_window(now_ms: i64) -> bool {
+    (19..22).contains(&(now_ms / 3_600_000 % 24))
+}
+
+/// Vacuums every tenant database so deleted text does not stay in free pages. Logs workspace IDs and
+/// durations only.
+fn vacuum_all(data_dir: &std::path::Path) -> anyhow::Result<()> {
+    let control = db::open_control(data_dir)?;
+    for tenant in db::tenant_ids(&control)? {
+        let started = std::time::Instant::now();
+        recapz_core::purge::vacuum(&db::open_tenant(data_dir, &tenant)?)?;
+        tracing::info!("vacuum: workspace {tenant} took {:?}", started.elapsed());
+    }
+    Ok(())
+}
+
 /// Polls every tenant's queue once a second, draining while work remains.
 pub fn spawn(
     data_dir: PathBuf,
@@ -156,6 +174,7 @@ pub fn spawn(
             Err(e) => tracing::error!("re-index check panicked: {e}"),
         }
         let mut last_sweep: Option<std::time::Instant> = None;
+        let mut last_vacuum: Option<std::time::Instant> = None;
         loop {
             // Audio retention, about once an hour (and once at start).
             if last_sweep.is_none_or(|t| t.elapsed() >= Duration::from_secs(3600)) {
@@ -168,6 +187,18 @@ pub fn spawn(
                     Ok(Ok(_)) => {}
                     Ok(Err(e)) => tracing::error!("retention sweep: {e:#}"),
                     Err(e) => tracing::error!("retention sweep panicked: {e}"),
+                }
+            }
+            // Weekly vacuum, inside the quiet hours.
+            if in_vacuum_window(db::now_ms())
+                && last_vacuum.is_none_or(|t| t.elapsed() >= Duration::from_secs(7 * 24 * 3600))
+            {
+                last_vacuum = Some(std::time::Instant::now());
+                let d = data_dir.clone();
+                match tokio::task::spawn_blocking(move || vacuum_all(&d)).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => tracing::error!("vacuum: {e:#}"),
+                    Err(e) => tracing::error!("vacuum panicked: {e}"),
                 }
             }
             let (d, t, b, r, e, m) = (
@@ -542,6 +573,17 @@ mod tests {
             rows,
             vec![(60, 7_800)],
             "one minute at the configured rate, one row"
+        );
+    }
+
+    #[test]
+    fn the_vacuum_window_is_19_to_22_utc() {
+        let h = |hour: i64| hour * 3_600_000 + 5;
+        let open: Vec<i64> = (0..24).filter(|x| in_vacuum_window(h(*x))).collect();
+        assert_eq!(open, vec![19, 20, 21]);
+        assert!(
+            in_vacuum_window(3 * 24 * 3_600_000 + h(20)),
+            "later days too"
         );
     }
 }

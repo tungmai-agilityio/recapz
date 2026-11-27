@@ -8,6 +8,46 @@ use anyhow::{bail, Result};
 use rusqlite::{Connection, OptionalExtension};
 use std::{fs, io, path::Path};
 
+/// Ends a purge transaction. After a commit the WAL is truncated, so the deleted rows do not stay
+/// readable in the write-ahead log.
+fn finish<T>(c: &Connection, done: Result<T>) -> Result<T> {
+    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+    if done.is_ok() {
+        scrub(c)?;
+    }
+    done
+}
+
+/// Folds the search indexes' delete markers into their data (an FTS5 delete only marks the old
+/// terms) and truncates the WAL when no reader blocks it: the delete is already committed, so a busy
+/// WAL is not an error for the caller, and the weekly vacuum truncates it later. ponytail: `optimize` rewrites each whole index; use `merge` if a
+/// workspace grows large enough for a purge to feel slow.
+fn scrub(c: &Connection) -> Result<()> {
+    for t in ["chunks_fts", "document_chunks_fts"] {
+        c.execute(&format!("INSERT INTO {t}({t}) VALUES('optimize')"), [])?;
+    }
+    truncate_wal(c)?;
+    Ok(())
+}
+
+/// Empties the WAL; true when it did. A busy answer (another connection is reading) leaves the WAL in
+/// place.
+fn truncate_wal(c: &Connection) -> Result<bool> {
+    let busy: i64 = c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+    Ok(busy == 0)
+}
+
+/// Rewrites the database file so free pages (where deleted text may linger) are dropped, then
+/// truncates the WAL. Runs weekly from the job runner.
+pub fn vacuum(c: &Connection) -> Result<()> {
+    scrub(c)?;
+    c.execute_batch("VACUUM")?;
+    if !truncate_wal(c)? {
+        bail!("the WAL could not be truncated: the database is busy");
+    }
+    Ok(())
+}
+
 /// Returns false when the meeting does not exist. Safe to repeat: the recording goes first (the
 /// object in the store, then local files), so a failure partway leaves nothing readable and a
 /// retry finishes the job. A recording that lives in the store with no `blobs` given is an error,
@@ -56,8 +96,7 @@ pub fn purge_meeting(
         c.execute("DELETE FROM llm_usage WHERE meeting_id = ?1", [meeting_id])?;
         Ok(c.execute("DELETE FROM meetings WHERE id = ?1", [meeting_id])? > 0)
     })();
-    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
-    done
+    finish(c, done)
 }
 
 /// How many meetings one person spoke in, matched by the speaker's display name (case and edge
@@ -123,8 +162,7 @@ pub fn purge_participant(c: &Connection, name: &str) -> Result<i64> {
         }
         Ok(ids.len() as i64)
     })();
-    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
-    done
+    finish(c, done)
 }
 
 /// Hard delete of one member's document: the file first (a failure leaves nothing readable and a
@@ -163,8 +201,7 @@ pub fn purge_document(
         )?;
         Ok(c.execute("DELETE FROM documents WHERE id = ?1", [doc_id])? > 0)
     })();
-    c.execute_batch(if done.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
-    done
+    finish(c, done)
 }
 
 #[cfg(test)]
@@ -192,6 +229,58 @@ mod tests {
              INSERT INTO jobs (kind, meeting_id, run_after) VALUES ('report','{id}',0);"
         ))
         .unwrap();
+    }
+
+    #[test]
+    fn a_purge_leaves_no_deleted_text_in_the_wal_or_the_database_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafishmarker");
+        seed(&c, dir.path(), "m2", "walrus");
+        let db = tenant_dir(dir.path(), "t1").join("recapz.sqlite");
+        let has = |p: &Path, m: &[u8]| fs::read(p).unwrap().windows(m.len()).any(|w| w == m);
+        assert!(
+            has(&db.with_extension("sqlite-wal"), b"zebrafishmarker")
+                || has(&db, b"zebrafishmarker")
+        );
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap());
+        assert_eq!(
+            fs::metadata(db.with_extension("sqlite-wal")).unwrap().len(),
+            0,
+            "WAL emptied"
+        );
+        assert!(
+            !has(&db, b"zebrafishmarker"),
+            "text gone from the database file"
+        );
+        assert!(has(&db, b"walrus"), "the other meeting stays");
+    }
+
+    #[test]
+    fn a_purge_still_succeeds_when_a_reader_keeps_the_wal_from_truncating() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafish");
+        let reader = open_tenant(dir.path(), "t1").unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        count(&reader, "SELECT count(*) FROM meetings");
+        assert!(purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap());
+        assert_eq!(count(&c, "SELECT count(*) FROM meetings"), 0);
+        assert!(vacuum(&c).is_err(), "vacuum reports a busy WAL");
+    }
+
+    #[test]
+    fn vacuum_drops_deleted_text_from_free_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafishmarker");
+        c.execute("DELETE FROM meetings", []).unwrap();
+        vacuum(&c).unwrap();
+        let db = tenant_dir(dir.path(), "t1").join("recapz.sqlite");
+        assert!(!fs::read(&db)
+            .unwrap()
+            .windows(15)
+            .any(|w| w == b"zebrafishmarker"));
     }
 
     #[test]
