@@ -116,17 +116,17 @@ Cost caps: `monthly_cap_usd` in `config.toml` is the default cap of every worksp
 
 ```sh
 sudo install -m 0755 scripts/backup.sh /usr/local/bin/recapz-backup
-sudo install -d -m 0700 -o recapz -g recapz /var/backups/recapz
+sudo install -d -m 0750 -o recapz -g recapz /var/backups/recapz
 sudo install -m 0644 deploy/recapz-backup.service deploy/recapz-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 ```
 
-Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed.
+Daily at 03:30 UTC; keeps 14 days. Stamps are `0750`/`0640` `recapz:recapz` (umask 027) so the offsite user can read them; stamps written before this change stay `0700`, so `sudo chmod -R g+rX /var/backups/recapz` once on an existing host. Needs `sqlite3` and `rsync` installed.
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
 
 ### Offsite (encrypted)
 
-`recapz-offsite.timer` (04:00 UTC) pushes the newest stamp to an encrypted restic repository on any S3-compatible storage and keeps 7 daily and 4 weekly snapshots; the first run creates the repository. `scripts/provision-host.sh` installs restic, the script (`/usr/local/bin/recapz-offsite`) and the units. Use a private bucket of its own (not the recordings bucket) and, ideally, another provider than the host, so losing one account does not lose both. Create `/etc/recapz/offsite.env` (mode 0600, owner `root:root`: the job runs as root so the app user cannot read the bucket key or the restic password; never commit it) by editing it on the host:
+`recapz-offsite.timer` (04:00 UTC) pushes the newest stamp to an encrypted restic repository on any S3-compatible storage and keeps 7 daily and 4 weekly snapshots; the first run creates the repository. `scripts/provision-host.sh` installs restic, the script (`/usr/local/bin/recapz-offsite`) and the units. Use a private bucket of its own (not the recordings bucket) and, ideally, another provider than the host, so losing one account does not lose both. Create `/etc/recapz/offsite.env` (mode 0600, owner `root:root`: systemd reads it as root, so neither the app user nor the job user `recapz-offsite` can read the bucket key or the restic password; never commit it) by editing it on the host:
 
 ```sh
 RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>
@@ -134,6 +134,10 @@ RESTIC_PASSWORD=<openssl rand -hex 32>   # also in your password manager: withou
 AWS_ACCESS_KEY_ID=<bucket key id>
 AWS_SECRET_ACCESS_KEY=<bucket secret>
 ```
+
+The job runs as `recapz-offsite` (created by `scripts/provision-host.sh`, no shell, no home) with the supplementary group `recapz`, which is how it reads `/var/backups/recapz`. Code running as `recapz` cannot read the bucket key, the restic password or the offsite cache.
+
+**Retention lock and pruning.** Turn on an R2 bucket lock rule on the offsite bucket: retain objects for at least 14 days (R2 dashboard, bucket Settings, Object lock). A key stolen from the host then cannot delete or overwrite snapshots younger than that. The job still runs `restic forget --prune` on the host (`scripts/offsite-backup.sh`), so prune can only remove packs older than the lock; a locked pack makes prune report an error until it ages out *(unverified against R2)*. If you want the host key unable to delete at all, use a bucket key without delete rights and run `restic forget --prune` yourself from a trusted machine with a separate key.
 
 ```sh
 sudo systemctl enable --now recapz-offsite.timer
