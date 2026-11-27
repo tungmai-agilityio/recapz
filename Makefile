@@ -106,6 +106,7 @@ test:
 	./scripts/test-desktop-latest.sh
 	./scripts/test-automerge.sh
 	./scripts/test-health.sh
+	./scripts/test-offsite.sh
 	cargo test --workspace
 	pnpm -C web test
 

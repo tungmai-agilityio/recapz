@@ -123,8 +123,26 @@ sudo install -m 0644 deploy/recapz-backup.service deploy/recapz-backup.timer /et
 sudo systemctl daemon-reload && sudo systemctl enable --now recapz-backup.timer
 ```
 
-Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed. Copy `/var/backups/recapz` off the host (it contains real meeting data, so encrypt it in transit and at rest).
+Daily at 03:30 UTC; keeps 14 days. Needs `sqlite3` and `rsync` installed.
 Restore: stop the service, copy a stamp directory's contents over `/var/lib/recapz`, fix ownership to `recapz`, start the service.
+
+### Offsite (encrypted)
+
+`recapz-offsite.timer` (04:00 UTC) pushes the newest stamp to an encrypted restic repository on any S3-compatible storage and keeps 7 daily and 4 weekly snapshots; the first run creates the repository. `scripts/provision-host.sh` installs restic, the script (`/usr/local/bin/recapz-offsite`) and the units. Use a private bucket of its own (not the recordings bucket) and, ideally, another provider than the host, so losing one account does not lose both. Create `/etc/recapz/offsite.env` (mode 0640, owner `recapz:recapz`, never commit it) by editing it on the host:
+
+```sh
+RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>
+RESTIC_PASSWORD=<openssl rand -hex 32>   # also in your password manager: without it the backups cannot be read
+AWS_ACCESS_KEY_ID=<bucket key id>
+AWS_SECRET_ACCESS_KEY=<bucket secret>
+```
+
+```sh
+sudo systemctl enable --now recapz-offsite.timer
+sudo systemctl start recapz-offsite.service && journalctl -u recapz-offsite -n 20   # run once now
+```
+
+Restore on a rebuilt host: `systemctl stop recapz`, then as `recapz` with the same env (`set -a; . /etc/recapz/offsite.env`) run `restic restore latest --target /var/lib/recapz`, `chown -R recapz:recapz /var/lib/recapz` and start the service. The notetaker's sign-in is never backed up; run `notetaker-login` again. `scripts/test-offsite.sh` checks backup, prune and restore against a local repository (needs restic; skipped without it).
 
 ## Health check and restore test
 
