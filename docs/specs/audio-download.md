@@ -1,6 +1,6 @@
 # Audio download
 
-Status: **agreed with the maintainer (2026-11-27); not built.** Tickets #704 to #706 are open. Nothing here is verified in a running app.
+Status: **agreed with the maintainer (2026-11-27).** Spec merged (#704); the server route is built (#705, tests only, not run against a real bucket); the web item (#706) is open.
 Intent: #703. Docs ticket: #704.
 
 ## Problem
