@@ -313,6 +313,21 @@ export interface DocumentUsage { used_bytes: number; cap_bytes: number }
 
 export const getDocumentUsage = async (): Promise<DocumentUsage> => (await check(await fetch('/api/documents/usage'))).json()
 
+/** One document with the start of its text; `truncated` when only the first 1 MB is in `text`. */
+export interface DocDetail extends Doc { kind: 'md' | 'txt'; text: string; truncated: boolean }
+
+/** No such document for this member (missing, someone else's, or deleted). */
+export class DocNotFound extends Error {}
+
+export async function getDocument(id: string): Promise<DocDetail> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}`)
+  if (res.status === 404) throw new DocNotFound()
+  return (await check(res)).json()
+}
+
+/** Where the original file downloads from. */
+export const documentFileUrl = (id: string) => `/api/documents/${encodeURIComponent(id)}/file`
+
 export const getDocuments = async (): Promise<Doc[]> => (await check(await fetch('/api/documents'))).json()
 
 export async function uploadDocument(file: File): Promise<{ id: string }> {

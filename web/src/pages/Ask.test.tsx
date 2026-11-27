@@ -87,12 +87,12 @@ test('while streaming a marker shows as a plain number and an unfinished one wai
   expect(p.querySelector('a')).toBeNull()
 })
 
-test('a document citation names the document and is not a meeting link', async () => {
+test('a document citation names the document and links to its page, not a meeting', async () => {
   const c = [{ meeting_id: null, document_id: 'd1', answered: false, title: 'notes.md', start_ms: null, quote: 'walrus clause' }]
   await askWith(() => new Response(`event: token\ndata: {"text":"A"}\n\nevent: citations\ndata: ${JSON.stringify(c)}\n\nevent: done\ndata: {}\n\n`))
   expect(await screen.findByText('notes.md')).toBeTruthy()
   expect(screen.getByText('Document, not sent to the model')).toBeTruthy()
-  expect(screen.queryByRole('link', { name: /notes\.md/ })).toBeNull()
+  expect(screen.getByRole('link', { name: /notes\.md/ }).getAttribute('href')).toBe('/documents/d1')
 })
 
 test('no citations says so', async () => {

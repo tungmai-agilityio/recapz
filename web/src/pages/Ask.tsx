@@ -105,7 +105,7 @@ export function Ask() {
                 <Cite
                   key={i}
                   id={`cite-${ti}-${i}`}
-                  to={c.meeting_id ? `/meetings/${c.meeting_id}?t=${c.start_ms ?? 0}` : null}
+                  to={c.meeting_id ? `/meetings/${c.meeting_id}?t=${c.start_ms ?? 0}` : c.document_id ? `/documents/${c.document_id}` : null}
                   className="flex min-w-0 flex-col gap-2 rounded-lg border border-hair bg-inset p-3 hover:border-ink-2"
                 >
                   <span className="flex justify-between font-mono text-xs"><span>{c.n ?? ''}</span><time className="text-mute">{c.start_ms === null ? (c.answered ? 'Document' : 'Document, not sent to the model') : clock(c.start_ms)}</time></span>

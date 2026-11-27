@@ -1,6 +1,6 @@
 # Document view
 
-Status: **agreed with the maintainer (2026-11-27); server built in #700, page in #701 (see its PR).** Not seen against a real server: unverified. The 1 MB browser threshold is unverified.
+Status: **agreed with the maintainer (2026-11-27); server built (#700, merged), page built in #701.** Not seen against a real server: unverified. The 1 MB browser threshold is unverified.
 Intent: none (two tickets, milestone M23).
 
 ## Problem
