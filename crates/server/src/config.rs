@@ -132,11 +132,23 @@ impl Default for Mail {
 }
 
 /// Settings for the browser notetaker.
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Clone)]
 #[serde(default)]
 pub struct Notetaker {
     /// Chromium or Chrome binary; empty searches the usual locations.
     pub chromium_path: String,
+    /// Leave the call when the chat notice cannot be posted (default). Off: record anyway, and the
+    /// meeting report warns that no notice was posted.
+    pub require_chat_notice: bool,
+}
+
+impl Default for Notetaker {
+    fn default() -> Self {
+        Self {
+            chromium_path: String::new(),
+            require_chat_notice: true,
+        }
+    }
 }
 
 #[derive(Deserialize, Clone)]
@@ -277,6 +289,14 @@ mod tests {
         assert!(cfg.require_speech_key().is_err());
         cfg.speech.api_key = "k".into();
         assert!(cfg.require_speech_key().is_ok());
+    }
+
+    #[test]
+    fn the_chat_notice_is_required_unless_turned_off() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.notetaker.require_chat_notice);
+        let cfg: Config = toml::from_str("[notetaker]\nrequire_chat_notice = false").unwrap();
+        assert!(!cfg.notetaker.require_chat_notice);
     }
 
     #[test]

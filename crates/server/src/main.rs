@@ -89,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
                 chromium,
                 max_concurrent: cfg.max_concurrent_calls,
                 max_call_minutes: cfg.max_call_minutes,
+                require_chat_notice: cfg.notetaker.require_chat_notice,
                 live: Some(recapz_server::notetaker::Live {
                     base_url: cfg.speech.listen_url(),
                     api_key: cfg.speech.api_key.clone(),

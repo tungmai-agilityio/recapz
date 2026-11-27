@@ -17,6 +17,8 @@ export interface MeetingDetail extends Meeting {
   share: MeetingShare
   /** The owner or an admin: may rename, re-share and delete. */
   can_edit: boolean
+  /** The notetaker recorded without posting its chat notice (the server allows that only when configured). */
+  no_chat_notice?: boolean
   /** What the meeting cost; sent to admins only. */
   speech_micro_usd?: number
   llm_micro_usd?: number
