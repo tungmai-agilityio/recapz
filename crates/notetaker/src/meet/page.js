@@ -30,19 +30,20 @@
   };
   const roleOf = (el) =>
     el.getAttribute('role') || { BUTTON: 'button', A: 'link', TEXTAREA: 'textbox', INPUT: 'textbox' }[el.tagName] || '';
-  // A box can be named by a label element or only by its placeholder, so read those too.
+  // A text box can be named by a label element or only by its placeholder.
   const labelledBy = (el) =>
     (el.getAttribute('aria-labelledby') || '')
       .split(/\s+/)
       .map((id) => (id && document.getElementById(id)?.textContent) || '')
       .join(' ')
       .trim();
+  // Only text boxes read them, so button and link names stay as they were.
   const nameOf = (el) =>
     (
       el.getAttribute('aria-label') ||
-      labelledBy(el) ||
-      el.getAttribute('placeholder') ||
-      el.getAttribute('aria-placeholder') ||
+      (roleOf(el) === 'textbox'
+        ? labelledBy(el) || el.getAttribute('placeholder') || el.getAttribute('aria-placeholder')
+        : '') ||
       el.textContent ||
       ''
     ).trim();
