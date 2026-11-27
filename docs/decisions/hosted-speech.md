@@ -19,8 +19,8 @@ and a hosted provider was an opt-in. Provider facts were read from provider docs
 | Cost | Per-meeting usage (audio seconds, tokens) stored; estimated cost shown to admins; a monthly cap in config pauses new jobs |
 | Failure | Audio stays on disk, jobs retry with backoff, streaming failure never blocks recording and the live view says "live transcript unavailable". Auth and quota errors fail fast with an admin alert. No automatic second provider |
 | Local whisper | Dropped: `whisper-rs`, the CUDA build and model files leave the build and docs. The `Transcriber` trait stays so a local engine can return. Upload decoding (symphonia) stays |
-| Recording storage | Object storage provider is open (undecided); recordings are on server disk for now (no bucket enabled). The 2026-11-18 Hetzner choice is superseded: hosting moved to DigitalOcean. With a private S3-compatible bucket configured, the notetaker still writes WAV to local disk during the call; after a successful batch transcript the file is uploaded to the bucket and the local copy removed. Playback streams from the bucket with range requests. Deleting a meeting, opt-out or participant purge hard-deletes the objects. The bucket is private, one deployment key in the env file, and was to be named on the privacy screen as a place audio is kept (wording from before #326; not checked against the current screen) |
-| Deploy | 2 vCPU, 4 GB RAM, 40 GB disk or more (the last Droplet had 79 GB; it has since been deleted, see `docs/deploy.md`), `max_concurrent_calls = 2`. Chromium per call is the memory driver and in-call WAV (about 115 MB per hour, local only until uploaded) the disk driver; recordings stay on server disk until a storage provider is chosen |
+| Recording storage | Cloudflare R2 (chosen by the maintainer 2026-11-27: S3-compatible, private bucket; not yet checked with a real recording, *unverified*). The 2026-11-18 Hetzner choice is superseded: hosting moved to DigitalOcean. With a private S3-compatible bucket configured, the notetaker still writes WAV to local disk during the call; after a successful batch transcript the file is uploaded to the bucket and the local copy removed. Playback streams from the bucket with range requests. Deleting a meeting, opt-out or participant purge hard-deletes the objects. The bucket is private, one deployment key in the env file, and was to be named on the privacy screen as a place audio is kept (wording from before #326; not checked against the current screen) |
+| Deploy | 2 vCPU, 4 GB RAM, 40 GB disk or more (the current Droplet has 50 GB, see `docs/deploy.md`; 1 vCPU / 2 GB with `max_concurrent_calls = 1` for a demo), `max_concurrent_calls = 2`. Chromium per call is the memory driver and in-call WAV (about 115 MB per hour, local only until uploaded) the disk driver; finished recordings move to the R2 bucket |
 
 ## Why Deepgram
 
@@ -80,7 +80,7 @@ LLM. A one hour meeting with the live view on costs about $1. The monthly cap in
 
 ## Open questions
 
-- Which S3-compatible provider holds recordings, and whether its region is near the San Francisco Droplet (*unverified*; if not, playback latency and cross-region transfer need a check). Audio retention period (suggested 90 days, admin-settable).
+- Playback latency from R2 to members in Vietnam via the Singapore Droplet (*unverified*). Audio retention period (suggested 90 days, admin-settable).
 
 - Exact Deepgram and OpenAI settings that give no training and no retention (*unverified*).
 - Whether Deepgram streaming accepts the notetaker's 16 kHz mono i16 frames as they are (expected yes).
