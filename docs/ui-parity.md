@@ -171,6 +171,7 @@ non-owners once the list returns the owner.
 - [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
 - [ ] Filters: From, To and Person above the composer, Clear filters (jsdom test only; the prototype has no filters,
       so the layout is not compared and not seen in a browser: unverified)
+- [ ] History (#698, planned in `docs/specs/ask-history.md`): earlier turns load on open, a delete button on each turn, Clear history with an inline confirmation; both skins and mobile
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
