@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Documents } from './Documents'
 
@@ -15,7 +16,7 @@ function run(rows: unknown[], calls: string[] = [], used: unknown = usage) {
     if (u === '/api/documents/usage') return used === null ? new Response('', { status: 500 }) : new Response(JSON.stringify(used))
     return new Response(JSON.stringify(rows))
   }))
-  render(<QueryClientProvider client={new QueryClient()}><Documents /></QueryClientProvider>)
+  render(<MemoryRouter><QueryClientProvider client={new QueryClient()}><Documents /></QueryClientProvider></MemoryRouter>)
 }
 const added = new Date(2026, 10, 12, 9).getTime()
 const rows = [
@@ -109,4 +110,11 @@ test('each cell carries its column label so narrow screens can stack the row', a
   const table = await screen.findByRole('table', { name: 'Documents' })
   const cells = [...within(table).getAllByRole('row')[1].querySelectorAll('td')]
   expect(cells.map((c) => c.dataset.label)).toEqual(['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', undefined])
+})
+
+test('each name links to its document page', async () => {
+  run(rows)
+  const table = await screen.findByRole('table', { name: 'Documents' })
+  expect(within(table).getByRole('link', { name: 'plan.md' }).getAttribute('href')).toBe('/documents/a1')
+  expect(within(table).getByRole('link', { name: 'empty.txt' }).getAttribute('href')).toBe('/documents/b2')
 })

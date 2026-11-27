@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { deleteDocument, getDocuments, getDocumentUsage, setDocumentLlmOk, uploadDocument, type Doc } from '../api'
 import { Badge } from '../ui/Badge'
 import { fileClass } from '../ui/Field'
@@ -7,6 +8,7 @@ import { Button } from '../ui/Button'
 import { Columns } from '../ui/Columns'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Icon } from '../ui/Icon'
+import { addedOn, bytesLabel, label, tone } from './documentFormat'
 import { PageHead } from '../ui/PageHead'
 import { Switch } from '../ui/Switch'
 import { Cell, Row, Table } from '../ui/Table'
@@ -21,18 +23,6 @@ function problem(f: File): string | null {
   if (f.size > MAX_BYTES) return `${f.name}: over 20 MB.`
   return null
 }
-
-/** 1.5 MB, 320 KB, 12 B. */
-function bytesLabel(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
-  return `${Number((n / (1024 * 1024)).toFixed(1))} MB`
-}
-
-const addedOn = (ms: number) => new Date(ms).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
-
-const tone = { indexing: 'signal', indexed: 'good', 'no text found': 'neutral' } as const
-const label = { indexing: 'Indexing', indexed: 'Indexed', 'no text found': 'No text found' } as const
 
 /** Storage used against the per-member cap. */
 function Meter({ used, cap }: { used: number; cap: number }) {
@@ -109,7 +99,7 @@ export function Documents() {
             <Table label="Documents" head={['Name', 'Type', 'Size', 'Added', 'Status', 'Send to language model', '']}>
               {docs.data.map((d) => (
                 <Row key={d.id}>
-                  <Cell label="Name" className="min-w-24 font-semibold break-words @max-2xl:col-span-2">{d.name}</Cell>
+                  <Cell label="Name" className="min-w-24 font-semibold break-words @max-2xl:col-span-2"><Link to={`/documents/${d.id}`} className="hover:text-primary">{d.name}</Link></Cell>
                   <Cell label="Type">{(d.name.split('.').pop() ?? '').toUpperCase()}</Cell>
                   <Cell label="Size" className="whitespace-nowrap">{bytesLabel(d.size_bytes)}</Cell>
                   <Cell label="Added" className="whitespace-nowrap">{addedOn(d.created_at)}</Cell>
