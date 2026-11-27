@@ -94,6 +94,7 @@ pub fn purge_meeting(
         // delete trigger) go with the meeting row; the rest have no foreign key.
         c.execute("DELETE FROM jobs WHERE meeting_id = ?1", [meeting_id])?;
         c.execute("DELETE FROM llm_usage WHERE meeting_id = ?1", [meeting_id])?;
+        crate::ask_history::purge_citing(c, "meeting_id", meeting_id)?;
         Ok(c.execute("DELETE FROM meetings WHERE id = ?1", [meeting_id])? > 0)
     })();
     finish(c, done)
@@ -142,6 +143,8 @@ pub fn purge_participant(c: &Connection, name: &str) -> Result<i64> {
             c.execute("DELETE FROM chunks WHERE meeting_id = ?1", [m])?;
             c.execute("DELETE FROM reports WHERE meeting_id = ?1", [m])?;
             c.execute("DELETE FROM action_items WHERE meeting_id = ?1", [m])?;
+            // An Ask answer may quote the person.
+            crate::ask_history::purge_citing(c, "meeting_id", m)?;
             c.execute(
                 "DELETE FROM jobs WHERE meeting_id = ?1 AND kind IN ('index','report') AND state = 'queued'",
                 [m],
@@ -199,6 +202,7 @@ pub fn purge_document(
             "DELETE FROM jobs WHERE kind = ?1 AND payload = ?2",
             [crate::document::KIND, doc_id],
         )?;
+        crate::ask_history::purge_citing(c, "document_id", doc_id)?;
         Ok(c.execute("DELETE FROM documents WHERE id = ?1", [doc_id])? > 0)
     })();
     finish(c, done)
@@ -522,5 +526,80 @@ mod tests {
             "only that meeting's object goes"
         );
         assert_eq!(count(&c, "SELECT count(*) FROM meetings"), 0);
+    }
+
+    /// Two members' turns: u1 cites `m1`, u2 cites `m1` and a document, u1 cites `m2`, u1 cites nothing.
+    fn seed_turns(c: &Connection) {
+        let cite = |k: &str, v: &str| format!(r#"[{{"{k}":"{v}"}}]"#);
+        for (who, q, cites) in [
+            ("u1", "about m1", cite("meeting_id", "m1")),
+            (
+                "u2",
+                "about m1 and d1",
+                r#"[{"meeting_id":"m1"},{"document_id":"d1"}]"#.into(),
+            ),
+            ("u1", "about m2", cite("meeting_id", "m2")),
+            ("u1", "about d1", cite("document_id", "d1")),
+            ("u1", "about nothing", "[]".into()),
+        ] {
+            crate::ask_history::save(c, who, q, "a", &cites).unwrap();
+        }
+    }
+
+    fn left(c: &Connection) -> Vec<String> {
+        let mut q: Vec<String> = c
+            .prepare("SELECT question FROM ask_turns")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        q.sort();
+        q
+    }
+
+    #[test]
+    fn purging_a_meeting_deletes_the_ask_turns_that_cite_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c, dir.path(), "m1", "zebrafish");
+        seed_turns(&c);
+        purge_meeting(&c, dir.path(), "t1", "m1", None).unwrap();
+        assert_eq!(left(&c), ["about d1", "about m2", "about nothing"]);
+    }
+
+    #[test]
+    fn purging_a_participant_deletes_the_ask_turns_that_cite_their_meetings() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        for m in ["m1", "m2"] {
+            c.execute(
+                "INSERT INTO meetings (id, title, platform, status) VALUES (?1,'t','upload','ready')",
+                [m],
+            )
+            .unwrap();
+        }
+        c.execute_batch(
+            "INSERT INTO speakers (id, meeting_id, label, display_name) VALUES ('s1','m1','S1','Lan'),('s2','m2','S1','Minh');",
+        )
+        .unwrap();
+        seed_turns(&c);
+        assert_eq!(purge_participant(&c, "Lan").unwrap(), 1);
+        assert_eq!(left(&c), ["about d1", "about m2", "about nothing"]);
+    }
+
+    #[test]
+    fn purging_a_document_deletes_the_ask_turns_that_cite_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        c.execute_batch(
+            "INSERT INTO members (id, email, role) VALUES ('u1','u1@x.io','member');
+             INSERT INTO documents (id, member_id, name, kind, size_bytes, path, created_at)
+               VALUES ('d1','u1','n.md','md',1,'documents/d1.md',1);",
+        )
+        .unwrap();
+        seed_turns(&c);
+        assert!(purge_document(&c, dir.path(), "t1", "u1", "d1").unwrap());
+        assert_eq!(left(&c), ["about m1", "about m2", "about nothing"]);
     }
 }
