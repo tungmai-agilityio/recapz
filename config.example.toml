@@ -28,7 +28,7 @@ bucket = ""              # must be private
 
 [google]
 client_id = ""
-client_secret = ""
+client_secret = ""   # or set RECAPZ_GOOGLE_CLIENT_SECRET in the environment (it wins; use it in production, keep the secret out of this file)
 
 # Meeting reports. Leave `provider` empty to skip reports.
 # Only transcript text, documents marked "May be sent to the language model" and a member's question
@@ -36,7 +36,7 @@ client_secret = ""
 [llm]
 provider = ""            # "anthropic" or "openai" (any OpenAI-compatible server)
 base_url = ""            # required for "openai", e.g. http://localhost:8000/v1
-api_key = ""            # or set RECAPZ_LLM_KEY in the environment (it wins; use it in production)
+api_key = ""            # or set RECAPZ_LLM_KEY in the environment (it wins; use it in production and keep the key out of this file)
 model = ""
 embedding_model = ""     # for embedder = "hosted": POST {base}/embeddings; changing it re-indexes meetings at start
 embedding_base_url = ""  # empty uses base_url; api_key is reused
