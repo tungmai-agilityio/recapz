@@ -236,8 +236,17 @@ export class AnswerFailed extends Error {}
 /** Optional narrowing of Ask: UTC dates `YYYY-MM-DD` (inclusive) and the name of a person who spoke. */
 export interface AskFilter { from?: string; to?: string; speaker?: string }
 
-/** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
-export async function ask(question: string, onToken: (t: string) => void, filter: AskFilter = {}): Promise<Citation[]> {
+/** One saved question and answer; `id` is what delete uses. */
+export interface AskTurn { id: string; question: string; answer: string; citations: Citation[]; created_at: number }
+
+/** The member's own saved turns, oldest first. */
+export const getAskHistory = async (): Promise<AskTurn[]> => (await check(await fetch('/api/ask/history'))).json()
+export const deleteAskTurn = async (id: string) => { await check(await fetch(`/api/ask/history/${encodeURIComponent(id)}`, { method: 'DELETE', headers: csrf() })) }
+export const clearAskHistory = async () => { await check(await fetch('/api/ask/history', { method: 'DELETE', headers: csrf() })) }
+
+/** Streams an answer: `onToken` gets each piece of text; the result is the cited moments and the saved turn's `id`
+ *  (null when the server could not save it). */
+export async function ask(question: string, onToken: (t: string) => void, filter: AskFilter = {}): Promise<{ citations: Citation[]; id: string | null }> {
   const first = await fetch('/api/ask', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...csrf() },
@@ -250,6 +259,7 @@ export async function ask(question: string, onToken: (t: string) => void, filter
   const decoder = new TextDecoder()
   let buf = ''
   let citations: Citation[] = []
+  let id: string | null = null
   for (;;) {
     const { done, value } = await reader.read()
     buf += decoder.decode(value, { stream: !done })
@@ -259,8 +269,9 @@ export async function ask(question: string, onToken: (t: string) => void, filter
       if (e.name === 'token') onToken((e.data as { text: string }).text)
       if (e.name === 'error') throw new AnswerFailed()
       if (e.name === 'citations') citations = e.data as Citation[]
+      if (e.name === 'done') id = (e.data as { id?: string | null }).id ?? null
     }
-    if (done) return citations
+    if (done) return { citations, id }
   }
 }
 

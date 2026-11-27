@@ -1,6 +1,6 @@
 # Ask history
 
-Status: **agreed with the maintainer (2026-11-27); storage (#696) and server (#697) built, page not yet.** Ticket #698 is open. Nothing here is verified in a running app.
+Status: **agreed with the maintainer (2026-11-27); built in #696 to #698, all merged.** Not yet seen against a real server: unverified. Visual parity with the prototype is not compared side by side: see the S4 row in `docs/ui-parity.md`.
 Intent: #695. Docs ticket: #699.
 
 ## Problem
@@ -26,12 +26,12 @@ Ask questions and answers vanish on a page reload. `web/src/pages/Ask.tsx` keeps
 
 ## Acceptance
 
-- [ ] After a reload the Ask page shows the member's earlier turns with their citation cards.
-- [ ] A member never receives, deletes or counts another member's turns; an admin gets the same answer as any other member.
-- [ ] A turn citing a meeting the member can no longer see is not listed.
-- [ ] Purging a meeting, a participant's speech or a document, and removing a member, hard-deletes the matching turns.
+- [x] After a reload the Ask page shows the member's earlier turns with their citation cards.
+- [x] A member never receives, deletes or counts another member's turns; an admin gets the same answer as any other member.
+- [x] A turn citing a meeting the member can no longer see is not listed.
+- [x] Purging a meeting, a participant's speech or a document, and removing a member, hard-deletes the matching turns.
 - [ ] Delete one and Clear history work from the page; Clear asks first. Matches the prototype in both skins and on mobile.
-- [ ] Logs contain no question or answer text.
+- [x] Logs contain no question or answer text.
 
 ## API
 

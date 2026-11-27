@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { parseEvents } from '../api'
@@ -6,14 +6,21 @@ import { Ask } from './Ask'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
+/** Answers the history load with `history` and hands every other request to the returned mock. */
+function stubFetch(handler: () => Response, history: unknown[] = []) {
+  const calls = vi.fn(async (_url: string, _init?: RequestInit) => handler())
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) =>
+    url === '/api/ask/history' && !init?.method ? Response.json(history) : calls(url, init))
+  return calls
+}
+
 const sse =
   'event: token\ndata: {"text":"Ships Friday ["}\n\nevent: token\ndata: {"text":"1]. Not [9]."}\n\n' +
   'event: citations\ndata: [{"meeting_id":"m1","document_id":null,"title":"Weekly sync","start_ms":65000,"quote":"pricing page ships Friday","answered":true,"n":1,"speaker":"Bo","duration_ms":200000,"ribbon":[{"speaker":0,"weight":30},{"speaker":1,"weight":30}]}]\n\n' +
   'event: done\ndata: {}\n\n'
 
 test('shows the streamed answer and a citation card that opens the moment', async () => {
-  const fetchMock = vi.fn(async () => new Response(sse))
-  vi.stubGlobal('fetch', fetchMock)
+  const fetchMock = stubFetch(() => new Response(sse))
   render(<MemoryRouter><Ask /></MemoryRouter>)
   fireEvent.change(screen.getByLabelText('Question'), { target: { value: ' when does pricing ship? ' } })
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
@@ -32,7 +39,7 @@ test('shows the streamed answer and a citation card that opens the moment', asyn
 })
 
 async function askWith(res: () => Response) {
-  vi.stubGlobal('fetch', vi.fn(async () => res()))
+  stubFetch(res)
   render(<MemoryRouter><Ask /></MemoryRouter>)
   fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'x' } })
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
@@ -77,7 +84,7 @@ test('only three markers are shown for four citations', async () => {
 test('while streaming a marker shows as a plain number and an unfinished one waits', async () => {
   let push!: (t: string) => void
   const body = new ReadableStream<Uint8Array>({ start(c) { push = (t) => c.enqueue(new TextEncoder().encode(t)) } })
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+  stubFetch(() => new Response(body))
   render(<MemoryRouter><Ask /></MemoryRouter>)
   fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'x' } })
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
@@ -101,8 +108,7 @@ test('no citations says so', async () => {
 })
 
 test('answer markers link to cards, and a chip asks a second question below a divider', async () => {
-  const fetchMock = vi.fn(async () => new Response(sse))
-  vi.stubGlobal('fetch', fetchMock)
+  const fetchMock = stubFetch(() => new Response(sse))
   const { container } = render(<MemoryRouter><Ask /></MemoryRouter>)
   fireEvent.click(screen.getByRole('button', { name: 'What are the open action items?' }))
   const marker = await screen.findByRole('link', { name: '1' })
@@ -124,8 +130,7 @@ test('parseEvents keeps an unfinished event for the next read', () => {
 })
 
 test('filters are sent with the question only when set, and Clear removes them', async () => {
-  const fetchMock = vi.fn(async () => new Response(sse))
-  vi.stubGlobal('fetch', fetchMock)
+  const fetchMock = stubFetch(() => new Response(sse))
   render(<MemoryRouter><Ask /></MemoryRouter>)
   expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull()
   fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-11-01' } })
@@ -141,4 +146,74 @@ test('filters are sent with the question only when set, and Clear removes them',
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   expect(body(1)).toEqual({ question: 'again' })
+})
+
+const saved = (id: string, q: string) => ({
+  id, question: q, answer: `Answer ${id} [1]`, created_at: 1,
+  citations: [{ meeting_id: 'm1', document_id: null, title: 'Weekly sync', start_ms: 65000, quote: `quote ${id}`, answered: true, n: 1 }],
+})
+
+test('saved turns show again on open, oldest first, with their citation cards', async () => {
+  stubFetch(() => new Response(''), [saved('t1', 'first question'), saved('t2', 'second question')])
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  expect(await screen.findByText('first question')).toBeTruthy()
+  const qs = screen.getAllByText(/question$/).map((e) => e.textContent)
+  expect(qs).toEqual(['first question', 'second question'])
+  expect(screen.getByText('quote t1').closest('a')!.getAttribute('href')).toBe('/meetings/m1?t=65000')
+  expect(screen.getByText('quote t2')).toBeTruthy()
+})
+
+test('a new answer can be deleted without a reload, using the id from the done event', async () => {
+  const calls = stubFetch(() => new Response('event: token\ndata: {"text":"Hi"}\n\nevent: citations\ndata: []\n\nevent: done\ndata: {"id":"new-1"}\n\n'))
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'fresh one' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete this question' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+  await vi.waitFor(() => expect(screen.queryByText('fresh one')).toBeNull())
+  const del = calls.mock.calls[1] as unknown as [string, RequestInit]
+  expect([del[0], del[1].method]).toEqual(['/api/ask/history/new-1', 'DELETE'])
+})
+
+test('deleting one turn removes only that turn', async () => {
+  const calls = stubFetch(() => new Response(null, { status: 204 }), [saved('t1', 'first question'), saved('t2', 'second question')])
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  await screen.findByText('first question')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Delete this question' })[0])
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+  await vi.waitFor(() => expect(screen.queryByText('first question')).toBeNull())
+  expect(screen.getByText('second question')).toBeTruthy()
+  expect(calls.mock.calls.map((c) => [c[0], c[1]?.method])).toEqual([['/api/ask/history/t1', 'DELETE']])
+})
+
+test('Clear history asks first, cancel keeps everything, confirm deletes all', async () => {
+  const calls = stubFetch(() => new Response(null, { status: 204 }), [saved('t1', 'first question'), saved('t2', 'second question')])
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  await screen.findByText('first question')
+  fireEvent.click(screen.getByRole('button', { name: 'Clear history' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByText('second question')).toBeTruthy()
+  expect(calls).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Clear history' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear history' }))
+  await vi.waitFor(() => expect(screen.queryByText('first question')).toBeNull())
+  expect(screen.queryByText('second question')).toBeNull()
+  expect(calls.mock.calls.map((c) => [c[0], c[1]?.method])).toEqual([['/api/ask/history', 'DELETE']])
+})
+
+test('a failed delete keeps the turn and says so', async () => {
+  stubFetch(() => new Response('', { status: 500 }), [saved('t1', 'first question')])
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  await screen.findByText('first question')
+  fireEvent.click(screen.getByRole('button', { name: 'Delete this question' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+  expect(await screen.findByText('Could not delete. Try again.')).toBeTruthy()
+  expect(screen.getByText('first question')).toBeTruthy()
+})
+
+test('with no saved turns there is no Clear history button', async () => {
+  stubFetch(() => new Response(''))
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  await Promise.resolve()
+  expect(screen.queryByRole('button', { name: 'Clear history' })).toBeNull()
 })

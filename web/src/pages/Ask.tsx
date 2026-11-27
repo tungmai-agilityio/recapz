@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { ask, type AskFilter, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
+import { ask, clearAskHistory, deleteAskTurn, getAskHistory, type AskFilter, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
 import { clock } from '../clock'
 import { Button } from '../ui/Button'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { inputClass } from '../ui/Field'
 import { Ribbon } from '../ui/Ribbon'
 
@@ -46,7 +47,8 @@ function CardRibbon({ c }: { c: Citation }) {
   )
 }
 
-interface Turn { q: string; a: string; cites: Citation[]; state: 'streaming' | 'done' | 'error'; error: string }
+/** `key` is stable while turns come and go; `id` is the saved turn (null until saved, or if saving failed). */
+interface Turn { key: number; id: string | null; q: string; a: string; cites: Citation[]; state: 'streaming' | 'done' | 'error'; error: string }
 
 function errorText(err: unknown) {
   if (err instanceof Unauthorized) return 'Sign in to ask.'
@@ -65,33 +67,67 @@ export function Ask() {
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }) }, [turns.length])
 
+  const keys = useRef(0)
+  const [confirm, setConfirm] = useState<'clear' | Turn | null>(null)
+  const [busyDel, setBusyDel] = useState(false)
+  const [delError, setDelError] = useState('')
+
+  // The saved history comes first; a question asked before it arrives stays below it.
+  useEffect(() => {
+    getAskHistory().then((h) => setTurns((ts) => [
+      ...h.map((t): Turn => ({ key: ++keys.current, id: t.id, q: t.question, a: t.answer, cites: t.citations, state: 'done', error: '' })),
+      ...ts,
+    ])).catch(() => {})
+  }, [])
+
   async function submit(text: string) {
     const q = text.trim()
     if (!q || busy) return
     setQuestion('')
-    const i = turns.length
+    const key = ++keys.current
     const patch = (f: (t: Turn) => Partial<Turn>) =>
-      setTurns((ts) => ts.map((t, j) => (j === i ? { ...t, ...f(t) } : t)))
-    setTurns((ts) => [...ts, { q, a: '', cites: [], state: 'streaming', error: '' }])
+      setTurns((ts) => ts.map((t) => (t.key === key ? { ...t, ...f(t) } : t)))
+    setTurns((ts) => [...ts, { key, id: null, q, a: '', cites: [], state: 'streaming', error: '' }])
     try {
-      const cites = await ask(q, (tok) => patch((t) => ({ a: t.a + tok })), filter)
-      patch(() => ({ cites, state: 'done' }))
+      const { citations, id } = await ask(q, (tok) => patch((t) => ({ a: t.a + tok })), filter)
+      patch(() => ({ cites: citations, id, state: 'done' }))
     } catch (err) {
       patch(() => ({ state: 'error', error: errorText(err) }))
       setQuestion((cur) => cur || q)
     }
   }
 
+  async function confirmed() {
+    if (!confirm) return
+    setBusyDel(true)
+    setDelError('')
+    try {
+      if (confirm === 'clear') { await clearAskHistory(); setTurns([]) }
+      else { await deleteAskTurn(confirm.id!); setTurns((ts) => ts.filter((t) => t.key !== confirm.key)) }
+      setConfirm(null)
+    } catch {
+      setDelError('Could not delete. Try again.')
+    } finally {
+      setBusyDel(false)
+    }
+  }
+
   return (
     <section className="flex max-w-[760px] flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Ask</h1>
-        <p className="mt-1 text-sm text-mute">Searches every transcript and report you can access. Each answer links to the moment it came from.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Ask</h1>
+          <p className="mt-1 text-sm text-mute">Searches every transcript and report you can access. Each answer links to the moment it came from. Your questions are kept for you only; admins cannot read them.</p>
+        </div>
+        {turns.some((t) => t.id) && <Button disabled={busy} onClick={() => { setDelError(''); setConfirm('clear') }}>Clear history</Button>}
       </div>
       {turns.length > 0 && <div className="frame flex flex-col gap-5">{turns.map((t, ti) => (
-        <div key={ti} className="flex flex-col gap-3.5">
+        <div key={t.key} className="flex flex-col gap-3.5">
           {ti > 0 && <div className="h-px bg-hair" />}
-          <p className="text-xl font-semibold leading-snug tracking-tight">{t.q}</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xl font-semibold leading-snug tracking-tight">{t.q}</p>
+            {t.id && <Button variant="ghost" aria-label="Delete this question" title="Delete this question" onClick={() => { setDelError(''); setConfirm(t) }}>Delete</Button>}
+          </div>
           {(t.state !== 'error' || t.a) && (
             <p className="whitespace-pre-wrap leading-7" aria-live="polite">
               {t.a ? <AnswerText text={t.a} cites={t.cites} ti={ti} streaming={t.state === 'streaming'} /> : <span className="text-mute">Searching your meetings…</span>}
@@ -147,6 +183,12 @@ export function Ask() {
         <Button type="submit" variant="primary" disabled={busy}>Ask</Button>
       </form>
       <div ref={bottom} />
+      {confirm && (
+        <ConfirmDialog title={confirm === 'clear' ? 'Clear Ask history?' : 'Delete this question?'} confirmLabel={confirm === 'clear' ? 'Clear history' : 'Delete'}
+          busy={busyDel} error={delError || undefined} onConfirm={confirmed} onCancel={() => setConfirm(null)}>
+          {confirm === 'clear' ? 'All your saved questions and answers are deleted for good.' : 'This question and its answer are deleted for good.'}
+        </ConfirmDialog>
+      )}
     </section>
   )
 }
