@@ -64,19 +64,17 @@ export function Ask() {
   const filtered = Object.values(filter).some(Boolean)
   const setPart = (k: keyof AskFilter) => (e: { target: { value: string } }) => setFilter((f) => ({ ...f, [k]: e.target.value }))
   const busy = turns.some((t) => t.state === 'streaming')
-  const bottom = useRef<HTMLDivElement>(null)
-  useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }) }, [turns.length])
 
   const keys = useRef(0)
   const [confirm, setConfirm] = useState<'clear' | Turn | null>(null)
   const [busyDel, setBusyDel] = useState(false)
   const [delError, setDelError] = useState('')
 
-  // The saved history comes first; a question asked before it arrives stays below it.
+  // Turns are listed newest first, under the question box; a question asked before the history arrives stays on top.
   useEffect(() => {
     getAskHistory().then((h) => setTurns((ts) => [
-      ...h.map((t): Turn => ({ key: ++keys.current, id: t.id, q: t.question, a: t.answer, cites: t.citations, state: 'done', error: '' })),
       ...ts,
+      ...h.map((t): Turn => ({ key: ++keys.current, id: t.id, q: t.question, a: t.answer, cites: t.citations, state: 'done', error: '' })).reverse(),
     ])).catch(() => {})
   }, [])
 
@@ -87,7 +85,7 @@ export function Ask() {
     const key = ++keys.current
     const patch = (f: (t: Turn) => Partial<Turn>) =>
       setTurns((ts) => ts.map((t) => (t.key === key ? { ...t, ...f(t) } : t)))
-    setTurns((ts) => [...ts, { key, id: null, q, a: '', cites: [], state: 'streaming', error: '' }])
+    setTurns((ts) => [{ key, id: null, q, a: '', cites: [], state: 'streaming', error: '' }, ...ts])
     try {
       const { citations, id } = await ask(q, (tok) => patch((t) => ({ a: t.a + tok })), filter)
       patch(() => ({ cites: citations, id, state: 'done' }))
@@ -119,8 +117,40 @@ export function Ask() {
           <h1 className="text-2xl font-semibold tracking-tight">Ask</h1>
           <p className="mt-1 text-sm text-mute">Searches every transcript and report you can access. Each answer links to the moment it came from. Your questions are kept for you only; admins cannot read them.</p>
         </div>
-        {turns.some((t) => t.id) && <Button disabled={busy} onClick={() => { setDelError(''); setConfirm('clear') }}>Clear history</Button>}
       </div>
+      <form
+        onSubmit={(e) => { e.preventDefault(); submit(question) }}
+        className="flex items-center gap-2 rounded-xl border border-hair bg-sheet py-1.5 pl-3.5 pr-1.5"
+      >
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          maxLength={1000}
+          aria-label="Question"
+          placeholder="Ask anything"
+          autoComplete="off"
+          className="min-w-0 flex-1 bg-transparent py-2 outline-none"
+        />
+        <Button type="submit" variant="primary" disabled={busy}>Ask</Button>
+      </form>
+      <div className="flex flex-wrap items-end gap-3 text-sm text-mute">
+        <label>From <input type="date" className={`${inputClass} block`} value={filter.from ?? ''} max={filter.to || undefined} onChange={setPart('from')} /></label>
+        <label>To <input type="date" className={`${inputClass} block`} value={filter.to ?? ''} min={filter.from || undefined} onChange={setPart('to')} /></label>
+        <label>Person <input className={`${inputClass} block`} maxLength={100} placeholder="Who spoke" value={filter.speaker ?? ''} onChange={setPart('speaker')} /></label>
+        {filtered && <Button onClick={() => setFilter({})}>Clear filters</Button>}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {SUGGESTIONS.map((s) => (
+          <button key={s} type="button" disabled={busy} onClick={() => submit(s)}
+            className="rounded-full border border-hair px-3 py-1 text-[0.82rem] text-ink-2 hover:border-ink-2 disabled:opacity-50">{s}</button>
+        ))}
+      </div>
+      {turns.length > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-mute">History</h2>
+          {turns.some((t) => t.id) && <Button disabled={busy} onClick={() => { setDelError(''); setConfirm('clear') }}>Clear history</Button>}
+        </div>
+      )}
       {turns.length > 0 && <div className="frame flex flex-col gap-5">{turns.map((t, ti) => (
         <div key={t.key} className="flex flex-col gap-3.5">
           {ti > 0 && <div className="h-px bg-hair" />}
@@ -155,34 +185,6 @@ export function Ask() {
           )}
         </div>
       ))}</div>}
-      <div className="flex flex-wrap items-end gap-3 text-sm text-mute">
-        <label>From <input type="date" className={`${inputClass} block`} value={filter.from ?? ''} max={filter.to || undefined} onChange={setPart('from')} /></label>
-        <label>To <input type="date" className={`${inputClass} block`} value={filter.to ?? ''} min={filter.from || undefined} onChange={setPart('to')} /></label>
-        <label>Person <input className={`${inputClass} block`} maxLength={100} placeholder="Who spoke" value={filter.speaker ?? ''} onChange={setPart('speaker')} /></label>
-        {filtered && <Button onClick={() => setFilter({})}>Clear filters</Button>}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {SUGGESTIONS.map((s) => (
-          <button key={s} type="button" disabled={busy} onClick={() => submit(s)}
-            className="rounded-full border border-hair px-3 py-1 text-[0.82rem] text-ink-2 hover:border-ink-2 disabled:opacity-50">{s}</button>
-        ))}
-      </div>
-      <form
-        onSubmit={(e) => { e.preventDefault(); submit(question) }}
-        className="sticky bottom-4 flex items-center gap-2 rounded-xl border border-hair bg-sheet py-1.5 pl-3.5 pr-1.5 shadow-lg"
-      >
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          maxLength={1000}
-          aria-label="Question"
-          placeholder="Ask anything"
-          autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent py-2 outline-none"
-        />
-        <Button type="submit" variant="primary" disabled={busy}>Ask</Button>
-      </form>
-      <div ref={bottom} />
       {confirm && (
         <ConfirmDialog title={confirm === 'clear' ? 'Clear Ask history?' : 'Delete this question?'} confirmLabel={confirm === 'clear' ? 'Clear history' : 'Delete'}
           busy={busyDel} error={delError || undefined} onConfirm={confirmed} onCancel={() => setConfirm(null)}>

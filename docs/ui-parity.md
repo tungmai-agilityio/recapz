@@ -176,6 +176,7 @@ non-owners once the list returns the owner.
 - [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
 - [ ] Filters: From, To and Person above the composer, Clear filters (jsdom test only; the prototype has no filters,
       so the layout is not compared and not seen in a browser: unverified)
+- [ ] History under the box (T-728, prototype v13): the question box, filters and suggestion chips come first and the history sits under them, newest first with a History heading and Clear history; a new question lands on top. Not yet checked by eye against prototype v13 in both skins and on mobile; `Ask.test.tsx` covers the order.
 - [x] History (#698, `docs/specs/ask-history.md`): earlier turns load on open, a Delete button on each turn, Clear history above the list; both ask first in the same confirm dialog the Documents page uses (the prototype draws an inline bar; the dialog is the app's existing pattern). Checked by eye on 2026-11-27 at 1280 px (Daylight light, Ink dark) and 390 px (Ink dark), page served by Vite with the history and `/api/me` replies mocked (synthetic text, no server). Not compared side by side with the prototype; Daylight dark, Ink light and Daylight mobile were not shot. Behaviour (restored turns, delete one, clear, cancel, failed delete) is covered by `Ask.test.tsx`.
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
