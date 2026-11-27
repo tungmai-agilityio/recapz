@@ -1577,33 +1577,114 @@ fn audio_type(path: &str) -> &'static str {
     }
 }
 
+/// `?download=1` saves the recording as a file instead of playing it.
+#[derive(Deserialize)]
+struct AudioQuery {
+    download: Option<String>,
+}
+
+/// `attachment` header for a saved recording: `<title>-<YYYY-MM-DD>.<ext>`. The title is cleaned
+/// before it reaches a header: control characters, quotes and slashes become `_`. `filename=` is
+/// ASCII only (anything else is `_`); `filename*=` carries the full UTF-8 name, percent-encoded.
+fn attachment_name(title: &str, at_ms: i64, rel: &str) -> String {
+    let title: String = title
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '"' | '\\' | '/') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .take(100)
+        .collect();
+    let title = title.trim();
+    let title = if title.is_empty() { "meeting" } else { title };
+    let date = time::OffsetDateTime::from_unix_timestamp(at_ms / 1000)
+        .map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()))
+        .unwrap_or_else(|_| "unknown-date".into());
+    let ext = rel
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .filter(|e| !e.is_empty() && e.len() <= 5 && e.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .unwrap_or_else(|| "bin".into());
+    let name = format!("{title}-{date}.{ext}");
+    let ascii: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let mut encoded = String::new();
+    for b in name.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'~') {
+            encoded.push(b as char);
+        } else {
+            encoded.push_str(&format!("%{b:02X}"));
+        }
+    }
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
 async fn meeting_audio(
     State(app): State<App>,
     jar: CookieJar,
     Path(id): Path<String>,
+    axum::extract::Query(q): axum::extract::Query<AudioQuery>,
     headers: HeaderMap,
 ) -> Res<Response> {
     let u = app.current_user(&jar).await?;
     let (uid, tenant) = (u.id.clone(), u.tenant_id.clone());
-    let (rel, remote) = app
+    let (meeting, member) = (id.clone(), uid.clone());
+    let (m, rel, remote) = app
         .tenant(tenant.clone(), move |c| {
             ensure_member(c, &u)?;
-            if visible_meeting(c, &uid, &id)?.is_none() {
+            let Some(m) = visible_meeting(c, &uid, &id)? else {
                 return Ok(None);
-            }
+            };
             let (path, remote) = c.query_row(
                 "SELECT audio_path, audio_remote FROM meetings WHERE id = ?1",
                 [&id],
                 |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, bool>(1)?)),
             )?;
-            Ok(path.map(|p| (p, remote)))
+            Ok(Some((m, path, remote)))
         })
         .await?
         .ok_or(ApiError::NotFound)?;
-    if remote {
-        return remote_audio(&app, &tenant, &rel, &headers).await;
+    let download = q.download.as_deref() == Some("1");
+    // The file is still being written; playback of the part so far stays allowed.
+    if download && matches!(m.status.as_str(), "joining" | "recording") {
+        return Err(ApiError::Conflict("the recording is still in progress"));
     }
-    let mut f = tokio::fs::File::open(db::tenant_dir(&app.cfg.data_dir, &tenant).join(&rel))
+    let rel = rel.ok_or(ApiError::NotFound)?;
+    let mut res = serve_audio(&app, &tenant, &rel, remote, &headers).await?;
+    if download {
+        tracing::info!(tenant = %tenant, meeting = %meeting, member = %member, "audio downloaded");
+        res.headers_mut().insert(
+            header::CONTENT_DISPOSITION,
+            attachment_name(&m.title, m.started_at.unwrap_or(m.created_at), &rel)
+                .parse()
+                .map_err(|_| ApiError::BadRequest("bad file name"))?,
+        );
+    }
+    Ok(res)
+}
+
+async fn serve_audio(
+    app: &App,
+    tenant: &str,
+    rel: &str,
+    remote: bool,
+    headers: &HeaderMap,
+) -> Res<Response> {
+    if remote {
+        return remote_audio(app, tenant, rel, headers).await;
+    }
+    let mut f = tokio::fs::File::open(db::tenant_dir(&app.cfg.data_dir, tenant).join(rel))
         .await
         .map_err(|_| ApiError::NotFound)?;
     let len = f.metadata().await?.len();
@@ -1623,7 +1704,7 @@ async fn meeting_audio(
             StatusCode::OK
         },
         [
-            (header::CONTENT_TYPE, audio_type(&rel).to_string()),
+            (header::CONTENT_TYPE, audio_type(rel).to_string()),
             (header::ACCEPT_RANGES, "bytes".to_string()),
         ],
         body,

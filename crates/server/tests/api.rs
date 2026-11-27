@@ -314,6 +314,179 @@ async fn audio_supports_ranges_and_follows_the_access_rule() {
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
 
+/// Serves 8 bytes ("RIFFdata") for any HEAD or GET, like a bucket holding one recording.
+async fn fake_bucket() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        loop {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = sock.read(&mut buf).await.unwrap();
+                let head = n >= 4 && &buf[..4] == b"HEAD";
+                let reply = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\n";
+                sock.write_all(reply.as_bytes()).await.unwrap();
+                if !head {
+                    sock.write_all(b"RIFFdata").await.unwrap();
+                }
+            });
+        }
+    });
+    url
+}
+
+#[tokio::test]
+async fn audio_download_sends_an_attachment_header_under_the_playback_rules() {
+    let dir = tempfile::tempdir().unwrap();
+    let bucket = fake_bucket().await;
+    let cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        storage: recapz_server::config::Storage {
+            endpoint: bucket,
+            region: "auto".into(),
+            bucket: "b".into(),
+            key_id: "k".into(),
+            secret: "s".into(),
+        },
+        ..Config::default()
+    };
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let other_tid =
+        db::create_workspace(&control, dir.path(), "Other", "zed@other.example").unwrap();
+    let app = routes::router(cfg, Arc::new(Mutex::new(control)));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    send(&app, upload(&boss, "Weekly sync")).await; // stored bytes: "RIFFdata"
+
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control)
+        .unwrap()
+        .into_iter()
+        .find(|t| *t != other_tid)
+        .unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let id: String = t
+        .query_row("SELECT id FROM meetings", [], |r| r.get(0))
+        .unwrap();
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let (_, zed, _) = send(&app, login("zed@other.example")).await;
+    let zed = zed.unwrap();
+    let play = format!("/api/meetings/{id}/audio");
+    let save = format!("{play}?download=1");
+    // 2023-11-14 22:13:20 UTC; `started_at` wins over `created_at`.
+    t.execute(
+        "UPDATE meetings SET title = ?1, started_at = 1700000000000, created_at = 1600000000000",
+        ["Họp \"sprint\" \\ a/b\nc"],
+    )
+    .unwrap();
+    let want = "attachment; filename=\"H_p _sprint_ _ a_b_c-2023-11-14.wav\"; \
+                filename*=UTF-8''H%E1%BB%8Dp%20_sprint_%20_%20a_b_c-2023-11-14.wav";
+    let ranged = |uri: &str, range: &str| {
+        Request::get(uri)
+            .header(header::COOKIE, &boss)
+            .header(header::RANGE, range)
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    // Playback is untouched: no `Content-Disposition`, same body.
+    let res = app.clone().oneshot(get(&play, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers().get(header::CONTENT_DISPOSITION).is_none());
+    // `download=0` is playback too.
+    let res = app
+        .clone()
+        .oneshot(get(&format!("{play}?download=0"), &boss))
+        .await
+        .unwrap();
+    assert!(res.headers().get(header::CONTENT_DISPOSITION).is_none());
+
+    let res = app.clone().oneshot(get(&save, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::CONTENT_DISPOSITION], want);
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "audio/wav");
+    assert_eq!(
+        &res.into_body().collect().await.unwrap().to_bytes()[..],
+        b"RIFFdata"
+    );
+
+    // A range still works with the header.
+    let res = app
+        .clone()
+        .oneshot(ranged(&save, "bytes=4-6"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(res.headers()[header::CONTENT_RANGE], "bytes 4-6/8");
+    assert_eq!(res.headers()[header::CONTENT_DISPOSITION], want);
+    assert_eq!(
+        &res.into_body().collect().await.unwrap().to_bytes()[..],
+        b"dat"
+    );
+
+    // Same access as playback: a member who cannot see it and a member of another workspace.
+    for who in [&amy, &zed] {
+        let (s, ..) = send(&app, get(&save, who)).await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+    }
+
+    // Still being recorded: 409 for the download, playback unchanged. `joining` has no file yet.
+    for status in ["recording", "joining"] {
+        t.execute("UPDATE meetings SET status = ?1", [status])
+            .unwrap();
+        let (s, _, body) = send(&app, get(&save, &boss)).await;
+        assert_eq!(
+            (s, body.as_str()),
+            (StatusCode::CONFLICT, "the recording is still in progress")
+        );
+    }
+    t.execute("UPDATE meetings SET status = 'recording'", [])
+        .unwrap();
+    let res = app.clone().oneshot(get(&play, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers().get(header::CONTENT_DISPOSITION).is_none());
+    t.execute("UPDATE meetings SET status = 'ready'", [])
+        .unwrap();
+
+    // Removed by the retention sweep: nothing to send.
+    t.execute(
+        "UPDATE meetings SET audio_path = NULL, audio_remote = 0",
+        [],
+    )
+    .unwrap();
+    let (s, ..) = send(&app, get(&save, &boss)).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    // The object-store path sends the same header (no `started_at`: falls back to `created_at`).
+    t.execute(
+        "UPDATE meetings SET audio_path = 'audio/x/a.WAV', audio_remote = 1, started_at = NULL",
+        [],
+    )
+    .unwrap();
+    let res = app.clone().oneshot(get(&save, &boss)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()[header::CONTENT_DISPOSITION],
+        "attachment; filename=\"H_p _sprint_ _ a_b_c-2020-09-13.wav\"; \
+         filename*=UTF-8''H%E1%BB%8Dp%20_sprint_%20_%20a_b_c-2020-09-13.wav"
+    );
+    assert_eq!(
+        &res.into_body().collect().await.unwrap().to_bytes()[..],
+        b"RIFFdata"
+    );
+}
+
 #[tokio::test]
 async fn report_is_null_until_written_and_follows_the_access_rule() {
     let dir = tempfile::tempdir().unwrap();
