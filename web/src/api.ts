@@ -231,12 +231,15 @@ export class NoModel extends Error {}
 /** The stream ended with an `error` event after it had started. */
 export class AnswerFailed extends Error {}
 
+/** Optional narrowing of Ask: UTC dates `YYYY-MM-DD` (inclusive) and the name of a person who spoke. */
+export interface AskFilter { from?: string; to?: string; speaker?: string }
+
 /** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
-export async function ask(question: string, onToken: (t: string) => void): Promise<Citation[]> {
+export async function ask(question: string, onToken: (t: string) => void, filter: AskFilter = {}): Promise<Citation[]> {
   const first = await fetch('/api/ask', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...csrf() },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, ...Object.fromEntries(Object.entries(filter).filter(([, v]) => v)) }),
   })
   if (first.status === 429) throw new RateLimited()
   if (first.status === 503) throw new NoModel()

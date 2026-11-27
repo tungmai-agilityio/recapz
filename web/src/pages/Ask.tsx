@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { ask, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
+import { ask, type AskFilter, type Citation, NoModel, RateLimited, Unauthorized } from '../api'
 import { clock } from '../clock'
 import { Button } from '../ui/Button'
+import { inputClass } from '../ui/Field'
 import { Ribbon } from '../ui/Ribbon'
 
 const SUGGESTIONS = ['What decisions were made recently?', 'What are the open action items?', 'What was said about deadlines?']
@@ -57,6 +58,9 @@ function errorText(err: unknown) {
 export function Ask() {
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
+  const [filter, setFilter] = useState<AskFilter>({})
+  const filtered = Object.values(filter).some(Boolean)
+  const setPart = (k: keyof AskFilter) => (e: { target: { value: string } }) => setFilter((f) => ({ ...f, [k]: e.target.value }))
   const busy = turns.some((t) => t.state === 'streaming')
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }) }, [turns.length])
@@ -70,7 +74,7 @@ export function Ask() {
       setTurns((ts) => ts.map((t, j) => (j === i ? { ...t, ...f(t) } : t)))
     setTurns((ts) => [...ts, { q, a: '', cites: [], state: 'streaming', error: '' }])
     try {
-      const cites = await ask(q, (tok) => patch((t) => ({ a: t.a + tok })))
+      const cites = await ask(q, (tok) => patch((t) => ({ a: t.a + tok })), filter)
       patch(() => ({ cites, state: 'done' }))
     } catch (err) {
       patch(() => ({ state: 'error', error: errorText(err) }))
@@ -115,6 +119,12 @@ export function Ask() {
           )}
         </div>
       ))}</div>}
+      <div className="flex flex-wrap items-end gap-3 text-sm text-mute">
+        <label>From <input type="date" className={`${inputClass} block`} value={filter.from ?? ''} max={filter.to || undefined} onChange={setPart('from')} /></label>
+        <label>To <input type="date" className={`${inputClass} block`} value={filter.to ?? ''} min={filter.from || undefined} onChange={setPart('to')} /></label>
+        <label>Person <input className={`${inputClass} block`} maxLength={100} placeholder="Who spoke" value={filter.speaker ?? ''} onChange={setPart('speaker')} /></label>
+        {filtered && <Button onClick={() => setFilter({})}>Clear filters</Button>}
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
           <button key={s} type="button" disabled={busy} onClick={() => submit(s)}

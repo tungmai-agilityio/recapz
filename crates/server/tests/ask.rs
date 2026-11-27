@@ -60,13 +60,15 @@ fn login(email: &str) -> Request<Body> {
 }
 
 fn ask(cookie: &str, question: &str) -> Request<Body> {
+    ask_with(cookie, serde_json::json!({ "question": question }))
+}
+
+fn ask_with(cookie: &str, body: serde_json::Value) -> Request<Body> {
     Request::post("/api/ask")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
         .header("x-csrf-token", "t")
-        .body(Body::from(
-            serde_json::json!({ "question": question }).to_string(),
-        ))
+        .body(Body::from(body.to_string()))
         .unwrap()
 }
 
@@ -536,4 +538,87 @@ async fn ask_citations_carry_the_marker_number_speaker_duration_and_ribbon() {
         c["ribbon"],
         serde_json::json!([{"speaker":0,"weight":30},{"speaker":1,"weight":30}])
     );
+}
+
+#[tokio::test]
+async fn ask_filters_by_date_and_person_and_a_filter_never_widens_access() {
+    let dir = tempfile::tempdir().unwrap();
+    // One model call per search that finds something: amy twice, the boss once.
+    let stub = Arc::new(Stub::new(
+        (0..3)
+            .map(|_| {
+                Ok(Completion {
+                    text: r#"{"answer":"May.","citations":[1]}"#.into(),
+                    input_tokens: 100,
+                    output_tokens: 5,
+                })
+            })
+            .collect(),
+    ));
+    let app = app(dir.path(), Some(stub.clone()));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let (tid, _) = seed(dir.path());
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    // 2026-11-15 12:00 UTC for the shared meeting; the private one stays at its default (1970).
+    t.execute(
+        "UPDATE meetings SET started_at = 1794744000000 WHERE id = 'shared'",
+        [],
+    )
+    .unwrap();
+    t.execute(
+        "INSERT INTO speakers (id, meeting_id, label, display_name) VALUES ('p1','shared','Speaker 1','Linh'), ('p2','private','Speaker 1','Linh')",
+        [],
+    )
+    .unwrap();
+    let q = |who: &str, f: serde_json::Value| {
+        let mut b = serde_json::json!({ "question": "when is the launch date?" });
+        b.as_object_mut()
+            .unwrap()
+            .extend(f.as_object().unwrap().clone());
+        ask_with(who, b)
+    };
+    let cited = |body: &str| body.contains(r#""meeting_id":"shared""#);
+
+    let (s, _, body) = send(&app, q(&amy, serde_json::json!({}))).await;
+    assert_eq!((s, cited(&body)), (StatusCode::OK, true));
+    let (_, _, body) = send(
+        &app,
+        q(
+            &amy,
+            serde_json::json!({"from": "2026-11-15", "to": "2026-11-15", "speaker": " linh "}),
+        ),
+    )
+    .await;
+    assert!(cited(&body), "{body}");
+    for f in [
+        serde_json::json!({"from": "2026-11-16"}),
+        serde_json::json!({"to": "2026-11-14"}),
+        serde_json::json!({"speaker": "Minh"}),
+    ] {
+        let (s, _, body) = send(&app, q(&amy, f.clone())).await;
+        assert_eq!((s, cited(&body)), (StatusCode::OK, false), "{f}");
+    }
+    // The private meeting matches the date and person filter but is still hidden from amy, and the
+    // boss, who owns it, finds it.
+    let pq = |who: &str| {
+        ask_with(
+            who,
+            serde_json::json!({"question": "what is the acquisition price?", "to": "1970-01-02", "speaker": "Linh"}),
+        )
+    };
+    let (_, _, body) = send(&app, pq(&amy)).await;
+    assert!(
+        !body.contains("private") && !body.contains("nine million"),
+        "{body}"
+    );
+    let (_, _, body) = send(&app, pq(&boss)).await;
+    assert!(body.contains(r#""meeting_id":"private""#), "{body}");
+    // Bad dates are refused before any search.
+    for bad in ["2026-02-30", "2026-1-5", "yesterday"] {
+        let (s, ..) = send(&app, q(&boss, serde_json::json!({ "from": bad }))).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
+    }
 }

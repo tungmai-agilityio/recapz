@@ -13,6 +13,44 @@ const MAX_QUESTION_CHARS: usize = 1000;
 #[derive(Deserialize)]
 pub struct AskBody {
     question: String,
+    /// Optional narrowing: UTC dates `YYYY-MM-DD` (inclusive) and a speaker's name.
+    from: Option<String>,
+    to: Option<String>,
+    speaker: Option<String>,
+}
+
+/// An empty value means "no filter"; a date must really exist (`2026-02-30` is refused).
+fn date(v: Option<String>) -> Result<Option<String>, ApiError> {
+    let Some(v) = v.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    // The format check keeps `2026-1-5` and a trailing time out, which `Date::parse` would also refuse.
+    let ok = time::format_description::parse_borrowed::<2>("[year]-[month]-[day]")
+        .ok()
+        .is_some_and(|f| time::Date::parse(&v, &f).is_ok());
+    if ok {
+        Ok(Some(v))
+    } else {
+        Err(ApiError::BadRequest("dates must look like 2026-11-30"))
+    }
+}
+
+fn filter(b: &mut AskBody) -> Result<search::Filter, ApiError> {
+    let speaker = b
+        .speaker
+        .take()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    if speaker.as_ref().is_some_and(|s| s.chars().count() > 100) {
+        return Err(ApiError::BadRequest(
+            "person must be at most 100 characters",
+        ));
+    }
+    Ok(search::Filter {
+        from: date(b.from.take())?,
+        to: date(b.to.take())?,
+        speaker,
+    })
 }
 
 pub(super) fn event(name: &str, data: serde_json::Value) -> String {
@@ -181,7 +219,7 @@ pub(super) fn excerpts(hits: &[search::Hit]) -> Vec<Excerpt> {
 pub async fn ask(
     State(app): State<App>,
     jar: CookieJar,
-    Json(body): Json<AskBody>,
+    Json(mut body): Json<AskBody>,
 ) -> Res<Response> {
     let u = app.current_user(&jar).await?;
     let question = body.question.trim().to_string();
@@ -190,6 +228,7 @@ pub async fn ask(
             "question must be 1 to 1000 characters",
         ));
     }
+    let filter = filter(&mut body)?;
     // After validation so a malformed request does not burn quota; before any retrieval or model call.
     if !app.allow_ask(&u.id) {
         return Err(ApiError::TooManyRequests);
@@ -203,7 +242,7 @@ pub async fn ask(
     let hits = app
         .tenant(tenant.clone(), move |c| {
             ensure_member(c, &u)?;
-            search::search(c, &uid, &q, embedder.as_ref(), TOP_K)
+            search::search_with(c, &uid, &q, embedder.as_ref(), TOP_K, &filter)
         })
         .await?;
     // Only text the owner allowed to leave the server is sent to the model; a toggle-off document
