@@ -166,6 +166,8 @@ non-owners once the list returns the owner.
       Vite and the Ask and `/api/me` replies mocked (synthetic text, no server). Not compared side by side with the
       prototype Ask state; Daylight dark and Ink light were not shot.
 - [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
+- [ ] Filters: From, To and Person above the composer, Clear filters (jsdom test only; the prototype has no filters,
+      so the layout is not compared and not seen in a browser: unverified)
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload

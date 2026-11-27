@@ -11,6 +11,30 @@ use std::collections::HashMap;
 use crate::db::MEETING_VISIBLE as VISIBLE;
 /// The document access rule as SQL, for a document aliased `d` and the member id as `?1`.
 const OWN_DOC: &str = "d.member_id = ?1";
+/// Optional narrowing of an Ask search, on top of the access rule. Dates are UTC `YYYY-MM-DD`
+/// (both ends inclusive) and compare with the meeting's start (its creation when it never started);
+/// `speaker` matches a speaker's display name, ignoring case and edge spaces. Documents have neither
+/// a date nor speakers, so any filter leaves them out.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Filter {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub speaker: Option<String>,
+}
+
+impl Filter {
+    fn active(&self) -> bool {
+        self.from.is_some() || self.to.is_some() || self.speaker.is_some()
+    }
+
+    /// SQL for a meeting aliased `m`, with `from`, `to` and `speaker` as `?3`, `?4` and `?5`.
+    const SQL: &'static str =
+        "AND (?3 IS NULL OR date(COALESCE(m.started_at, m.created_at) / 1000, 'unixepoch') >= ?3)
+         AND (?4 IS NULL OR date(COALESCE(m.started_at, m.created_at) / 1000, 'unixepoch') <= ?4)
+         AND (?5 IS NULL OR EXISTS (SELECT 1 FROM speakers p WHERE p.meeting_id = m.id
+              AND lower(trim(p.display_name)) = lower(trim(?5))))";
+}
+
 /// A chunk is a meeting chunk (`false`) or a document chunk (`true`); their ids are separate.
 type Key = (bool, i64);
 const POOL: usize = 50;
@@ -40,7 +64,7 @@ fn fts_query(q: &str) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" OR "))
 }
 
-fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<Key>> {
+fn keyword_ids(c: &Connection, member: &str, q: &str, f: &Filter) -> Result<Vec<Key>> {
     let Some(m) = fts_query(q) else {
         return Ok(vec![]);
     };
@@ -51,7 +75,8 @@ fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<Key>> {
             format!(
                 "SELECT k.id, f.rank FROM chunks_fts f JOIN chunks k ON k.id = f.rowid
                  JOIN meetings m ON m.id = k.meeting_id
-                 WHERE chunks_fts MATCH ?2 AND {VISIBLE} ORDER BY f.rank LIMIT {POOL}"
+                 WHERE chunks_fts MATCH ?2 AND {VISIBLE} {} ORDER BY f.rank LIMIT {POOL}",
+                Filter::SQL
             ),
         ),
         (
@@ -63,10 +88,18 @@ fn keyword_ids(c: &Connection, member: &str, q: &str) -> Result<Vec<Key>> {
             ),
         ),
     ] {
+        if doc && f.active() {
+            continue;
+        }
         let mut st = c.prepare(&sql)?;
-        let rows: Vec<(i64, f64)> = st
-            .query_map(params![member, m], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<Result<_, _>>()?;
+        let row = |r: &rusqlite::Row| Ok((r.get(0)?, r.get(1)?));
+        let rows: Vec<(i64, f64)> = if doc {
+            st.query_map(params![member, m], row)?
+                .collect::<Result<_, _>>()?
+        } else {
+            st.query_map(params![member, m, f.from, f.to, f.speaker], row)?
+                .collect::<Result<_, _>>()?
+        };
         out.extend(rows.into_iter().map(|(id, r)| ((doc, id), r)));
     }
     // bm25 ranks (lower is better) from the two indexes are merged as if comparable.
@@ -83,6 +116,7 @@ fn vector_ids(
     e: &dyn Embedder,
     query: &str,
     min_similarity: f32,
+    f: &Filter,
 ) -> Result<Vec<Key>> {
     let qvec = e.embed(query)?;
     // Only chunks embedded by this same embedder are comparable; the rest are reached by keyword
@@ -93,7 +127,8 @@ fn vector_ids(
             false,
             format!(
                 "SELECT k.id, k.embedding FROM chunks k JOIN meetings m ON m.id = k.meeting_id
-                 WHERE {VISIBLE} AND k.embedder = ?2"
+                 WHERE {VISIBLE} AND k.embedder = ?2 {}",
+                Filter::SQL
             ),
         ),
         (
@@ -104,12 +139,18 @@ fn vector_ids(
             ),
         ),
     ] {
+        if doc && f.active() {
+            continue;
+        }
         let mut st = c.prepare(&sql)?;
-        let rows = st
-            .query_map(params![member, e.id()], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let row = |r: &rusqlite::Row| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?));
+        let rows = if doc {
+            st.query_map(params![member, e.id()], row)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            st.query_map(params![member, e.id(), f.from, f.to, f.speaker], row)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
         scored.extend(
             rows.into_iter()
                 .map(|(id, b)| ((doc, id), cosine(&qvec, &from_blob(&b)))),
@@ -129,7 +170,27 @@ pub fn search(
     embedder: &dyn Embedder,
     limit: usize,
 ) -> Result<Vec<Hit>> {
-    search_at(c, member, query, embedder, limit, embedder.min_similarity())
+    search_with(c, member, query, embedder, limit, &Filter::default())
+}
+
+/// `search` narrowed by a `Filter`; the access rule still applies in every query.
+pub fn search_with(
+    c: &Connection,
+    member: &str,
+    query: &str,
+    embedder: &dyn Embedder,
+    limit: usize,
+    filter: &Filter,
+) -> Result<Vec<Hit>> {
+    ranked_hits(
+        c,
+        member,
+        query,
+        embedder,
+        limit,
+        embedder.min_similarity(),
+        filter,
+    )
 }
 
 /// `search` with an explicit cosine cut-off, for measuring thresholds (`eval ask`).
@@ -141,10 +202,30 @@ pub fn search_at(
     limit: usize,
     min_similarity: f32,
 ) -> Result<Vec<Hit>> {
+    ranked_hits(
+        c,
+        member,
+        query,
+        embedder,
+        limit,
+        min_similarity,
+        &Filter::default(),
+    )
+}
+
+fn ranked_hits(
+    c: &Connection,
+    member: &str,
+    query: &str,
+    embedder: &dyn Embedder,
+    limit: usize,
+    min_similarity: f32,
+    filter: &Filter,
+) -> Result<Vec<Hit>> {
     let mut score: HashMap<Key, f32> = HashMap::new();
     for ids in [
-        keyword_ids(c, member, query)?,
-        vector_ids(c, member, embedder, query, min_similarity)?,
+        keyword_ids(c, member, query, filter)?,
+        vector_ids(c, member, embedder, query, min_similarity, filter)?,
     ] {
         for (rank, id) in ids.into_iter().enumerate() {
             *score.entry(id).or_default() += 1.0 / (RRF_K + rank as f32 + 1.0);
@@ -257,6 +338,73 @@ mod tests {
         );
         // bob owns it, so he sees both.
         assert_eq!(ask(&c, "bob", "launch budget").len(), 2);
+    }
+
+    #[test]
+    fn date_and_speaker_filters_narrow_the_hits_and_never_widen_access() {
+        let (_d, c) = setup();
+        // 2026-10-15, 2026-11-15 and 2026-11-20 (UTC, noon), all in ms.
+        for (id, at) in [
+            ("mine", 1_792_065_600_000_i64),
+            ("team", 1_794_744_000_000),
+            ("secret", 1_795_176_000_000),
+        ] {
+            c.execute(
+                "UPDATE meetings SET started_at = ?2 WHERE id = ?1",
+                params![id, at],
+            )
+            .unwrap();
+            add(&c, id, 0, "the launch budget moved");
+        }
+        c.execute_batch(
+            "INSERT INTO speakers (id, meeting_id, label, display_name) VALUES
+               ('p1','mine','Speaker 1','  Linh '), ('p2','team','Speaker 1','Minh'), ('p3','secret','Speaker 1','Linh')",
+        )
+        .unwrap();
+        let ids = |f: Filter, who: &str| -> Vec<String> {
+            let mut v: Vec<String> = search_with(&c, who, "launch budget", &HashEmbedder, 5, &f)
+                .unwrap()
+                .into_iter()
+                .map(|h| h.meeting_id.unwrap())
+                .collect();
+            v.sort();
+            v
+        };
+        let on = |from: Option<&str>, to: Option<&str>, who: Option<&str>| Filter {
+            from: from.map(Into::into),
+            to: to.map(Into::into),
+            speaker: who.map(Into::into),
+        };
+        // alice sees "mine" and the workspace-shared "team", never bob's private "secret".
+        assert_eq!(ids(Filter::default(), "alice"), vec!["mine", "team"]);
+        assert_eq!(
+            ids(on(Some("2026-11-01"), None, None), "alice"),
+            vec!["team"],
+            "october is out of range"
+        );
+        assert_eq!(
+            ids(on(None, Some("2026-10-31"), None), "alice"),
+            vec!["mine"]
+        );
+        assert_eq!(
+            ids(on(Some("2026-11-15"), Some("2026-11-15"), None), "alice"),
+            vec!["team"],
+            "both ends inclusive"
+        );
+        assert_eq!(
+            ids(on(None, None, Some("linh")), "alice"),
+            vec!["mine"],
+            "case and spaces ignored, secret stays hidden"
+        );
+        assert_eq!(
+            ids(on(None, None, Some("Linh")), "bob"),
+            vec!["secret"],
+            "bob's own private meeting with Linh"
+        );
+        assert_eq!(
+            ids(on(Some("2026-11-01"), None, Some("Linh")), "alice"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
