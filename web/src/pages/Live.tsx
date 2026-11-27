@@ -4,13 +4,16 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { controlLive, getMeeting, liveAsk, NoModel, NotLive, RateLimited, Unauthorized, watchLive, type Citation, type LiveEvent } from '../api'
 import { clock } from '../clock'
+import { talk, type Said } from '../live-talk'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
+import { Ribbon } from '../ui/Ribbon'
+import { colour } from '../ui/speaker-colour'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { inputClass } from '../ui/Field'
 import { RecorderBar } from './Record'
 
-interface Line { at_ms: number; text: string; gap?: boolean }
+type Line = Said
 interface Card { id: number; context: string; ms: number; answer: string; cites: Citation[]; error: string }
 
 function errorText(err: unknown) {
@@ -137,6 +140,8 @@ function LiveView({ id }: { id: string }) {
   const [endedAt, setEndedAt] = useState<number | null>(null)
   const [picked, setPicked] = useState<Line | null>(null)
   const [paused, setPaused] = useState(false)
+  const [speaking, setSpeaking] = useState<number | null>(null)
+  const quiet = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [confirmStop, setConfirmStop] = useState(false)
   const [busy, setBusy] = useState(false)
   const [controlError, setControlError] = useState('')
@@ -145,18 +150,27 @@ function LiveView({ id }: { id: string }) {
   useEffect(() => {
     const stop = new AbortController()
     const on = (e: LiveEvent) => {
-      if (e.type === 'final') { setLines((ls) => [...ls, { at_ms: e.at_ms, text: e.text }]); setPartial('') }
+      if (e.type === 'final') {
+        setLines((ls) => [...ls, { at_ms: e.at_ms, text: e.text, speaker: e.speaker, label: e.label, ms: e.ms }]); setPartial('')
+        if (e.speaker !== undefined) setSpeaking(e.speaker)
+      }
       else if (e.type === 'partial') setPartial(e.text)
       else if (e.type === 'paused') { setPaused(true); setPartial(''); setLines((ls) => [...ls, { at_ms: e.at_ms, text: 'Recording paused', gap: true }]) }
       else if (e.type === 'resumed') { setPaused(false); setLines((ls) => [...ls, { at_ms: e.at_ms, text: 'Recording resumed', gap: true }]) }
       else if (e.type === 'unavailable') setState('unavailable')
       else if (e.type === 'end') { setState('ended'); setEndedAt(Date.now()) }
     }
-    watchLive(id, on, stop.signal)
+    const track = (e: LiveEvent) => {
+      on(e)
+      if (e.type !== 'final' && e.type !== 'partial') return
+      clearTimeout(quiet.current)
+      quiet.current = setTimeout(() => setSpeaking(null), 4000)
+    }
+    watchLive(id, track, stop.signal)
       // The stream closing without an `end` event means the connection dropped, not that the call is over.
       .then(() => setState((s) => (s === 'ended' ? s : 'unavailable')))
       .catch((err) => { if (!stop.signal.aborted) setState(err instanceof NotLive ? 'not-live' : 'unavailable') })
-    return () => stop.abort()
+    return () => { stop.abort(); clearTimeout(quiet.current) }
   }, [id])
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }) }, [lines.length])
 
@@ -167,6 +181,8 @@ function LiveView({ id }: { id: string }) {
     finally { setBusy(false) }
   }
 
+  const { totals, segments } = talk(lines)
+  const nameOf = (n: number) => totals.find((t) => t.speaker === n)?.label
   const title = meeting.data?.title ?? 'Live meeting'
   if (state === 'not-live')
     return (
@@ -209,6 +225,22 @@ function LiveView({ id }: { id: string }) {
         <RecorderBar id={id} ended={state === 'ended'} />
         {state === 'unavailable' && <p role="status" className="text-sm text-mute">Live transcript unavailable. Recording goes on and the full transcript follows after the call.</p>}
         {state === 'ended' && <p role="status" className="text-sm text-mute">The call has ended. <Link to={`/meetings/${id}`} className="underline">Open the meeting</Link></p>}
+        {segments.length > 0 && (
+          <div className="frame flex flex-col gap-2.5" aria-label="Speakers">
+            <Ribbon segments={segments} variant="live" label="Live speaker ribbon" />
+            <p aria-live="polite" className="text-sm text-ink-2">
+              {speaking !== null && state !== 'ended' ? <>Speaking now: <b className="font-semibold">{nameOf(speaking)}</b></> : 'Nobody speaking right now'}
+            </p>
+            <ul aria-label="Talk time" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              {totals.map((t) => (
+                <li key={t.speaker} className="flex items-center gap-1.5">
+                  <span aria-hidden className={`size-2 rounded-full ${colour(t.speaker)}`} />{t.label}
+                  <time className="font-mono text-xs text-mute">{clock(t.ms)}</time>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="frame flex max-h-[60vh] min-h-40 flex-col gap-1.5 overflow-y-auto" aria-label="Live transcript">
           {lines.length === 0 && !partial && <p className="text-sm text-mute">Waiting for the first words…</p>}
           {lines.map((l, i) => l.gap ? (
@@ -216,7 +248,7 @@ function LiveView({ id }: { id: string }) {
           ) : (
             <button key={i} type="button" onClick={() => setPicked(l)} aria-pressed={picked?.at_ms === l.at_ms}
               className={`flex gap-3 rounded-md px-2 py-1 text-left hover:bg-hair-2 ${picked?.at_ms === l.at_ms ? 'bg-signal-wash' : ''}`}>
-              <time className="w-12 shrink-0 font-mono text-xs text-mute">{clock(l.at_ms)}</time><span>{l.text}</span>
+              <time className="w-12 shrink-0 font-mono text-xs text-mute">{clock(l.at_ms)}</time><span>{l.speaker !== undefined && <b className="mr-1.5 font-semibold">{nameOf(l.speaker)}:</b>}{l.text}</span>
             </button>
           ))}
           {partial && <p className="px-2 py-1 text-mute" aria-live="polite">{partial}</p>}

@@ -11,12 +11,45 @@ use tokio::sync::broadcast;
 // ponytail: a count, not an age; the Ask window is 60 s, so this is far more than it needs.
 const MAX_LINES: usize = 2000;
 
+/// Who said a line: the provider's 0-based speaker number (one colour per number), the name or
+/// "Speaker N" to show for it, and how long the words took in ms.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Who {
+    pub n: u32,
+    pub label: String,
+    pub ms: i64,
+}
+
+/// Names the provider's speaker numbers from the notetaker's active-speaker samples: each finished
+/// line votes for the name that was active when it arrived, and a number shows its most voted name,
+/// or "Speaker N" (1-based) while it has none. Browser and desktop recordings have no samples.
+#[derive(Default)]
+pub struct Labels(HashMap<u32, HashMap<String, u32>>);
+
+impl Labels {
+    pub fn label(&mut self, n: u32, active: Option<&str>) -> String {
+        let votes = self.0.entry(n).or_default();
+        if let Some(a) = active {
+            *votes.entry(a.to_string()).or_default() += 1;
+        }
+        votes
+            .iter()
+            .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+            .map(|(name, _)| name.clone())
+            .unwrap_or_else(|| format!("Speaker {}", n + 1))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Msg {
     /// Text that may still change; replaces the previous partial.
     Partial(String),
-    /// A finished line, `at_ms` after the call was admitted.
-    Final { at_ms: i64, text: String },
+    /// A finished line, `at_ms` after the call was admitted; `who` is its speaker when known.
+    Final {
+        at_ms: i64,
+        text: String,
+        who: Option<Who>,
+    },
     /// Streaming failed; recording goes on.
     Unavailable,
     /// The owner or an admin paused recording, `at_ms` into the call.
@@ -29,7 +62,7 @@ pub enum Msg {
 
 struct Call {
     started: Instant,
-    lines: Vec<(i64, String)>,
+    lines: Vec<Line>,
     partial: String,
     unavailable: bool,
     /// Pauses so far as `(from, to)` in call ms; `to` is `None` while one is still open.
@@ -38,6 +71,9 @@ struct Call {
     stop: bool,
     tx: broadcast::Sender<Msg>,
 }
+
+/// A finished line as kept: when, what and who.
+pub type Line = (i64, String, Option<Who>);
 
 /// What the call loop must do right now.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -48,7 +84,7 @@ pub struct Control {
 
 /// What a viewer gets on connecting: the lines so far, then everything new.
 pub struct Snapshot {
-    pub lines: Vec<(i64, String)>,
+    pub lines: Vec<Line>,
     pub partial: String,
     pub unavailable: bool,
     pub gaps: Vec<(i64, Option<i64>)>,
@@ -82,9 +118,9 @@ impl LiveHub {
         let Some(c) = calls.get_mut(id) else { return };
         match &m {
             Msg::Partial(t) => c.partial = t.clone(),
-            Msg::Final { at_ms, text } => {
+            Msg::Final { at_ms, text, who } => {
                 c.partial.clear();
-                c.lines.push((*at_ms, text.clone()));
+                c.lines.push((*at_ms, text.clone(), who.clone()));
                 if c.lines.len() > MAX_LINES {
                     c.lines.remove(0);
                 }
@@ -146,8 +182,8 @@ impl LiveHub {
         Some(
             c.lines
                 .iter()
-                .filter(|(at, _)| *at >= from)
-                .map(|(_, t)| t.clone())
+                .filter(|(at, ..)| *at >= from)
+                .map(|(_, t, _)| t.clone())
                 .collect(),
         )
     }
@@ -156,11 +192,11 @@ impl LiveHub {
     pub fn around(&self, id: &str, at_ms: i64, n: usize) -> Option<Vec<String>> {
         let calls = self.calls.lock().unwrap();
         let c = calls.get(id)?;
-        let Some(i) = c.lines.iter().position(|(at, _)| *at == at_ms) else {
+        let Some(i) = c.lines.iter().position(|(at, ..)| *at == at_ms) else {
             return Some(Vec::new());
         };
         let (a, b) = (i.saturating_sub(n), (i + n + 1).min(c.lines.len()));
-        Some(c.lines[a..b].iter().map(|(_, t)| t.clone()).collect())
+        Some(c.lines[a..b].iter().map(|(_, t, _)| t.clone()).collect())
     }
 
     /// `None` when the call is not live here.
@@ -188,6 +224,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_speaker_number_shows_its_most_active_name_or_speaker_n() {
+        let mut l = Labels::default();
+        // Browser and desktop recordings have no active-speaker samples: numbers, 1-based.
+        assert_eq!(l.label(0, None), "Speaker 1");
+        assert_eq!(l.label(2, None), "Speaker 3");
+        // Samples name them: the name with the most votes wins, a tie goes to the first alphabetically.
+        assert_eq!(l.label(0, Some("Ann")), "Ann");
+        assert_eq!(l.label(0, Some("Bob")), "Ann");
+        assert_eq!(l.label(0, Some("Bob")), "Bob");
+        assert_eq!(l.label(2, None), "Speaker 3");
+    }
+
+    #[test]
     fn a_late_viewer_gets_the_finished_lines_and_the_current_partial() {
         let h = LiveHub::default();
         h.start("m");
@@ -196,17 +245,28 @@ mod tests {
             Msg::Final {
                 at_ms: 100,
                 text: "hello".into(),
+                who: Some(Who {
+                    n: 0,
+                    label: "Speaker 1".into(),
+                    ms: 700,
+                }),
             },
         );
         h.push("m", Msg::Partial("wor".into()));
         let s = h.subscribe("m").unwrap();
-        assert_eq!(s.lines, vec![(100, "hello".to_string())]);
+        let who = Who {
+            n: 0,
+            label: "Speaker 1".into(),
+            ms: 700,
+        };
+        assert_eq!(s.lines, vec![(100, "hello".to_string(), Some(who))]);
         assert_eq!(s.partial, "wor");
         h.push(
             "m",
             Msg::Final {
                 at_ms: 200,
                 text: "world".into(),
+                who: None,
             },
         );
         assert_eq!(h.subscribe("m").unwrap().partial, "");
@@ -265,6 +325,7 @@ mod tests {
             Msg::Final {
                 at_ms: 1,
                 text: "secret".into(),
+                who: None,
             },
         );
         h.clear("m");
@@ -273,7 +334,8 @@ mod tests {
             s.rx.try_recv().unwrap(),
             Msg::Final {
                 at_ms: 1,
-                text: "secret".into()
+                text: "secret".into(),
+                who: None
             }
         );
         assert_eq!(s.rx.try_recv().unwrap(), Msg::End);
@@ -282,6 +344,7 @@ mod tests {
             Msg::Final {
                 at_ms: 2,
                 text: "late".into(),
+                who: None,
             },
         );
         assert!(
@@ -301,6 +364,7 @@ mod tests {
                 Msg::Final {
                     at_ms: at,
                     text: t.into(),
+                    who: None,
                 },
             );
         }
@@ -322,6 +386,7 @@ mod tests {
                 Msg::Final {
                     at_ms: i,
                     text: "x".into(),
+                    who: None,
                 },
             );
         }

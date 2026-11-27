@@ -185,3 +185,25 @@ test('a member who cannot edit the meeting sees no recording controls', async ()
   expect(screen.queryByRole('button', { name: 'Pause recording' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Stop and leave' })).toBeNull()
 })
+
+test('shows who is speaking: names on lines, the ribbon, speaking now and talk time', async () => {
+  const { send } = mount()
+  await send('final', { at_ms: 4000, text: 'hello all', speaker: 0, label: 'Speaker 1', ms: 3000 })
+  await send('final', { at_ms: 9000, text: 'hi there', speaker: 1, label: 'Speaker 2', ms: 1000 })
+  // Speaker 1 is later named: the name replaces the number everywhere, and talk time adds up per speaker.
+  await send('final', { at_ms: 12000, text: 'and so', speaker: 0, label: 'Ann', ms: 2000 })
+  expect(await screen.findByText(/Speaking now/)).toBeTruthy()
+  expect(screen.getByText(/Speaking now/).textContent).toBe('Speaking now: Ann')
+  const talkTime = within(screen.getByRole('list', { name: 'Talk time' })).getAllByRole('listitem').map((li) => li.textContent)
+  expect(talkTime).toEqual(['Ann0:05', 'Speaker 20:01'])
+  expect(screen.getByText('hello all').parentElement!.textContent).toBe('0:04Ann:hello all')
+  const strip = document.querySelector('[data-variant="live"]')!
+  expect([...strip.children].map((c) => [c.getAttribute('data-speaker'), (c as HTMLElement).style.flex])).toEqual([['0', '3000 1 0%'], ['1', '1000 1 0%'], ['0', '2000 1 0%']])
+})
+
+test('lines without a speaker show no speaker block', async () => {
+  const { send } = mount()
+  await send('final', { at_ms: 4000, text: 'plain line' })
+  await screen.findByText('plain line')
+  expect(screen.queryByLabelText('Speakers')).toBeNull()
+})

@@ -94,6 +94,7 @@ fn say(meeting: &str, text: &str) {
         Msg::Final {
             at_ms: 0,
             text: text.into(),
+            who: None,
         },
     );
 }

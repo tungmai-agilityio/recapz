@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use recapz_core::db;
 use recapz_server::{
     config::Config,
-    live::{hub, Control, Msg},
+    live::{hub, Control, Msg, Who},
     routes,
 };
 use rusqlite::params;
@@ -111,6 +111,7 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
             Msg::Final {
                 at_ms: 1500,
                 text: "the price is nine million".into(),
+                who: None,
             },
         );
     }
@@ -159,6 +160,21 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
         read_until(&mut body, "\n\n").await,
         "event: unavailable\ndata: {}\n\n"
     );
+    // A line with a speaker carries the number (its colour), the name to show and how long it took.
+    hub().push(
+        "live-shared",
+        Msg::Final {
+            at_ms: 4000,
+            text: "agreed".into(),
+            who: Some(Who {
+                n: 1,
+                label: "Ann".into(),
+                ms: 900,
+            }),
+        },
+    );
+    let who_line = "event: final\ndata: {\"at_ms\":4000,\"label\":\"Ann\",\"ms\":900,\"speaker\":1,\"text\":\"agreed\"}\n\n";
+    assert_eq!(read_until(&mut body, "\n\n").await, who_line);
 
     // A workspace member joining late gets the line, the partial and the failure notice.
     let res = app
@@ -171,7 +187,7 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
     let got = read_until(&mut body, "event: unavailable\ndata: {}\n\n").await;
     assert_eq!(
         got,
-        format!("{line}event: partial\ndata: {{\"text\":\"and the\"}}\n\nevent: unavailable\ndata: {{}}\n\n")
+        format!("{line}{who_line}event: unavailable\ndata: {{}}\n\n")
     );
 
     // Ending the call (or an opt-out) closes the stream and drops the transcript.
