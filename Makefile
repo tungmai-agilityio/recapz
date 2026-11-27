@@ -1,4 +1,4 @@
-.PHONY: dev local hooks desktop-check desktop-dmg desktop-run desktop-update-test notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release
+.PHONY: dev local hooks desktop-check desktop-dmg desktop-run desktop-update-test notetaker-login notetaker-logout sample live-sim replay live-stop pr-check test test-browser lint release deploy
 
 dev:
 	@trap 'kill 0' INT TERM; set -a; [ -f .env ] && . ./.env; set +a; cargo run -p recapz-server & pnpm -C web dev & wait
@@ -122,3 +122,9 @@ lint:
 release:
 	pnpm -C web build
 	cargo build --release -p recapz-server
+
+# Build main on CI and deploy it to production (rolls back on a failed smoke test), then wait for the run.
+deploy:
+	gh workflow run release-build.yml --ref main -f deploy=true
+	sleep 5
+	gh run watch $$(gh run list --workflow release-build.yml --event workflow_dispatch --limit 5 --json databaseId,status -q 'map(select(.status != "completed"))[0].databaseId') --exit-status

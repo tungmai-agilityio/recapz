@@ -278,11 +278,13 @@ gh run list --workflow release-build.yml --limit 3
 gh run watch <run-id>
 ```
 
-A deploy without a tag (from `main`, still needs the same approval):
+A deploy without a tag, from `main` (`make deploy` runs this and waits for the run; it fails when the build, deploy or smoke test fails):
 
 ```bash
 gh workflow run release-build.yml --ref main -f deploy=true
 ```
+
+Since 2026-11-27 the `production` environment has no required reviewer (the maintainer's choice), so these deploys start without **Approve and deploy**; add yourself as reviewer again to bring the gate back.
 
 Check the result and, if needed, roll back by hand:
 
