@@ -8,7 +8,7 @@ A map of where things live, checked against the repository tree on 2026-11-25. F
 | Piece | Where | Role |
 |---|---|---|
 | Server binary | `crates/server` | axum HTTP routes (`routes.rs`, `routes/`), config, job runner (`runner.rs`), live transcript (`live.rs`), notetaker loop (`notetaker*.rs`), browser-recording socket (`browser_call.rs`), calendar sync, embedded web app (`web.rs`) |
-| Core | `crates/core` | Domain, control and per-tenant SQLite, additive migrations (`migrations/`), job queue (`jobs.rs`), pipeline jobs (`transcribe_job`, `label_job`, `report_job`, `index_job`, `archive_job`), search, documents, usage and cap, retention, hard-delete (`purge.rs`) |
+| Core | `crates/core` | Domain, control and per-tenant SQLite, additive migrations (`migrations/`), job queue (`jobs.rs`), pipeline jobs (`transcribe_job`, `label_job`, `report_job`, `index_job`, `archive_job`), search, documents, Ask history (`ask_history.rs`), usage and cap, retention, hard-delete (`purge.rs`) |
 | Speech | `crates/speech` | `Transcriber` trait, Deepgram batch (`deepgram.rs`) and streaming (`stream.rs`), upload decoding (`decode.rs`) |
 | LLM | `crates/llm` | `Provider` trait, OpenAI-compatible and Anthropic adapters, report and Ask prompts (`prompts/`, versioned) |
 | Notetaker | `crates/notetaker` | Browser driver for Google Meet, session rules, opt-out detection, WAV writer; no browser needed for its unit tests |

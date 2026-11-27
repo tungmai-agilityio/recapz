@@ -1,5 +1,6 @@
 //! Recapz domain core: control and tenant databases, job queue.
 pub mod archive_job;
+pub mod ask_history;
 pub mod blobs;
 pub mod calendar;
 pub mod chunk;

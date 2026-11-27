@@ -215,6 +215,7 @@ pub fn remove(
             params![admin_id, user_id],
         )?;
         google_tokens::delete(tenant, user_id)?;
+        crate::ask_history::clear(tenant, user_id)?;
         tenant.execute(
             "DELETE FROM calendar_events WHERE member_id = ?1 AND ends_at > ?2",
             params![user_id, now_ms()],
@@ -494,5 +495,23 @@ mod tests {
 
         // they can be invited again
         invite(&control, "t1", "a", "b@x.io", "member").unwrap();
+    }
+
+    #[test]
+    fn remove_deletes_the_removed_members_ask_history_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, t1, _t2) = setup(dir.path());
+        crate::ask_history::save(&t1, "b", "mine", "a", "[]").unwrap();
+        crate::ask_history::save(&t1, "b", "mine too", "a", "[]").unwrap();
+        crate::ask_history::save(&t1, "a", "admin's", "a", "[]").unwrap();
+        remove(&control, &t1, dir.path(), "t1", "a", "b").unwrap();
+        assert_eq!(
+            n(&t1, "SELECT count(*) FROM ask_turns WHERE member_id = 'b'"),
+            0
+        );
+        assert_eq!(
+            n(&t1, "SELECT count(*) FROM ask_turns WHERE member_id = 'a'"),
+            1
+        );
     }
 }
