@@ -1,12 +1,13 @@
 name: release-build
 # Builds the Linux x86_64 server binary (web app embedded). Run it by hand from the Actions tab (any
 # branch) or push a v* tag. The deploy job runs only for a v* tag, or a manual run on main with
-# "deploy" ticked, and only after the reviewer of the `production` environment approves (docs/deploy.md).
+# "deploy" ticked. The `production` environment has no required reviewer (maintainer's choice), so nothing
+# waits for approval: a tag ruleset on v* limits who can deploy (docs/deploy.md).
 on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy to production after the build (main only; still needs approval)
+        description: Deploy to production after the build (main only)
         type: boolean
         default: false
   push:
