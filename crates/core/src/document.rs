@@ -99,6 +99,39 @@ pub fn used_bytes(c: &Connection, member_id: &str) -> Result<i64> {
     )?)
 }
 
+/// One of the member's documents with where its file is (relative to the workspace folder).
+#[derive(Debug, PartialEq)]
+pub struct Full {
+    pub id: String,
+    pub name: String,
+    /// `md` or `txt`.
+    pub kind: String,
+    pub llm_ok: bool,
+    pub size_bytes: i64,
+    pub created_at: i64,
+    pub path: String,
+}
+
+/// The member's own document, or `None` for a missing one or someone else's.
+pub fn get(c: &Connection, member_id: &str, doc_id: &str) -> Result<Option<Full>> {
+    Ok(c.query_row(
+        "SELECT id, name, kind, llm_ok, size_bytes, created_at, path FROM documents WHERE id=?1 AND member_id=?2",
+        [doc_id, member_id],
+        |r| {
+            Ok(Full {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                kind: r.get(2)?,
+                llm_ok: r.get::<_, i64>(3)? == 1,
+                size_bytes: r.get(4)?,
+                created_at: r.get(5)?,
+                path: r.get(6)?,
+            })
+        },
+    )
+    .optional()?)
+}
+
 /// One of the member's documents as listed.
 #[derive(Debug, PartialEq)]
 pub struct Listed {

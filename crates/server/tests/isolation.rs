@@ -249,7 +249,7 @@ async fn every_id_route_answers_404_for_the_other_workspace_and_changes_nothing(
     let f = fixture().await;
     let before = f.second_state();
     assert!(before.contains("m2Title"), "{before}");
-    let routes: [(&str, &str, Option<&str>); 13] = [
+    let routes: [(&str, &str, Option<&str>); 15] = [
         ("GET", "/api/meetings/m2", None),
         ("PATCH", "/api/meetings/m2", Some(r#"{"title":"hacked"}"#)),
         ("DELETE", "/api/meetings/m2", None),
@@ -265,6 +265,8 @@ async fn every_id_route_answers_404_for_the_other_workspace_and_changes_nothing(
         ("POST", "/api/meetings/m2/live-ask", Some("{}")),
         ("PATCH", "/api/documents/d2", Some(r#"{"llm_ok":false}"#)),
         ("DELETE", "/api/documents/d2", None),
+        ("GET", "/api/documents/d2", None),
+        ("GET", "/api/documents/d2/file", None),
         (
             "PATCH",
             "/api/calendar-events/e2",
