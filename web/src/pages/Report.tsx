@@ -13,7 +13,7 @@ import { useTranscriptRetention } from '../speech'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
 import { inputClass } from '../ui/Field'
-import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, setMeetingLanguage, setMeetingShare, updateActionItem, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
+import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, renameSpeaker, setMeetingLanguage, setMeetingShare, updateActionItem, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
 
 const SHARE_LABEL: Record<MeetingShare, string> = { attendees: 'Attendees', workspace: 'Whole team', owner: 'Only me' }
 
@@ -305,6 +305,17 @@ function ReportSections({ id, r, talk, language, sharing, deletion, seek, open }
   const done = r.action_items.filter((a) => a.done).length
   const qc = useQueryClient()
   const toast = useToast()
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null) // speaker being renamed
+  const renameOne = useMutation({
+    mutationFn: (v: { id: string; name: string }) => renameSpeaker(id, v.id, v.name),
+    onSuccess: () => {
+      setEditing(null)
+      void qc.invalidateQueries({ queryKey: ['transcript', id] })
+      void qc.invalidateQueries({ queryKey: ['meeting', id] })
+      void qc.invalidateQueries({ queryKey: ['meetings'] })
+    },
+    onError: () => toast('Could not rename the speaker'),
+  })
   const edit = useMutation({
     mutationFn: (v: { item: string; patch: Parameters<typeof updateActionItem>[1] }) => updateActionItem(v.item, v.patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['report', id] }),
@@ -376,9 +387,19 @@ function ReportSections({ id, r, talk, language, sharing, deletion, seek, open }
             <ul>
               {talk.people.map((p) => (
                 <li key={p.id} className="grid grid-cols-[70px_1fr_38px] items-center gap-2.5 py-0.5 text-[0.84rem]">
-                  <span className="truncate">{p.name}</span>
-                  <span data-testid="talk-bar" style={{ width: `${(p.ms / talk.people[0].ms) * 100}%` }} className={`h-1.5 rounded-[2px] ${colour(p.index)}`} />
-                  <span className="font-mono text-mute">{Math.round((p.ms / talk.all) * 100)}%</span>
+                  {editing?.id === p.id ? (
+                    <form className="col-span-3 flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (editing.name.trim() && !renameOne.isPending) renameOne.mutate({ id: p.id, name: editing.name.trim() }) }}>
+                      <input autoFocus aria-label={`Name of ${p.name}`} maxLength={100} value={editing.name} className={`${inputClass} min-w-0 flex-1`}
+                        onChange={(e) => setEditing({ id: p.id, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null) }} />
+                      <Button type="submit" disabled={!editing.name.trim() || renameOne.isPending}>Save</Button>
+                    </form>
+                  ) : (
+                    <button type="button" aria-label={`Rename ${p.name}`} className="truncate text-left hover:text-primary" onClick={() => setEditing({ id: p.id, name: p.name })}>{p.name}</button>
+                  )}
+                  {editing?.id !== p.id && <>
+                    <span data-testid="talk-bar" style={{ width: `${(p.ms / talk.people[0].ms) * 100}%` }} className={`h-1.5 rounded-[2px] ${colour(p.index)}`} />
+                    <span className="font-mono text-mute">{Math.round((p.ms / talk.all) * 100)}%</span>
+                  </>}
                 </li>
               ))}
             </ul>

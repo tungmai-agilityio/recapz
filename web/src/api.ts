@@ -126,6 +126,10 @@ export const getReport = async (id: string): Promise<ReportData | null> =>
 export const renameMeeting = async (id: string, title: string): Promise<{ title: string }> =>
   (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ title }) }))).json()
 
+/** Any member who can see the meeting; 404 otherwise. */
+export const renameSpeaker = async (meetingId: string, speakerId: string, name: string): Promise<{ name: string }> =>
+  (await check(await fetch(`/api/meetings/${meetingId}/speakers/${speakerId}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ name }) }))).json()
+
 /** Owner or admin only: the server answers 403 for anyone else who can see the meeting. */
 export const setMeetingShare = async (id: string, share: MeetingShare): Promise<{ share: MeetingShare }> =>
   (await check(await fetch(`/api/meetings/${id}`, { method: 'PATCH', headers: { ...csrf(), 'content-type': 'application/json' }, body: JSON.stringify({ share }) }))).json()
