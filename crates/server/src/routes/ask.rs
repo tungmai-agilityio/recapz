@@ -2,7 +2,7 @@
 //! The reply is a server-sent event stream: `token` events with the answer text, one `citations`
 //! event with the moments used, then `done`. Retrieval applies the access rule inside the query.
 use super::*;
-use recapz_core::search;
+use recapz_core::{ask_history, search};
 use recapz_llm::ask::{answer_stream, Excerpt, Source};
 use tokio::io::AsyncWriteExt;
 
@@ -237,6 +237,7 @@ pub async fn ask(
         "Ask needs a language model; set [llm] in config",
     ))?;
 
+    let member = u.id.clone();
     let (uid, q, tenant) = (u.id.clone(), question.clone(), u.tenant_id.clone());
     let embedder = app.embedder.clone();
     let hits = app
@@ -294,8 +295,19 @@ pub async fn ask(
                         tracing::error!("citation details not loaded");
                         plain
                     });
-                event("citations", serde_json::Value::Array(citations))
-                    + &event("done", serde_json::json!({}))
+                // Saved here, not by the client, so a closed tab still keeps the turn. Only a
+                // completed answer is saved; the `done` event carries the turn's id.
+                let citations = serde_json::Value::Array(citations);
+                let (who, cards_json, answer) =
+                    (member, citations.to_string(), out.value.answer.clone());
+                let id = app
+                    .tenant(tenant.clone(), move |c| {
+                        ask_history::save(c, &who, &question, &answer, &cards_json)
+                    })
+                    .await
+                    .map_err(|_| tracing::error!("ask turn not saved"))
+                    .ok();
+                event("citations", citations) + &event("done", serde_json::json!({ "id": id }))
             }
             Err(e) => {
                 tracing::error!("ask failed: {e}");
@@ -317,6 +329,88 @@ pub async fn ask(
         Body::from_stream(ReaderStream::new(rx_pipe)),
     )
         .into_response())
+}
+
+#[derive(Serialize)]
+pub struct HistoryTurn {
+    id: String,
+    question: String,
+    answer: String,
+    citations: serde_json::Value,
+    created_at: i64,
+}
+
+/// The member's saved turns, oldest first. A turn that cites a meeting the member can no longer see
+/// is left out (not deleted: it returns if access returns).
+pub async fn history(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<HistoryTurn>>> {
+    let u = app.current_user(&jar).await?;
+    let rows = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            let mut visible = c.prepare(&format!(
+                "SELECT 1 FROM meetings m WHERE m.id = ?2 AND {}",
+                db::MEETING_VISIBLE
+            ))?;
+            let mut out = vec![];
+            for t in ask_history::list(c, &u.id)? {
+                let cites: serde_json::Value = serde_json::from_str(&t.citations_json)?;
+                let hidden = {
+                    let mut hidden = false;
+                    for m in cites
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|v| v["meeting_id"].as_str())
+                    {
+                        if !visible.exists([&u.id, m])? {
+                            hidden = true;
+                            break;
+                        }
+                    }
+                    hidden
+                };
+                if !hidden {
+                    out.push(HistoryTurn {
+                        id: t.id,
+                        question: t.question,
+                        answer: t.answer,
+                        citations: cites,
+                        created_at: t.created_at,
+                    });
+                }
+            }
+            Ok(out)
+        })
+        .await?;
+    Ok(Json(rows))
+}
+
+/// Deletes one of the member's own turns; 404 for another member's or a missing one.
+pub async fn delete_turn(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    let u = app.current_user(&jar).await?;
+    let found = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            ask_history::delete_one(c, &u.id, &id)
+        })
+        .await?;
+    found
+        .then_some(StatusCode::NO_CONTENT)
+        .ok_or(ApiError::NotFound)
+}
+
+pub async fn clear_history(State(app): State<App>, jar: CookieJar) -> Res<StatusCode> {
+    let u = app.current_user(&jar).await?;
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        ask_history::clear(c, &u.id)
+    })
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

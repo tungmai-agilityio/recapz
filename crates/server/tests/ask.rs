@@ -178,7 +178,10 @@ async fn ask_never_reads_or_sends_another_members_private_meeting() {
     assert_eq!(answer_text(&body), "May.");
     assert!(body.contains(r#""meeting_id":"shared""#), "{body}");
     assert!(body.contains(r#""start_ms":90000"#), "{body}");
-    assert!(body.trim_end().ends_with("event: done\ndata: {}"), "{body}");
+    assert!(
+        body.trim_end().contains("event: done\ndata: {\"id\":\""),
+        "the done event names the saved turn: {body}"
+    );
 
     // The owner can find the private one.
     let stub2 = reply(r#"{"answer":"Nine million.","citations":[1]}"#);
@@ -621,4 +624,182 @@ async fn ask_filters_by_date_and_person_and_a_filter_never_widens_access() {
         let (s, ..) = send(&app, q(&boss, serde_json::json!({ "from": bad }))).await;
         assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
     }
+}
+
+fn get_history(cookie: &str) -> Request<Body> {
+    Request::get("/api/ask/history")
+        .header(header::COOKIE, cookie)
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn delete(cookie: &str, path: &str, csrf: bool) -> Request<Body> {
+    let mut r = Request::delete(path);
+    if csrf {
+        r = r
+            .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+            .header("x-csrf-token", "t");
+    } else {
+        r = r.header(header::COOKIE, cookie);
+    }
+    r.body(Body::empty()).unwrap()
+}
+
+async fn history_of(app: &Router, cookie: &str) -> Vec<serde_json::Value> {
+    let (s, _, body) = send(app, get_history(cookie)).await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    serde_json::from_str(&body).unwrap()
+}
+
+fn done_id(sse: &str) -> String {
+    let line = sse
+        .lines()
+        .skip_while(|l| *l != "event: done")
+        .nth(1)
+        .unwrap();
+    let d: serde_json::Value = serde_json::from_str(line.trim_start_matches("data: ")).unwrap();
+    d["id"].as_str().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn a_finished_answer_is_saved_and_listed_with_its_citations() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(
+        dir.path(),
+        Some(reply(r#"{"answer":"May.","citations":[1]}"#)),
+    );
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    seed(dir.path());
+    assert!(history_of(&app, &boss).await.is_empty());
+
+    let (_, _, sse) = send(&app, ask(&boss, "when is the launch date?")).await;
+    let id = done_id(&sse);
+
+    let h = history_of(&app, &boss).await;
+    assert_eq!(h.len(), 1);
+    assert_eq!(h[0]["id"], id);
+    assert_eq!(h[0]["question"], "when is the launch date?");
+    assert_eq!(h[0]["answer"], "May.");
+    assert_eq!(h[0]["citations"][0]["meeting_id"], "shared");
+    assert_eq!(h[0]["citations"][0]["start_ms"], 90000);
+}
+
+#[tokio::test]
+async fn a_failed_answer_is_not_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = streaming_app(
+        dir.path(),
+        Pieces {
+            pieces: vec!["{\"answer\":\"Ma"],
+            fail_after: true,
+        },
+    );
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    seed(dir.path());
+    let (_, _, sse) = send(&app, ask(&boss, "when is the launch date?")).await;
+    assert!(sse.contains("event: error"), "{sse}");
+    assert!(history_of(&app, &boss).await.is_empty());
+}
+
+#[tokio::test]
+async fn history_is_private_and_hides_turns_citing_a_meeting_the_member_lost() {
+    let dir = tempfile::tempdir().unwrap();
+    let ans = r#"{"answer":"A.","citations":[1]}"#;
+    let app = app(dir.path(), Some(Arc::new(Stub::texts(&[ans, ans]))));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let (tid, _) = seed(dir.path());
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+
+    let (_, _, sse) = send(&app, ask(&boss, "what is the acquisition price?")).await;
+    let private_turn = done_id(&sse);
+    let (_, _, sse) = send(&app, ask(&amy, "when is the launch date?")).await;
+    let amy_turn = done_id(&sse);
+
+    // Each member sees only their own, and cannot delete the other's.
+    assert_eq!(history_of(&app, &amy).await.len(), 1);
+    assert_eq!(history_of(&app, &amy).await[0]["id"], amy_turn);
+    assert_eq!(history_of(&app, &boss).await.len(), 1);
+    let (s, ..) = send(
+        &app,
+        delete(&boss, &format!("/api/ask/history/{amy_turn}"), true),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    assert_eq!(history_of(&app, &amy).await.len(), 1);
+
+    // The boss loses the private meeting: the turn is hidden, not deleted, and returns with access.
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    t.execute(
+        "UPDATE meetings SET owner_id = NULL WHERE id = 'private'",
+        [],
+    )
+    .unwrap();
+    assert!(history_of(&app, &boss).await.is_empty());
+    let rows: i64 = t
+        .query_row("SELECT count(*) FROM ask_turns", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 2, "hidden, not deleted");
+    t.execute(
+        "UPDATE meetings SET owner_id = (SELECT id FROM members WHERE email='boss@example.com') WHERE id = 'private'",
+        [],
+    )
+    .unwrap();
+    let h = history_of(&app, &boss).await;
+    assert_eq!(h.len(), 1);
+    assert_eq!(h[0]["id"], private_turn);
+}
+
+#[tokio::test]
+async fn a_member_deletes_one_turn_or_clears_all_and_deletes_need_csrf() {
+    let dir = tempfile::tempdir().unwrap();
+    let ans = r#"{"answer":"May.","citations":[1]}"#;
+    let app = app(dir.path(), Some(Arc::new(Stub::texts(&[ans, ans, ans]))));
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    seed(dir.path());
+    let mut ids = vec![];
+    for q in ["launch date one?", "launch date two?", "launch date three?"] {
+        let (_, _, sse) = send(&app, ask(&boss, q)).await;
+        ids.push(done_id(&sse));
+    }
+    assert_eq!(history_of(&app, &boss).await.len(), 3);
+
+    let (s, ..) = send(
+        &app,
+        delete(&boss, &format!("/api/ask/history/{}", ids[0]), false),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "no csrf token");
+    let (s, ..) = send(&app, delete(&boss, "/api/ask/history", false)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "no csrf token");
+    assert_eq!(history_of(&app, &boss).await.len(), 3);
+
+    let (s, ..) = send(
+        &app,
+        delete(&boss, &format!("/api/ask/history/{}", ids[1]), true),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, ..) = send(
+        &app,
+        delete(&boss, &format!("/api/ask/history/{}", ids[1]), true),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "already gone");
+    let left: Vec<_> = history_of(&app, &boss)
+        .await
+        .iter()
+        .map(|t| t["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(left, [ids[0].clone(), ids[2].clone()]);
+
+    let (s, ..) = send(&app, delete(&boss, "/api/ask/history", true)).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert!(history_of(&app, &boss).await.is_empty());
+    let (s, ..) = send(&app, get_history("recapz_session=nope")).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
 }
