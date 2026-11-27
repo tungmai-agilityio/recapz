@@ -231,10 +231,10 @@ export class NoModel extends Error {}
 /** The stream ended with an `error` event after it had started. */
 export class AnswerFailed extends Error {}
 
-/** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
 /** Optional narrowing of Ask: UTC dates `YYYY-MM-DD` (inclusive) and the name of a person who spoke. */
 export interface AskFilter { from?: string; to?: string; speaker?: string }
 
+/** Streams an answer: `onToken` gets each piece of text, the result is the cited moments. */
 export async function ask(question: string, onToken: (t: string) => void, filter: AskFilter = {}): Promise<Citation[]> {
   const first = await fetch('/api/ask', {
     method: 'POST',
