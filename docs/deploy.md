@@ -1,10 +1,6 @@
 # Deploy (systemd)
 
-**Status (2026-11-25):** the Droplet was deleted to save cost (stated by the maintainer; not
-verified from the repository). `https://recapz.tungmai.com/api/health` did not answer within 8 seconds when checked on
-2026-11-25, while the DNS name still resolved (to the old host, unverified). Nothing is deployed now, so "today" and "current Droplet" below
-describe the last host. To run again, follow "Destroy and rebuild the Droplet", "Rebuild from scratch". Also: the
-repository has no GitHub release yet (tags `v0.1.0` to `v0.1.2` only, checked 2026-11-25).
+**Status (2026-11-27):** running again on a new Droplet `recapz-dev` (Debian 13, 1 vCPU / 2 GB, 50 GB disk, Singapore `sgp1`, IP 143.198.199.104), sized for a one-person demo with 2 GB swap and `max_concurrent_calls = 1`. The `recapz` A record points at it (DNS only). Provisioned with `scripts/provision-host.sh`; release `v0.1.2-2fc71a3` installed by hand with `deploy-release.sh`; `scripts/smoke-deploy.sh` passed 6/6. The notetaker is signed in; no test Meet call has run on this host yet *(unverified)*. Recordings go to a private Cloudflare R2 bucket, untested with a real recording so far *(unverified)*. Offsite backups run daily to a separate R2 bucket (first snapshot and a test restore checked 2026-11-27). CI deploy access (`deploy` user, `DEPLOY_*`) is set for this host; the first CI deploy has not run yet. The previous Droplet (San Francisco) was deleted on 2026-11-24 with no data kept.
 
 On a fresh Debian 12 or 13 host, `sudo scripts/provision-host.sh` does the packages, user, directories, unit files, firewall and key-only SSH below; then continue from the config and env files. Debian, not Ubuntu: Ubuntu's `chromium` is a snap that breaks under the service's hardening *(unverified here)*.
 
@@ -20,7 +16,7 @@ Destroying the Droplet saves cost (billing is hourly). What is lost and what to 
 | `notetaker-profile/` (the bot's Google sign-in) | yes, and never in backups | nothing: sign in again after the rebuild |
 | Release history under `/opt/recapz/releases`, the SSH host key, the `deploy` user | yes | nothing: recreated below |
 
-Backups are not offsite today (`recapz-backup.timer` only writes to the same disk), so destroying without copying `/var/backups/recapz` loses all meetings. Run a backup first (`sudo systemctl start recapz-backup.service`) and `scp` the newest stamp directory off the host.
+Before destroying, run both backups once (`sudo systemctl start recapz-backup.service recapz-offsite.service`) and check `journalctl -u recapz-offsite` saved a snapshot; without `/etc/recapz/offsite.env` ("Offsite" below) backups stay on the same disk and destroying loses all meetings.
 
 ### Optional: snapshot instead of a clean rebuild
 
@@ -30,7 +26,7 @@ A DigitalOcean snapshot keeps the whole disk, so the rebuild is only a new Dropl
 
 Run on your machine unless a step says "on the host". Never paste a key into chat or put it on a command line; edit files on the server.
 
-1. **Create the Droplet:** Debian 13, 2 vCPU / 4 GB, San Francisco, your SSH key, enable the cloud firewall for 22, 80, 443. Note its IP.
+1. **Create the Droplet:** Debian 13, Singapore (`sgp1`, nearest the members), 1 vCPU / 2 GB for a demo (then add 2 GB swap and set `max_concurrent_calls = 1`) or 2 vCPU / 4 GB for a team; a CPU/RAM-only resize keeps the disk, so start small, your SSH key, enable the cloud firewall for 22, 80, 443. Note its IP.
 2. **DNS:** in Cloudflare, set the `recapz` A record for `tungmai.com` to the new IP, **DNS only** (not proxied). Wait until `dig +short recapz.tungmai.com` shows it; Caddy cannot get a certificate before that. Then `ssh-keygen -R recapz.tungmai.com` to drop the old host key.
 3. **Provision:** copy only the files the script needs, then run it on the host (it installs the packages, the Chromium policy `/etc/chromium/policies/managed/recapz.json` = `{"BrowserSignin": 0}`, the `recapz` user, directories, units, firewall and key-only SSH):
    ```bash
@@ -56,7 +52,7 @@ Run on your machine unless a step says "on the host". Never paste a key into cha
    ```
    Open `vnc://localhost:5900` (macOS Screen Sharing) and, in a second SSH session on the host, run `sudo -u recapz env DISPLAY=:99 recapz notetaker-login`. Sign in by hand in the window that appears, close it, stop `x11vnc` (Ctrl-C). Never run Chromium or `notetaker-login` as root: a root-owned file in `notetaker-profile/` breaks every call ("dropped before enough audio"). If one exists: `chown -R recapz:recapz /var/lib/recapz/notetaker-profile`. Google may challenge the sign-in from a new datacenter IP; that is not verified here.
 9. **Restore data (if you kept a backup):** `systemctl stop recapz`, copy the stamp directory's contents over `/var/lib/recapz`, `chown -R recapz:recapz /var/lib/recapz`, but do not touch `notetaker-profile/`; start the service. Members keep their data; calendar connections work only with the old `RECAPZ_SECRET_KEY`.
-10. **Check:** `./scripts/smoke-deploy.sh https://recapz.tungmai.com`, sign in as the admin, then a test Meet call (`scripts/smoke-join.sh`) to confirm the bot joins signed in. Copy `/var/backups/recapz` off the host regularly; there is no offsite backup yet.
+10. **Check:** `./scripts/smoke-deploy.sh https://recapz.tungmai.com`, sign in as the admin, then a test Meet call (`scripts/smoke-join.sh`) to confirm the bot joins signed in. Set up "Offsite" under Backups and run it once.
 
 ## Install steps
 
@@ -74,7 +70,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now recapz-xvfb recapz
 journalctl -u recapz -f
 ```
 
-- **Cloud:** a DigitalOcean Droplet in San Francisco, billed hourly (destroy it when unused; none exists now, see Status above). It is a plain Linux VM, so everything below applies unchanged. DigitalOcean's optional Droplet backups are not enabled, so copy `/var/backups/recapz` off the host. Debian 13 is what the last host ran and what the rebuild steps assume; `scripts/provision-host.sh` was first written against Debian 12 (it only checks for Debian, not the version). A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
+- **Cloud:** a DigitalOcean Droplet in Singapore, billed hourly (destroy it when unused; see Status above). It is a plain Linux VM, so everything below applies unchanged. DigitalOcean's Droplet backups and snapshots stay off (they would copy the notetaker's session cookies); the offsite restic backup covers the data. Debian 13 is what the host runs and what the rebuild steps assume; `scripts/provision-host.sh` was first written against Debian 12 (it only checks for Debian, not the version). A datacenter IP may be challenged by Meet more than a residential one *(unverified)*; the notetaker's saved sign-in and daily smoke test cover it.
 - **Target host (hosted speech, `docs/decisions/hosted-speech.md`):** 2 vCPU, 4 GB RAM (the last Droplet had a 79 GB disk; about 40 GB is enough), `max_concurrent_calls = 2`, no GPU. Chromium (about 1 GB per call) drives memory; WAV audio (about 115 MB per hour) drives disk. On 2 GB RAM use `max_concurrent_calls = 1`. The speech and LLM keys go in `/etc/recapz/recapz.env` with `RECAPZ_SECRET_KEY`, never in `config.toml`.
 - `make release` is a plain `cargo build --release`: no GPU or CUDA toolkit is needed to build or run (a C compiler is, for the TLS library).
 - `bind` stays `127.0.0.1:8080`; Caddy terminates TLS in front of it: `sudo apt install caddy`, put `deploy/Caddyfile` at `/etc/caddy/Caddyfile` (the host is `recapz.tungmai.com`; change it if the domain changes; its DNS record must already point at the host), `sudo systemctl reload caddy`. Set `base_url` to the public https URL. Allow only ports 22, 80 and 443 in the host and cloud firewall. DNS: `tungmai.com` is on Cloudflare with a DNS-only (not proxied) A record pointing at the Droplet; the IP is not recorded here.
@@ -88,7 +84,7 @@ sudo apt install chromium xvfb          # or your distribution's Chromium; or se
 echo "RECAPZ_SECRET_KEY=$(openssl rand -hex 32)" | sudo tee -a /etc/recapz/recapz.env >/dev/null
 # the Deepgram key: the server refuses to start without it (add it by editing the file, not on the command line)
 sudoedit /etc/recapz/recapz.env   # add a line: RECAPZ_SPEECH_KEY=...
-# recordings bucket (optional, not enabled today: recordings stay on server disk; the object storage provider is undecided; see [storage] in config.toml): create a PRIVATE bucket, then add
+# recordings bucket (optional; the current host uses a private Cloudflare R2 bucket, see [storage] in config.toml): create a PRIVATE bucket, then add
 #   RECAPZ_STORAGE_KEY_ID=...   and   RECAPZ_STORAGE_SECRET=...
 ```
 
