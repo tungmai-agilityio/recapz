@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: sudo scripts/provision-host.sh     (run from a checkout of this repo on a fresh Debian 12 host)
+# Usage: sudo scripts/provision-host.sh     (run from a checkout of this repo on a fresh Debian 12 or 13 host)
 # Prepares the host: packages, service user, directories, systemd units, firewall, SSH key-only.
 # Safe to run twice. It installs no binary, no config and no secrets: after it, follow docs/deploy.md
 # ("Meeting notetaker", the env file, the Caddyfile, then scripts/deploy-release.sh).

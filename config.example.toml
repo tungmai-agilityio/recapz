@@ -23,7 +23,7 @@ price_per_minute_micro_usd = 7800   # estimate per audio minute: batch about $0.
 # The access key is never read from this file: set RECAPZ_STORAGE_KEY_ID and RECAPZ_STORAGE_SECRET in the environment.
 [storage]
 endpoint = ""            # e.g. "https://s3.example.com"
-region = ""              # e.g. "region-1"
+region = ""              # e.g. "region-1"; Cloudflare R2: "auto"
 bucket = ""              # must be private
 
 [google]
