@@ -15,6 +15,10 @@ recapz.tungmai.com {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy same-origin
+		X-Frame-Options DENY
+		# Needs of the web app: Google Fonts (stylesheet + font files), inline style="" attributes (Ribbon, Face, bars),
+		# same-origin audio, the capture worklet and the /ws recording socket. Google sign-in is a plain link and a redirect.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' wss://recapz.tungmai.com; worker-src 'self' blob:; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
 	}
 	request_body {
 		max_size 2GB
