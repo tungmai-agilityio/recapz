@@ -19,7 +19,10 @@
       "Bash(git push -u origin main*)",
       "Bash(git push * HEAD:main*)",
       "Bash(git commit --no-verify*)",
-      "Bash(git commit * --no-verify*)"
+      "Bash(git commit * --no-verify*)",
+      "Read(.secrets/**)",
+      "Read(.env)",
+      "Read(config.toml)"
     ]
   },
   "hooks": {
