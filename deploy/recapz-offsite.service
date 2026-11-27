@@ -4,7 +4,8 @@ After=recapz-backup.service
 
 [Service]
 Type=oneshot
-User=recapz
+# Runs as root on purpose: /etc/recapz/offsite.env (root:root 0600) holds the bucket key and the restic
+# password, which the app user must not read. It only reads /var/backups/recapz and writes its cache.
 # RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 EnvironmentFile=/etc/recapz/offsite.env
 # keep restic's cache out of /var/lib/recapz, or the next local backup copies it

@@ -34,14 +34,20 @@ if [ "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -lt 3500000 ] && ! swapon --s
 fi
 
 id recapz >/dev/null 2>&1 || useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
-install -d -m 0750 -o recapz -g recapz /etc/recapz
+install -d -m 0750 -o root -g recapz /etc/recapz   # root owns config and keys; recapz only reads
 install -d -m 0700 -o recapz -g recapz /var/backups/recapz
 install -d -m 0755 /opt/recapz/releases
 install -m 0755 "$repo/scripts/backup.sh" /usr/local/bin/recapz-backup
 install -m 0755 "$repo/scripts/offsite-backup.sh" /usr/local/bin/recapz-offsite
+install -m 0755 "$repo/scripts/check-health.sh" /usr/local/bin/recapz-check-health
+install -m 0755 "$repo/scripts/restore-test.sh" /usr/local/bin/recapz-restore-test
+install -m 0755 "$repo/scripts/smoke-join.sh" /usr/local/bin/recapz-smoke-join
 install -m 0644 "$repo"/deploy/recapz.service "$repo"/deploy/recapz-xvfb.service \
   "$repo"/deploy/recapz-backup.service "$repo"/deploy/recapz-backup.timer \
-  "$repo"/deploy/recapz-offsite.service "$repo"/deploy/recapz-offsite.timer /etc/systemd/system/
+  "$repo"/deploy/recapz-offsite.service "$repo"/deploy/recapz-offsite.timer \
+  "$repo"/deploy/recapz-health.service "$repo"/deploy/recapz-health.timer \
+  "$repo"/deploy/recapz-restore-test.service "$repo"/deploy/recapz-restore-test.timer \
+  "$repo"/deploy/recapz-smoke.service "$repo"/deploy/recapz-smoke.timer /etc/systemd/system/
 systemctl daemon-reload
 
 # firewall: SSH, HTTP (certificate challenge and redirect) and HTTPS only; the Xvfb display has no TCP listener
