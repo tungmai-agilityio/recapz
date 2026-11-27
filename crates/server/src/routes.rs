@@ -22,7 +22,10 @@ const CSRF_COOKIE: &str = "recapz_csrf";
 const CSRF_HEADER: &str = "x-csrf-token";
 const OAUTH_STATE_COOKIE: &str = "recapz_oauth_state";
 const SESSION_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
+#[cfg(not(test))]
 const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
+#[cfg(test)]
+const MAX_UPLOAD_BYTES: usize = 1024;
 
 #[derive(Clone)]
 pub struct App {
@@ -265,6 +268,7 @@ enum ApiError {
     NotFound,
     Unavailable(&'static str),
     TooManyRequests,
+    TooLarge,
     BadRange(u64),
     Internal(anyhow::Error),
 }
@@ -290,6 +294,7 @@ impl IntoResponse for ApiError {
                 "too many questions, try again in a minute",
             )
                 .into_response(),
+            ApiError::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "file too large").into_response(),
             ApiError::BadRange(len) => (
                 StatusCode::RANGE_NOT_SATISFIABLE,
                 [(header::CONTENT_RANGE, format!("bytes */{len}"))],
@@ -1692,44 +1697,85 @@ fn meeting_language(raw: Option<&str>) -> Result<&'static str, ApiError> {
     }
 }
 
+/// Streams the `file` field to `path` chunk by chunk, so memory stays flat whatever the size.
+/// Returns the byte count; a body over `MAX_UPLOAD_BYTES` is 413.
+async fn stream_to_disk(
+    mut f: axum::extract::multipart::Field<'_>,
+    path: &std::path::Path,
+) -> Res<usize> {
+    use tokio::io::AsyncWriteExt;
+    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    let mut out = tokio::fs::File::create(path).await?;
+    let mut total = 0usize;
+    while let Some(chunk) = f.chunk().await.map_err(|e| {
+        if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            ApiError::TooLarge
+        } else {
+            ApiError::BadRequest("could not read file")
+        }
+    })? {
+        total += chunk.len();
+        if total > MAX_UPLOAD_BYTES {
+            return Err(ApiError::TooLarge);
+        }
+        out.write_all(&chunk).await?;
+    }
+    out.flush().await?;
+    Ok(total)
+}
+
 async fn upload(
     State(app): State<App>,
     jar: CookieJar,
-    mut mp: Multipart,
+    mp: Multipart,
 ) -> Res<(StatusCode, Json<Created>)> {
     let u = app.current_user(&jar).await?;
+    let id = db::new_id();
+    let dir = db::tenant_dir(&app.cfg.data_dir, &u.tenant_id).join(format!("audio/{id}"));
+    let res = upload_inner(app, u, id, &dir, mp).await;
+    if res.is_err() {
+        let _ = tokio::fs::remove_dir_all(&dir).await; // no orphan audio on failure
+    }
+    res
+}
+
+async fn upload_inner(
+    app: App,
+    u: db::User,
+    id: String,
+    dir: &std::path::Path,
+    mut mp: Multipart,
+) -> Res<(StatusCode, Json<Created>)> {
     let mut title = None;
     let mut language = None;
-    let mut file: Option<(String, axum::body::Bytes)> = None;
-    while let Some(f) = mp
-        .next_field()
-        .await
-        .map_err(|_| ApiError::BadRequest("bad multipart body"))?
-    {
+    let mut file: Option<(String, usize)> = None;
+    while let Some(f) = mp.next_field().await.map_err(|e| {
+        if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            ApiError::TooLarge
+        } else {
+            ApiError::BadRequest("bad multipart body")
+        }
+    })? {
         match f.name() {
             Some("title") => title = f.text().await.ok().filter(|t| !t.trim().is_empty()),
             Some("language") => language = f.text().await.ok(),
             Some("file") => {
+                if file.is_some() {
+                    return Err(ApiError::BadRequest("one file only"));
+                }
                 let name = f.file_name().unwrap_or("upload").to_owned();
-                let bytes = f
-                    .bytes()
-                    .await
-                    .map_err(|_| ApiError::BadRequest("could not read file"))?;
-                file = Some((name, bytes));
+                let size = stream_to_disk(f, &dir.join(safe_name(&name))).await?;
+                file = Some((name, size));
             }
             _ => {}
         }
     }
     let language = meeting_language(language.as_deref())?;
-    let (name, bytes) = file.ok_or(ApiError::BadRequest("missing file field"))?;
-    if bytes.is_empty() {
+    let (name, size) = file.ok_or(ApiError::BadRequest("missing file field"))?;
+    if size == 0 {
         return Err(ApiError::BadRequest("empty file"));
     }
-    let id = db::new_id();
     let rel = format!("audio/{id}/{}", safe_name(&name));
-    let path = db::tenant_dir(&app.cfg.data_dir, &u.tenant_id).join(&rel);
-    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
-    tokio::fs::write(&path, &bytes).await?;
 
     let title = title.unwrap_or_else(|| name.clone());
     let (mid, rel2) = (id.clone(), rel.clone());
@@ -1745,9 +1791,6 @@ async fn upload(
             Ok(())
         })
         .await;
-    if res.is_err() {
-        let _ = tokio::fs::remove_dir_all(path.parent().unwrap()).await; // no orphan audio on failure
-    }
     res?;
     Ok((StatusCode::CREATED, Json(Created { id })))
 }
@@ -1763,5 +1806,77 @@ mod api_error_tests {
         assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let b = axum::body::to_bytes(r.into_body(), 1024).await.unwrap();
         assert_eq!(b.len(), 0);
+    }
+}
+
+#[cfg(test)]
+mod upload_cap_tests {
+    use super::*;
+    use tower::ServiceExt;
+
+    async fn upload_of(app: &Router, cookie: &str, len: usize) -> StatusCode {
+        let b = "XB";
+        let mut body = format!(
+            "--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\n\r\n"
+        )
+        .into_bytes();
+        body.extend(std::iter::repeat_n(b'x', len));
+        body.extend(format!("\r\n--{b}--\r\n").bytes());
+        let req = axum::http::Request::post("/api/uploads")
+            .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+            .header("x-csrf-token", "t")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={b}"),
+            )
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        app.clone().oneshot(req).await.unwrap().status()
+    }
+
+    fn audio_files(d: &std::path::Path) -> usize {
+        let mut n = 0;
+        for e in std::fs::read_dir(d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                n += audio_files(&p);
+            } else if p.to_string_lossy().contains("/audio/") {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    #[tokio::test]
+    async fn a_body_over_the_cap_is_413_and_leaves_no_file_while_a_small_one_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = crate::config::Config {
+            data_dir: dir.path().into(),
+            dev_login: true,
+            ..Default::default()
+        };
+        let control = db::open_control(dir.path()).unwrap();
+        db::bootstrap_admin(&control, "boss@example.com").unwrap();
+        let app = router(cfg, Arc::new(Mutex::new(control)));
+        let login = axum::http::Request::post("/auth/dev-login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(r#"{"email":"boss@example.com"}"#))
+            .unwrap();
+        let res = app.clone().oneshot(login).await.unwrap();
+        let cookie = res
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned())
+            .find(|c| c.starts_with("recapz_session="))
+            .unwrap();
+
+        assert_eq!(
+            upload_of(&app, &cookie, MAX_UPLOAD_BYTES + 1).await,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(audio_files(dir.path()), 0);
+        assert_eq!(upload_of(&app, &cookie, 10).await, StatusCode::CREATED);
+        assert_eq!(audio_files(dir.path()), 1);
     }
 }
