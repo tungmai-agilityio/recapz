@@ -200,8 +200,11 @@ pub fn router_with_mail(
         .route("/api/documents/usage", get(documents::usage))
         .route(
             "/api/documents/{id}",
-            patch(documents::set_llm_ok).delete(documents::delete),
+            get(documents::get)
+                .patch(documents::set_llm_ok)
+                .delete(documents::delete),
         )
+        .route("/api/documents/{id}/file", get(documents::file))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
@@ -1608,7 +1611,13 @@ fn attachment_name(title: &str, at_ms: i64, rel: &str) -> String {
         .map(|(_, e)| e.to_ascii_lowercase())
         .filter(|e| !e.is_empty() && e.len() <= 5 && e.bytes().all(|b| b.is_ascii_alphanumeric()))
         .unwrap_or_else(|| "bin".into());
-    let name = format!("{title}-{date}.{ext}");
+    attachment_header(&format!("{title}-{date}.{ext}"))
+}
+
+/// `attachment; filename=...; filename*=...` for a name with no control characters, quotes or
+/// slashes. `filename=` is ASCII only (anything else is `_`); `filename*=` carries the full UTF-8
+/// name, percent-encoded (RFC 5987).
+fn attachment_header(name: &str) -> String {
     let ascii: String = name
         .chars()
         .map(|c| {

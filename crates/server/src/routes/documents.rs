@@ -93,6 +93,25 @@ pub async fn upload(
     Ok((StatusCode::CREATED, Json(Created { id })))
 }
 
+/// `indexing`, `indexed` or `no text found`: the one rule for the list and the document page.
+fn status(c: &Connection, id: &str) -> anyhow::Result<&'static str> {
+    let queued: i64 = c.query_row(
+        "SELECT COUNT(*) FROM jobs WHERE kind=?1 AND payload=?2 AND state IN ('queued','running')",
+        [document::KIND, id],
+        |r| r.get(0),
+    )?;
+    let chunks: i64 = c.query_row(
+        "SELECT COUNT(*) FROM document_chunks WHERE document_id=?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok(match (queued, chunks) {
+        (q, _) if q > 0 => "indexing",
+        (_, n) if n > 0 => "indexed",
+        _ => "no text found",
+    })
+}
+
 pub async fn list(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<DocRow>>> {
     let u = app.current_user(&jar).await?;
     let rows = app
@@ -102,21 +121,7 @@ pub async fn list(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<DocRow
                 .into_iter()
                 .map(|d| {
                     let id = d.id.clone();
-                    let queued: i64 = c.query_row(
-                        "SELECT COUNT(*) FROM jobs WHERE kind=?1 AND payload=?2 AND state IN ('queued','running')",
-                        [document::KIND, &id],
-                        |r| r.get(0),
-                    )?;
-                    let chunks: i64 = c.query_row(
-                        "SELECT COUNT(*) FROM document_chunks WHERE document_id=?1",
-                        [&id],
-                        |r| r.get(0),
-                    )?;
-                    let status = match (queued, chunks) {
-                        (q, _) if q > 0 => "indexing",
-                        (_, n) if n > 0 => "indexed",
-                        _ => "no text found",
-                    };
+                    let status = status(c, &id)?;
                     Ok(DocRow {
                         id,
                         name: d.name,
@@ -172,4 +177,107 @@ pub async fn delete(
     found
         .then_some(StatusCode::NO_CONTENT)
         .ok_or(ApiError::NotFound)
+}
+
+/// How much of a file the page shows; the whole file stays available through `/file`.
+const VIEW_BYTES: usize = 1024 * 1024;
+
+#[derive(Serialize)]
+pub struct Detail {
+    id: String,
+    name: String,
+    /// `md` or `txt`.
+    kind: String,
+    size_bytes: i64,
+    created_at: i64,
+    llm_ok: bool,
+    status: &'static str,
+    /// The first 1 MB of the file, cut on a character boundary.
+    text: String,
+    /// True when the file is longer than what `text` holds.
+    truncated: bool,
+}
+
+/// The member's own document and its stored file; `None` (a 404) for a missing or foreign id, an
+/// unsafe id, or a file that is gone. `limit` bounds how many bytes are read.
+async fn load(
+    app: &App,
+    jar: &CookieJar,
+    id: String,
+    limit: usize,
+) -> Res<(document::Full, Vec<u8>, &'static str)> {
+    let u = app.current_user(jar).await?;
+    if !document::safe_id(&id) {
+        return Err(ApiError::NotFound);
+    }
+    let (tenant, dir) = (u.tenant_id.clone(), app.cfg.data_dir.clone());
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        let Some(d) = document::get(c, &u.id, &id)? else {
+            return Ok(None);
+        };
+        let file =
+            match std::fs::File::open(recapz_core::db::tenant_dir(&dir, &tenant).join(&d.path)) {
+                Ok(f) => f,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(e.into()),
+            };
+        let mut bytes = vec![];
+        std::io::Read::read_to_end(&mut std::io::Read::take(file, limit as u64), &mut bytes)?;
+        let status = status(c, &d.id)?;
+        Ok(Some((d, bytes, status)))
+    })
+    .await?
+    .ok_or(ApiError::NotFound)
+}
+
+pub async fn get(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<Json<Detail>> {
+    let (d, mut bytes, status) = load(&app, &jar, id, VIEW_BYTES + 1).await?;
+    let truncated = bytes.len() > VIEW_BYTES;
+    bytes.truncate(VIEW_BYTES);
+    // Uploads are valid UTF-8, so only a cut inside a character can fail: keep what is valid.
+    let text = match std::str::from_utf8(&bytes) {
+        Ok(t) => t.to_owned(),
+        Err(e) => String::from_utf8_lossy(&bytes[..e.valid_up_to()]).into_owned(),
+    };
+    Ok(Json(Detail {
+        id: d.id,
+        name: d.name,
+        kind: d.kind,
+        size_bytes: d.size_bytes,
+        created_at: d.created_at,
+        llm_ok: d.llm_ok,
+        status,
+        text,
+        truncated,
+    }))
+}
+
+/// The original file as an attachment. `nosniff` and a fixed text type keep a browser from running
+/// anything in it; `no-store` keeps it out of shared caches.
+pub async fn file(State(app): State<App>, jar: CookieJar, Path(id): Path<String>) -> Res<Response> {
+    let (d, bytes, _) = load(&app, &jar, id, document::MAX_FILE_BYTES).await?;
+    tracing::info!(document = %d.id, "document downloaded");
+    let kind = if d.kind == "md" {
+        "text/markdown; charset=utf-8"
+    } else {
+        "text/plain; charset=utf-8"
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, kind.to_owned()),
+            (header::CONTENT_DISPOSITION, attachment_header(&d.name)),
+            (
+                header::HeaderName::from_static("x-content-type-options"),
+                "nosniff".to_owned(),
+            ),
+            (header::CACHE_CONTROL, "private, no-store".to_owned()),
+        ],
+        bytes,
+    )
+        .into_response())
 }
