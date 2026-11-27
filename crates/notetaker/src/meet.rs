@@ -88,6 +88,10 @@ pub struct MeetPage {
     page: Page,
     /// How long no known phase may show before the page counts as changed.
     pub unknown_limit: Duration,
+    /// Off: a notice that cannot be posted is noted in `notice_missing` and the call goes on.
+    pub require_notice: bool,
+    /// The step that kept the notice from being posted, when `require_notice` is off.
+    pub notice_missing: Option<String>,
     asked: Option<Instant>,
     unknown_since: Option<Instant>,
 }
@@ -97,6 +101,8 @@ impl MeetPage {
         Self {
             page,
             unknown_limit: Duration::from_secs(20),
+            require_notice: true,
+            notice_missing: None,
             asked: None,
             unknown_since: None,
         }
@@ -268,7 +274,19 @@ impl MeetPage {
                 return Ok(JoinStep::Denied)
             }
             PageState::Admitted => {
-                self.announce(notice).await?;
+                match self.announce(notice).await {
+                    Ok(()) => {}
+                    // Only chat failures may be let through; a lost page still ends the call.
+                    Err(DriverError::ChatOff) if !self.require_notice => {
+                        self.notice_missing = Some("chat_off".into())
+                    }
+                    Err(DriverError::UiChanged(s))
+                        if !self.require_notice && s.starts_with("chat_") =>
+                    {
+                        self.notice_missing = Some(s)
+                    }
+                    Err(e) => return Err(e),
+                }
                 return Ok(JoinStep::Admitted);
             }
             PageState::Prejoin if self.asked.is_none() => {

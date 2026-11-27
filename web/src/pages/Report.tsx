@@ -197,6 +197,11 @@ export function Report() {
           {setLanguage.error && <p role="alert" className="mt-1 text-xs text-bad">{setLanguage.error.message.replace(/^\d+ /, '')}</p>}
         </div>
       )}
+      {m.no_chat_notice && (
+        <p role="note" className="mt-3 rounded-md bg-bad-wash px-3 py-2 text-sm text-bad">
+          The notetaker could not post its chat notice, so people in the call were not told it was recording.
+        </p>
+      )}
       {m.status === 'failed' && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p role="alert" className="text-sm text-bad">{retry.error ? retry.error.message.replace(/^\d+ /, '') : m.error ?? 'Processing failed.'}</p>

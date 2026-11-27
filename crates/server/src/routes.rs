@@ -959,6 +959,8 @@ struct MeetingDetail {
     share: String,
     /// The member may rename, re-share and delete: the owner, or an admin (set by the detail route).
     can_edit: bool,
+    /// The notetaker recorded without posting its chat notice (`require_chat_notice = false`).
+    no_chat_notice: bool,
     /// Same order, cap and names as the list rows: the colour index every screen derives from.
     speakers: Vec<ListSpeaker>,
     /// What the meeting cost; present for admins only, so a member's response has no cost fields.
@@ -974,7 +976,7 @@ fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option
     Ok(c.query_row(
         &format!(
             "SELECT id, title, platform, status, language, started_at, ended_at, created_at, error, share,
-                    m.owner_id = ?1
+                    m.owner_id = ?1, no_chat_notice
              FROM meetings m WHERE id = ?2 AND {}",
             db::MEETING_VISIBLE
         ),
@@ -992,6 +994,7 @@ fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option
                 error: r.get(8)?,
                 share: r.get(9)?,
                 can_edit: r.get(10)?,
+                no_chat_notice: r.get(11)?,
                 speakers: Vec::new(),
                 speech_micro_usd: None,
                 llm_micro_usd: None,

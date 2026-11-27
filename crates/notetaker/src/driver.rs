@@ -13,6 +13,9 @@ pub enum DriverEvent {
     Audio(Vec<i16>),
     /// Who was marked as speaking (about every 250 ms). Names are never logged.
     Speaker(Sample),
+    /// The chat notice could not be posted and the notetaker records anyway (`require_notice` off).
+    /// `step` is the failing page step, or `chat_off`.
+    NoticeMissing { step: String },
 }
 
 /// Why a driver could not continue. The loop maps these to the meeting's failure message.
@@ -147,7 +150,7 @@ mod tests {
                         break;
                     }
                 }
-                DriverEvent::Speaker(_) => {}
+                DriverEvent::Speaker(_) | DriverEvent::NoticeMissing { .. } => {}
             }
         }
         assert_eq!(frames, 1);

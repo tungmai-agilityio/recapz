@@ -129,6 +129,9 @@ non-owners once the list returns the owner.
       switch the button and move the time; a click at the middle of the ribbon seeks to 2:30; Left and Right move
       5 s; Space toggles with the focus off the controls. Home and End do nothing. The ribbon was grey here because
       that meeting has no speaker data, so speaker colours on the ribbon are not checked.
+- [ ] No-notice warning: a red notice under the header when the notetaker recorded without posting its chat
+      notice (`require_chat_notice = false`, T-691). Not in the prototype, so not ticked; it reuses the
+      `bg-bad-wash text-bad` notice of Recording & privacy. Covered by a Report test; not checked by eye.
 - [x] Tabs Summary and Transcript (`role=tablist`)
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px).
 - [ ] Summary: prose, Decisions, Open questions with timestamp link, Action items "n/m done" with checkbox, owner

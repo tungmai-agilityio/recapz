@@ -143,6 +143,18 @@ test('shows a failed meeting with its error and no report', async () => {
   expect(screen.getByText('No report, because processing failed.')).toBeTruthy()
 })
 
+test('warns when the notetaker recorded without its chat notice, and only then', async () => {
+  const text = 'The notetaker could not post its chat notice, so people in the call were not told it was recording.'
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : { ...meeting, no_chat_notice: true }))))
+  show()
+  expect((await screen.findByRole('note')).textContent).toBe(text)
+  cleanup()
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : { ...meeting, no_chat_notice: false }))))
+  show()
+  await screen.findByText('Weekly sync')
+  expect(screen.queryByRole('note')).toBeNull()
+})
+
 test('Retry on a failed meeting posts the retry and is hidden from non-owners', async () => {
   const calls: string[] = []
   const m = { ...meeting, status: 'failed', error: 'transcription failed', can_edit: true }

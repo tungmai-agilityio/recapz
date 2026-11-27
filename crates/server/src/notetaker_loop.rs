@@ -39,6 +39,8 @@ pub struct Settings {
     pub chromium: PathBuf,
     pub max_concurrent: usize,
     pub max_call_minutes: u32,
+    /// `notetaker.require_chat_notice`: leave when the chat notice cannot be posted.
+    pub require_chat_notice: bool,
     /// Streaming speech for the live view; `None` leaves it off.
     pub live: Option<crate::notetaker::Live>,
 }
@@ -172,6 +174,7 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
                 &recapz_core::settings::join_message(&c)?,
                 &recapz_core::settings::notetaker_name(&c)?,
             ),
+            require_notice: s.require_chat_notice,
             // Opt in with RECAPZ_NOTETAKER_DEBUG=1: a failing page step saves a screenshot.
             debug_dir: (std::env::var("RECAPZ_NOTETAKER_DEBUG").as_deref() == Ok("1"))
                 .then(|| s.data_dir.join("notetaker-debug").join(&id)),

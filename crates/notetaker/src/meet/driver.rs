@@ -23,6 +23,8 @@ pub struct MeetConfig {
     pub launch: Launch,
     /// The chat message that tells the call it is being recorded and how to opt out.
     pub notice: String,
+    /// Leave when the notice cannot be posted (the default). Off: record anyway and report it.
+    pub require_notice: bool,
     /// When set, a failing page step or a refused join saves a screenshot and the page's buttons
     /// here (a private folder for this call), so a changed page or the refusal can be diagnosed.
     pub debug_dir: Option<std::path::PathBuf>,
@@ -110,6 +112,9 @@ impl MeetDriver {
                         chat_seen: seen,
                     };
                     self.pending.push_back(DriverEvent::Call(Event::Admitted));
+                    if let Some(step) = run.meet.notice_missing.take() {
+                        self.pending.push_back(DriverEvent::NoticeMissing { step });
+                    }
                 }
             },
             Phase::InCall {
@@ -171,7 +176,8 @@ impl CallDriver for MeetDriver {
         let capture = capture::start(&page)
             .await
             .map_err(|_| DriverError::Disconnected)?;
-        let meet = MeetPage::new(page);
+        let mut meet = MeetPage::new(page);
+        meet.require_notice = self.cfg.require_notice;
         meet.open(url).await?;
         self.run = Some(Run {
             meet,
@@ -274,6 +280,7 @@ mod browser_tests {
                 headless: true,
             },
             notice: NOTICE.into(),
+            require_notice: true,
             debug_dir: None,
         };
         Some((
@@ -438,6 +445,35 @@ mod browser_tests {
         );
         d.leave().await;
         assert!(!work.exists());
+    }
+
+    #[tokio::test]
+    async fn with_the_notice_not_required_a_failed_notice_is_reported_and_the_call_goes_on() {
+        let _one_at_a_time = crate::test_support::exclusive().await;
+        for (scenario, step) in [("chat_off", "chat_off"), ("chat_send_broken", "chat_send")] {
+            let Some((mut d, url, _work)) = driver(scenario) else {
+                return;
+            };
+            d.cfg.require_notice = false;
+            let (seen, err) = collect(&mut d, &url, |e| {
+                matches!(e, DriverEvent::NoticeMissing { .. })
+            })
+            .await;
+            assert_eq!(err, None, "{scenario}");
+            let tail: Vec<_> = seen
+                .iter()
+                .filter(|e| !matches!(call(e), Some(Event::Tick { .. })))
+                .collect();
+            assert_eq!(
+                tail,
+                vec![
+                    &DriverEvent::Call(Event::Admitted),
+                    &DriverEvent::NoticeMissing { step: step.into() }
+                ],
+                "{scenario}"
+            );
+            d.leave().await;
+        }
     }
 
     #[tokio::test]

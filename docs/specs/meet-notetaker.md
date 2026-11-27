@@ -290,7 +290,10 @@ Recorded 2026-11-12 and 2026-11-13.
 1. Meet first with the browser notetaker; Zoom later, its join path revisited then.
 2. Notetaker identity: a dedicated Workspace account in the team's domain.
 3. OAuth consent screen: Internal.
-4. When the chat notice cannot be posted, the notetaker leaves.
+4. When the chat notice cannot be posted, the notetaker leaves. Changed 2026-11-27 (T-691): this is the default
+   (`[notetaker] require_chat_notice = true`). A server owner may set it to `false` (for example on a demo host);
+   the notetaker then stays and records, logs the meeting id and failing step, and the meeting report shows a
+   warning that people in the call were not told it was recording.
 5. External calls are in scope: the notetaker knocks on other companies' calls, and the live check
    includes one.
 6. The Chromium profile is excluded from backups.

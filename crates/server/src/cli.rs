@@ -124,6 +124,7 @@ mod tests {
         let cfg = Config {
             notetaker: crate::config::Notetaker {
                 chromium_path: "/no/such/chromium".into(),
+                ..Default::default()
             },
             ..Config::default()
         };

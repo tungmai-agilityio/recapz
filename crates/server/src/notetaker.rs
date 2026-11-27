@@ -289,6 +289,13 @@ async fn capture<D: CallDriver>(
                     }
                 }
             }
+            Ok(DriverEvent::NoticeMissing { step }) => {
+                // The meeting id and the page step only.
+                tracing::warn!(
+                    "notetaker call {id}: no chat notice posted ({step}), recording anyway"
+                );
+                c.execute("UPDATE meetings SET no_chat_notice=1 WHERE id=?1", [id])?;
+            }
             Ok(DriverEvent::Speaker(s)) => {
                 if let (Some((_, j)), false) = (&mut files, ctl.paused) {
                     // Names are participant data: written to the call's own folder, never logged.
@@ -472,6 +479,35 @@ mod tests {
         assert_eq!(s.lines, vec![(5_000, "hello".to_string())]);
         assert_eq!((s.partial.as_str(), s.unavailable), ("wor", true));
         hub().clear("pump1");
+    }
+
+    #[tokio::test]
+    async fn a_call_without_its_chat_notice_is_recorded_and_flagged() {
+        let (dir, tenant) = setup();
+        run(
+            &dir,
+            &tenant,
+            vec![
+                call(Event::Admitted),
+                Ok(DriverEvent::NoticeMissing {
+                    step: "chat_input".into(),
+                }),
+                audio(2),
+                call(Event::CallEnded { at_ms: 9 }),
+            ],
+            i64::MAX,
+        )
+        .await;
+        let c = open(&dir, &tenant);
+        let got: (String, i64) = c
+            .query_row(
+                "SELECT status, no_chat_notice FROM meetings WHERE id='m1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(got, ("transcribing".into(), 1));
+        assert_eq!(transcribe_jobs(&c), 1);
     }
 
     /// A speech link that cannot connect: nothing is streamed, yet the call is recorded in full.
