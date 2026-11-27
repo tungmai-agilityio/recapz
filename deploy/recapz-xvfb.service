@@ -2,9 +2,12 @@
 Description=Recapz virtual display for the notetaker browser
 
 [Service]
+# X authority: a fresh cookie on every start, readable only by recapz (UMask), so other local users cannot reach the display.
+UMask=0077
+ExecStartPre=/bin/sh -c 'rm -f /var/lib/recapz/xauthority && xauth -f /var/lib/recapz/xauthority add :99 . $(mcookie)'
 User=recapz
 Group=recapz
-ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x800x24 -nolisten tcp
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -auth /var/lib/recapz/xauthority
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -12,7 +15,7 @@ PrivateTmp=false
 ProtectHome=true
 ProtectSystem=strict
 # Xvfb creates its socket under /tmp/.X11-unix.
-ReadWritePaths=/tmp
+ReadWritePaths=/tmp /var/lib/recapz
 
 [Install]
 WantedBy=multi-user.target
