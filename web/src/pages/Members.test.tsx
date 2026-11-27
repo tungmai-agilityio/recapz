@@ -50,6 +50,12 @@ test('changing a role sends PATCH', async () => {
   await waitFor(() => expect(calls).toContain('PATCH /api/members/u2 {"role":"admin"}'))
 })
 
+test('your own role cannot be changed', async () => {
+  run()
+  expect((await screen.findByLabelText('Role of Ana') as HTMLSelectElement).disabled).toBe(true)
+  expect((screen.getByLabelText('Role of bo@example.com') as HTMLSelectElement).disabled).toBe(false)
+})
+
 test('remove confirms inline, then sends DELETE; Keep sends nothing', async () => {
   const calls: string[] = []
   run(calls)

@@ -55,7 +55,7 @@ Cookie session; tenant comes from the session. Every handler checks the member c
 - Per meeting: `/transcript`, `/report`, `/audio`, `/live`, `/record` (WebSocket), `/live-ask`, `PATCH /language`
 - Members (admin only, 403 otherwise): `GET /api/members`, `POST /api/members/invites` (email, role; returns the
   sign-in link and `email`: `sent`, `off` with no `[mail]` relay, or `failed`; the invite is saved either way), `DELETE /api/members/invites/{email}`, `PATCH /api/members/{id}` (role), `DELETE /api/members/{id}`.
-  Removing the last admin or yourself is refused.
+  Removing the last admin, removing yourself or changing your own role is refused.
 - Workspaces: `GET /api/workspaces` (accepts pending invites for the person's email, then lists id, name, role and which
   one is current), `POST /api/workspaces/{id}/switch` (403 without a membership; sets the session's workspace and the one
   used at the next sign-in). `GET /api/me` includes `workspace { id, name }`.

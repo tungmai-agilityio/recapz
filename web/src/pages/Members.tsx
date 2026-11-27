@@ -109,7 +109,7 @@ export function Members() {
                   <Cell label="Member" className="font-semibold @max-2xl:col-span-2"><span className="flex items-center gap-2.5"><Face name={name} speaker={null} size={28} />{name}{you && <Badge>You</Badge>}</span></Cell>
                   <Cell label="Email" className="break-all text-ink-2 @max-2xl:col-span-2">{m.email}</Cell>
                   <Cell label="Role">
-                    <select aria-label={`Role of ${name}`} className={inCell} value={m.role} disabled={change.isPending}
+                    <select aria-label={`Role of ${name}`} className={inCell} value={m.role} disabled={change.isPending || you}
                       onChange={(e) => change.mutate({ id: m.id, role: e.target.value as Role })}>
                       <option value="member">Member</option><option value="admin">Admin</option>
                     </select>

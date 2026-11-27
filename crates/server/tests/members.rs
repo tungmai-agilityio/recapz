@@ -278,7 +278,7 @@ async fn admin_lists_invites_changes_roles_and_removes() {
 }
 
 #[tokio::test]
-async fn last_admin_and_self_removal_are_refused() {
+async fn self_removal_and_self_role_change_are_refused() {
     let f = fixture().await;
     let boss_id = f.id_of("boss@example.com").await;
     let uri = format!("/api/members/{boss_id}");
@@ -287,16 +287,20 @@ async fn last_admin_and_self_removal_are_refused() {
         (s, b.as_str()),
         (StatusCode::FORBIDDEN, "you cannot remove yourself")
     );
-    let (s, b) = f.call(&f.boss, "PATCH", &uri, r#"{"role":"member"}"#).await;
-    assert_eq!(
-        (s, b.as_str()),
-        (StatusCode::CONFLICT, "a workspace needs at least one admin")
-    );
-    // Still an admin after both refusals.
+    for role in ["member", "admin"] {
+        let (s, b) = f
+            .call(&f.boss, "PATCH", &uri, &format!(r#"{{"role":"{role}"}}"#))
+            .await;
+        assert_eq!(
+            (s, b.as_str()),
+            (StatusCode::FORBIDDEN, "you cannot change your own role")
+        );
+    }
+    // Still an admin after the refusals.
     let (s, _) = f.call(&f.boss, "GET", "/api/members", "").await;
     assert_eq!(s, StatusCode::OK);
 
-    // With a second admin, the first can be demoted, and the last one cannot be removed by a peer.
+    // A peer admin can demote the first, who then loses admin access.
     let amy_id = f.id_of("amy@example.com").await;
     let (s, _) = f
         .call(
@@ -307,20 +311,10 @@ async fn last_admin_and_self_removal_are_refused() {
         )
         .await;
     assert_eq!(s, StatusCode::NO_CONTENT);
-    let (s, _) = f.call(&f.boss, "PATCH", &uri, r#"{"role":"member"}"#).await;
+    let (s, _) = f.call(&f.amy, "PATCH", &uri, r#"{"role":"member"}"#).await;
     assert_eq!(s, StatusCode::NO_CONTENT);
-    let (s, b) = f
-        .call(
-            &f.amy,
-            "PATCH",
-            &format!("/api/members/{amy_id}"),
-            r#"{"role":"member"}"#,
-        )
-        .await;
-    assert_eq!(
-        (s, b.as_str()),
-        (StatusCode::CONFLICT, "a workspace needs at least one admin")
-    );
+    let (s, _) = f.call(&f.boss, "GET", "/api/members", "").await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
 }
 
 struct FakeMail {
