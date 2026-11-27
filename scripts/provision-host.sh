@@ -25,6 +25,18 @@ if ! command -v caddy >/dev/null; then # the official Caddy apt repository
   apt-get update -y && apt-get install -y caddy
 fi
 
+# Caddy's admin API goes on a unix socket (deploy/Caddyfile), not a localhost port any local process can reach
+install -d /etc/systemd/system/caddy.service.d
+printf '[Service]\nRuntimeDirectory=caddy\n' > /etc/systemd/system/caddy.service.d/10-recapz.conf
+
+# no mDNS or LLMNR listeners; unattended upgrades reboot at 04:30 when a fix needs it
+systemctl disable --now avahi-daemon.socket avahi-daemon.service 2>/dev/null || true
+install -d /etc/systemd/resolved.conf.d
+printf '[Resolve]\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/10-recapz.conf
+if systemctl cat systemd-resolved >/dev/null 2>&1; then systemctl try-reload-or-restart systemd-resolved; fi
+apt-get install -y unattended-upgrades
+printf 'Unattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Automatic-Reboot-Time "04:30";\n' > /etc/apt/apt.conf.d/52-recapz-reboot
+
 # under 4 GB RAM a call's Chromium needs room: 2 GB swap, used only under pressure
 if [ "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -lt 3500000 ] && ! swapon --show | grep -q /swapfile; then
   [ -e /swapfile ] || { fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null; }
@@ -38,6 +50,7 @@ id recapz-offsite >/dev/null 2>&1 || useradd --system --no-create-home --shell /
 install -d -m 0750 -o root -g recapz /etc/recapz   # root owns config and keys; recapz only reads
 install -d -m 0750 -o recapz -g recapz /var/backups/recapz   # recapz-offsite reads it via SupplementaryGroups=recapz
 chmod 0750 /var/backups/recapz
+for f in config.toml recapz.env; do [ ! -e /etc/recapz/$f ] || { chown root:recapz /etc/recapz/$f && chmod 0640 /etc/recapz/$f; }; done
 install -d -m 0755 /opt/recapz/releases
 install -m 0755 "$repo/scripts/backup.sh" /usr/local/bin/recapz-backup
 install -m 0755 "$repo/scripts/offsite-backup.sh" /usr/local/bin/recapz-offsite
@@ -51,6 +64,7 @@ install -m 0644 "$repo"/deploy/recapz.service "$repo"/deploy/recapz-xvfb.service
   "$repo"/deploy/recapz-restore-test.service "$repo"/deploy/recapz-restore-test.timer \
   "$repo"/deploy/recapz-smoke.service "$repo"/deploy/recapz-smoke.timer /etc/systemd/system/
 systemctl daemon-reload
+systemctl restart caddy   # picks up the drop-in (a reload cannot create the socket directory)
 
 # firewall: SSH, HTTP (certificate challenge and redirect) and HTTPS only; the Xvfb display has no TCP listener
 ufw default deny incoming && ufw default allow outgoing
@@ -61,8 +75,8 @@ ufw --force enable
 if ! ls /root/.ssh/authorized_keys >/dev/null 2>&1 || [ ! -s /root/.ssh/authorized_keys ]; then
   echo "no root authorized_keys found: leaving SSH password login as it is" >&2
 else
-  printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/10-recapz.conf
-  systemctl reload ssh
+  printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\nAllowAgentForwarding no\nX11Forwarding no\nMaxAuthTries 3\nAllowTcpForwarding local\n' > /etc/ssh/sshd_config.d/10-recapz.conf
+  sshd -t && systemctl reload ssh
 fi
 
 echo "host ready. Next: /etc/recapz/config.toml and recapz.env, the Caddyfile, deploy-release.sh, notetaker-login, then enable the units."

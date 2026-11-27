@@ -1,6 +1,11 @@
 # Caddy terminates TLS (automatic Let's Encrypt) and proxies to the app on 127.0.0.1:8080.
 # The host is recapz.tungmai.com; its DNS A record must point at this host
 # before Caddy starts, or certificate issuance fails.
+{
+	# the admin API is a unix socket (its directory comes from provision-host.sh), not 127.0.0.1:2019
+	admin unix//run/caddy/admin.sock
+}
+
 recapz.tungmai.com {
 	encode zstd gzip
 	# recordings are streamed with range requests and uploads can be large: no buffering, long timeouts
