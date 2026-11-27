@@ -14,15 +14,18 @@ const answerSse =
   'event: done\ndata: {}\n\n'
 
 /** A live stream the test writes into, and the live-ask requests it saw. */
-function mount(opts: { liveStatus?: number; me?: boolean } = {}) {
+function mount(opts: { liveStatus?: number; me?: boolean; canEdit?: boolean } = {}) {
+  const m = { ...meeting, can_edit: opts.canEdit ?? false }
+  const controls: string[] = []
   const enc = new TextEncoder()
   let push: (s: string) => void = () => {}
   let close: () => void = () => {}
   const asks: unknown[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role: 'member' }))
-    if (url === '/api/meetings') return new Response(JSON.stringify([meeting]))
-    if (url === '/api/meetings/m1') return new Response(JSON.stringify(meeting))
+    if (url === '/api/meetings') return new Response(JSON.stringify([m]))
+    if (url === '/api/meetings/m1') return new Response(JSON.stringify(m))
+    if (url.startsWith('/api/meetings/m1/live/') && init?.method === 'POST') { controls.push(url.split('/').pop()!); return new Response(null, { status: 204 }) }
     if (url === '/api/meetings/m1/live') {
       if (opts.liveStatus) return new Response('', { status: opts.liveStatus })
       return new Response(new ReadableStream({ start(c) { push = (s) => c.enqueue(enc.encode(s)); close = () => c.close() } }))
@@ -36,7 +39,7 @@ function mount(opts: { liveStatus?: number; me?: boolean } = {}) {
     </QueryClientProvider>,
   )
   const send = (name: string, data: object) => act(async () => { push(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`) })
-  return { asks, send, close: () => act(async () => { close() }) }
+  return { asks, controls, send, close: () => act(async () => { close() }) }
 }
 
 test('shows what is said as it arrives and the call ending', async () => {
@@ -152,4 +155,33 @@ test('shows platform, join time and a timer that stops when the call ends', asyn
     await act(async () => { vi.setSystemTime(start + 600000); vi.advanceTimersByTime(5000) })
     expect(screen.getByLabelText('Elapsed').textContent).toBe('1:06')
   } finally { meeting.started_at = 1; vi.useRealTimers() }
+})
+
+test('the owner or an admin pauses, resumes and stops the recording; others get no controls', async () => {
+  const { controls, send } = mount({ canEdit: true })
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause recording' }))
+  await waitFor(() => expect(controls).toEqual(['pause']))
+  await send('paused', { at_ms: 61000 })
+  expect(await screen.findByText('Paused')).toBeTruthy()
+  expect(screen.getByText('Recording paused')).toBeTruthy()
+  expect(screen.getByText('1:01')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Resume recording' }))
+  await waitFor(() => expect(controls).toEqual(['pause', 'resume']))
+  await send('resumed', { at_ms: 90000 })
+  expect(await screen.findByText('Recording resumed')).toBeTruthy()
+  expect(screen.queryByText('Paused')).toBeNull()
+  // Stopping asks first: Cancel sends nothing, the confirm sends one stop.
+  fireEvent.click(screen.getByRole('button', { name: 'Stop and leave' }))
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+  expect(controls).toEqual(['pause', 'resume'])
+  fireEvent.click(screen.getByRole('button', { name: 'Stop and leave' }))
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Stop and leave' }))
+  await waitFor(() => expect(controls).toEqual(['pause', 'resume', 'stop']))
+})
+
+test('a member who cannot edit the meeting sees no recording controls', async () => {
+  mount()
+  await screen.findByText('Waiting for the first words…')
+  expect(screen.queryByRole('button', { name: 'Pause recording' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Stop and leave' })).toBeNull()
 })

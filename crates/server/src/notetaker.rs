@@ -230,7 +230,15 @@ async fn capture<D: CallDriver>(
     let mut files: Option<(WavWriter<BufWriter<File>>, BufWriter<File>)> = None;
     let mut stream: Option<(DeepgramStream, Receiver<LiveEvent>)> = None;
     let end = loop {
-        match driver.next().await {
+        let event = driver.next().await;
+        // The live view's controls: stop leaves (the audio so far goes to transcription), pause mutes.
+        let ctl = hub().control(id);
+        if ctl.stop {
+            if let Action::Leave(r) = session.on_event(Event::Stop) {
+                break Ok(r);
+            }
+        }
+        match event {
             Err(e) => break Err(e),
             Ok(DriverEvent::Call(e)) => {
                 let admitted = e == Event::Admitted;
@@ -260,16 +268,29 @@ async fn capture<D: CallDriver>(
             }
             Ok(DriverEvent::Audio(a)) => {
                 if let Some((w, _)) = &mut files {
-                    w.write(&a)?;
+                    if ctl.paused {
+                        // Nothing from the call is written or streamed; silence of the same length (also sent to the stream, so the link stays open) keeps
+                        // the recording's clock aligned with the live one, and shows as a gap on the report.
+                        // ponytail: the silence is transcribed (and billed) like any audio.
+                        let quiet = vec![0; a.len()];
+                        w.write(&quiet)?;
+                        if let Some((s, _)) = &stream {
+                            s.send_frame(&quiet); // keeps the live link open through a long pause
+                        }
+                    } else {
+                        w.write(&a)?;
+                        if let Some((s, _)) = &stream {
+                            s.send_frame(&a); // a dropped frame only costs live text, never the recording
+                        }
+                    }
                     samples += a.len() as u64;
-                    if let Some((s, rx)) = &stream {
-                        s.send_frame(&a); // a dropped frame only costs live text, never the recording
+                    if let Some((_, rx)) = &stream {
                         pump(id, rx, (samples / 16) as i64);
                     }
                 }
             }
             Ok(DriverEvent::Speaker(s)) => {
-                if let Some((_, j)) = &mut files {
+                if let (Some((_, j)), false) = (&mut files, ctl.paused) {
                     // Names are participant data: written to the call's own folder, never logged.
                     writeln!(
                         j,
@@ -489,6 +510,141 @@ mod tests {
         assert_eq!(transcribe_jobs(&c), 1);
         assert!(
             hub().subscribe("live-dead").is_none(),
+            "cleared when the call ended"
+        );
+    }
+
+    /// A scripted call where the live view's controls are used at chosen steps (1 is the first event).
+    struct Steered {
+        inner: ScriptedDriver,
+        step: usize,
+        acts: Vec<(usize, Box<dyn Fn()>)>,
+    }
+
+    impl CallDriver for Steered {
+        async fn join(&mut self, url: &str) -> Result<(), DriverError> {
+            self.inner.join(url).await
+        }
+        async fn next(&mut self) -> Result<DriverEvent, DriverError> {
+            self.step += 1;
+            for (at, act) in &self.acts {
+                if *at == self.step {
+                    act();
+                }
+            }
+            self.inner.next().await
+        }
+        async fn leave(&mut self) {
+            self.inner.leave().await
+        }
+    }
+
+    /// Runs `script` as meeting `id` with the live transcript on; returns the driver and the recording's samples.
+    async fn steered(
+        id: &str,
+        script: Script,
+        acts: Vec<(usize, Box<dyn Fn()>)>,
+    ) -> (Steered, Vec<i16>, String) {
+        let (dir, tenant) = setup();
+        let c = open(&dir, &tenant);
+        meeting(&c, id, "joining", 0);
+        let mut d = Steered {
+            inner: ScriptedDriver::new(script),
+            step: 0,
+            acts,
+        };
+        run_meeting(
+            c,
+            dir.path(),
+            &tenant,
+            id,
+            "https://meet.example/abc",
+            i64::MAX,
+            &mut d,
+            Some(&dead_link()),
+            || 0,
+        )
+        .await
+        .unwrap();
+        let bytes = fs::read(
+            tenant_dir(dir.path(), &tenant)
+                .join("audio")
+                .join(id)
+                .join("recording.wav"),
+        )
+        .unwrap();
+        let samples = bytes[44..]
+            .chunks(2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]))
+            .collect();
+        let status = open(&dir, &tenant)
+            .query_row("SELECT status FROM meetings WHERE id=?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        (d, samples, status)
+    }
+
+    #[tokio::test]
+    async fn a_paused_call_writes_silence_instead_of_the_call_and_resumes() {
+        let script = vec![
+            call(Event::Admitted),
+            audio(1),
+            audio(1),
+            audio(1),
+            call(Event::CallEnded { at_ms: 9 }),
+        ];
+        let acts: Vec<(usize, Box<dyn Fn()>)> = vec![
+            (
+                3,
+                Box::new(|| {
+                    hub().set_paused("ctl-pause", true);
+                }),
+            ),
+            (
+                4,
+                Box::new(|| {
+                    hub().set_paused("ctl-pause", false);
+                }),
+            ),
+        ];
+        let (_, samples, status) = steered("ctl-pause", script, acts).await;
+        assert_eq!(status, "transcribing");
+        let sec = |i: usize| {
+            samples[i * 16_000..(i + 1) * 16_000]
+                .iter()
+                .all(|s| *s == if i == 1 { 0 } else { 7 })
+        };
+        assert_eq!(samples.len(), 48_000);
+        assert!(
+            sec(0) && sec(1) && sec(2),
+            "second one is silence, the others are the call"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stop_request_leaves_keeps_the_audio_so_far_and_goes_to_transcription() {
+        let script = vec![
+            call(Event::Admitted),
+            audio(1),
+            audio(1),
+            audio(1),
+            call(Event::CallEnded { at_ms: 9 }),
+        ];
+        let acts: Vec<(usize, Box<dyn Fn()>)> = vec![(
+            3,
+            Box::new(|| {
+                hub().request_stop("ctl-stop");
+            }),
+        )];
+        let (d, samples, status) = steered("ctl-stop", script, acts).await;
+        assert_eq!(
+            (status.as_str(), samples.len(), d.inner.left),
+            ("transcribing", 16_000, 1)
+        );
+        assert!(samples.iter().all(|s| *s == 7));
+        assert!(
+            hub().subscribe("ctl-stop").is_none(),
             "cleared when the call ended"
         );
     }

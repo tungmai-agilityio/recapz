@@ -193,7 +193,7 @@ non-owners once the list returns the owner.
 - [ ] Recording pill with timer, platform, join time, title; Pause; Stop and leave with confirm
       Open: title, "Recording" badge (and "Call ended"), platform, join time and an elapsed timer are built (#276; the
       timer stops at the final length when the call ends). jsdom test only: no screenshot, and the prototype has no
-      live state in the repo. Pause and Stop and leave have no backend route, so they are hidden.
+      live state in the repo. Pause or Resume and Stop and leave (confirm dialog) show to the owner or an admin (`can_edit`) while the call is live, with a Paused badge and "Recording paused/resumed" gap lines in the transcript (T-415). They need the live stream, so without live transcription configured the routes answer 404 and the buttons report that the call is no longer live. jsdom only: not checked in a browser.
 - [ ] Live ribbon, live transcript, speaking now, talk time, noted so far
       Open: the live transcript is built (lines with the time into the call, the partial line in grey, click a line to
       ask about it). The ribbon, speaking now, talk time and noted so far are not: the live stream has no speaker

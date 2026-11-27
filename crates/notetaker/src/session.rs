@@ -31,6 +31,8 @@ pub enum Event {
     Denied,
     /// A participant removed the notetaker. Only meaningful after admission; ignored before.
     Removed,
+    /// The owner or an admin ended the recording from the live view. Only meaningful after admission.
+    Stop,
     /// Periodic clock tick so timeouts fire when nothing else happens.
     Tick {
         at_ms: i64,
@@ -48,6 +50,8 @@ pub enum LeaveReason {
     Removed,
     /// The call ran past the hard cap. The audio is kept and transcribed.
     MaxDuration,
+    /// The owner or an admin stopped the recording: the audio so far is kept and transcribed.
+    Stopped,
     /// Someone asked not to be recorded: the recording, transcript and report must be deleted.
     OptOut,
 }
@@ -104,6 +108,7 @@ impl Session {
             Event::CallEnded { .. } => Some(LeaveReason::CallEnded),
             Event::Denied => (!self.admitted).then_some(LeaveReason::Denied),
             Event::Removed => self.admitted.then_some(LeaveReason::Removed),
+            Event::Stop => self.admitted.then_some(LeaveReason::Stopped),
             Event::Participants { at_ms, count } => {
                 if !self.admitted {
                     // Ignored until admitted; the lobby timeout covers that time.
@@ -156,6 +161,19 @@ mod tests {
         let mut s = Session::new(0);
         s.on_event(Event::Admitted);
         s
+    }
+
+    #[test]
+    fn a_stop_request_leaves_once_admitted_and_is_ignored_before() {
+        let mut s = Session::new(0);
+        assert_eq!(s.on_event(Event::Stop), Action::Continue);
+        s.on_event(Event::Admitted);
+        assert_eq!(s.on_event(Event::Stop), Action::Leave(LeaveReason::Stopped));
+        assert_eq!(
+            s.on_event(chat("hello")),
+            Action::Leave(LeaveReason::Stopped),
+            "the decision sticks"
+        );
     }
 
     #[test]
