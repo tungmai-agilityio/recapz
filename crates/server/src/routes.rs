@@ -6,7 +6,7 @@ use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -190,6 +190,11 @@ pub fn router_with_mail(
         )
         .route("/api/meetings/{id}/live-ask", post(live_ask::live_ask))
         .route("/api/ask", post(ask::ask))
+        .route(
+            "/api/ask/history",
+            get(ask::history).delete(ask::clear_history),
+        )
+        .route("/api/ask/history/{id}", delete(ask::delete_turn))
         .route("/api/participants", get(list_participants))
         .route("/api/participants/purge", post(purge_participant))
         .route(
