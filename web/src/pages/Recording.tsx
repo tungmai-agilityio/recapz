@@ -260,7 +260,7 @@ export function Recording() {
         <div className="grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,264px)_1fr]">
           <div>
             <h2 className="font-semibold">Where audio goes</h2>
-            <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription.</p>
+            <p className="mt-1 text-sm text-mute">Call and upload audio leaves this server only for transcription. A downloaded copy is outside Recapz: audio retention and deleting a meeting do not remove it.</p>
           </div>
           {storage.isAdmin && storage.days !== undefined && (
             <div className="text-sm @2xl:col-start-2">

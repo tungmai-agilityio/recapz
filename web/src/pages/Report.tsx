@@ -8,7 +8,7 @@ import { Face } from '../ui/Face'
 import { Ribbon, SpeakerBar } from '../ui/Ribbon'
 import { colour, speakerIndex } from '../ui/speaker-colour'
 import { Tabs } from '../ui/Tabs'
-import { Menu, MenuItem } from '../ui/Menu'
+import { Menu, MenuItem, MenuLink } from '../ui/Menu'
 import { useTranscriptRetention } from '../speech'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
@@ -156,6 +156,7 @@ export function Report() {
         <Link to="/" className="text-sm text-mute hover:text-primary">← All meetings</Link>
         <Menu label="Meeting actions" side="below" trigger="⋯">
           <MenuItem onClick={() => { rename.reset(); setDraft(m.title) }}>Rename</MenuItem>
+          {!noAudio && m.status !== 'joining' && m.status !== 'recording' && <MenuLink href={`/api/meetings/${m.id}/audio?download=1`} download>Download audio</MenuLink>}
           {m.can_edit && m.status === 'ready' && <MenuItem onClick={() => { regenerate.reset(); setRegenerating(true) }}>Regenerate</MenuItem>}
           <MenuItem className="text-bad" onClick={() => { del.reset(); setConfirming(true) }}>Delete</MenuItem>
         </Menu>

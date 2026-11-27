@@ -125,6 +125,12 @@ fn show_window(app: &AppHandle) {
             }
             true
         })
+        // "Download audio" on a report: save to ~/Downloads, only for files from our own server.
+        // Without a handler the macOS web view does not save downloads at all.
+        .on_download(|_, e| match e {
+            tauri::webview::DownloadEvent::Requested { url, .. } => is_ours(&url),
+            _ => true,
+        })
         // The code is sent only from a page on our own origin, never from whatever the window shows.
         .on_page_load(|w, p| {
             // A new page has no recorder, so drop any capture the old one left running.

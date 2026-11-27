@@ -123,6 +123,10 @@ non-owners once the list returns the owner.
       design. Checked by eye on 2026-11-20 (#327) at 1280 and 390 px: title, date, duration and platform match.
       Not checked: faces (the test meeting has no speakers), and the prototype's Share, Regenerate and Delete
       icons, which the app replaces with the "Meeting actions" menu.)
+- [ ] Download audio (#706, `docs/specs/audio-download.md`): a "Download audio" item in the "Meeting actions" menu, a plain
+      link with `download` to `/api/meetings/{id}/audio?download=1`, hidden when the audio cannot load or the call is joining or
+      recording (jsdom tests for the exact menu items). Not ticked: no prototype screenshots were taken (both skins, 1280 and
+      390 px), no manual save check in Chrome and Safari, and the desktop app's download handler was only compiled, not run.
 - [x] Transport: play and pause, ribbon scrubber with chapter ticks and playhead, current and total time;
       clicking the ribbon seeks; Space toggles
       Checked in a real browser on 2026-11-20 (#327) against a 5:00 recording at 1280 and 390 px: Play and Pause

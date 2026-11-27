@@ -29,3 +29,9 @@ export function MenuItem({ className = '', ...props }: React.ButtonHTMLAttribute
   return <button type="button" role="menuitem" {...props}
     className={`rounded-md px-2.5 py-2 text-left text-sm hover:bg-hair-2 ${className}`} />
 }
+
+/** A `MenuItem` that is a plain link, e.g. a file download. */
+export function MenuLink({ className = '', ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return <a role="menuitem" {...props}
+    className={`rounded-md px-2.5 py-2 text-left text-sm hover:bg-hair-2 ${className}`} />
+}
