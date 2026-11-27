@@ -163,6 +163,9 @@ pub(super) async fn set_role(
     Json(b): Json<NewRole>,
 ) -> Res<StatusCode> {
     let u = admin(&app, &jar).await?;
+    if id == u.id {
+        return Err(ApiError::Denied("you cannot change your own role"));
+    }
     app.control(move |c| members::set_role(c, &u.tenant_id, &id, &b.role))
         .await
         .map_err(refusal)?;
