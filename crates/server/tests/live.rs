@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use recapz_core::db;
 use recapz_server::{
     config::Config,
-    live::{hub, Msg},
+    live::{hub, Control, Msg},
     routes,
 };
 use rusqlite::params;
@@ -190,4 +190,118 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+fn post(path: &str, cookie: &str) -> Request<Body> {
+    Request::post(path)
+        .header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+        .header("x-csrf-token", "t")
+        .body(Body::empty())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn only_the_owner_or_an_admin_pauses_resumes_or_stops_a_live_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let boss = login(&app, "boss@example.com").await;
+    seed(dir.path());
+    let amy = login(&app, "amy@example.com").await;
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    // Amy owns "ctl-amy"; "ctl-shared" belongs to the boss and is visible to her.
+    let amy_id: String = control
+        .query_row(
+            "SELECT id FROM users WHERE email='amy@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    t.execute(
+        "INSERT INTO members (id, email, role) VALUES (?1, 'amy@example.com', 'member') ON CONFLICT DO NOTHING",
+        [&amy_id],
+    )
+    .unwrap();
+    let boss_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email='boss@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    for (id, owner, share) in [
+        ("ctl-amy", amy_id.as_str(), "workspace"),
+        ("ctl-shared", boss_id.as_str(), "workspace"),
+        ("ctl-boss", boss_id.as_str(), "attendees"),
+    ] {
+        t.execute(
+            "INSERT INTO meetings (id, title, platform, status, owner_id, share) VALUES (?1, ?1, 'meet', 'recording', ?2, ?3)",
+            params![id, owner, share],
+        )
+        .unwrap();
+        hub().start(id);
+    }
+    let status = |req: Request<Body>| {
+        let app = app.clone();
+        async move { app.oneshot(req).await.unwrap().status() }
+    };
+    let act = |id: &str, what: &str| format!("/api/meetings/{id}/live/{what}");
+
+    // Amy sees the boss's workspace-shared call but does not own it: 403, nothing changes. The boss's
+    // private call is a 404 for her.
+    assert_eq!(
+        status(post(&act("ctl-shared", "pause"), &amy)).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(post(&act("ctl-boss", "stop"), &amy)).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(hub().control("ctl-shared"), Default::default());
+    assert_eq!(hub().control("ctl-boss"), Default::default());
+    // Signed out, and no CSRF token: refused before anything runs.
+    assert_eq!(
+        status(post(&act("ctl-amy", "pause"), "recapz_session=nope")).await,
+        StatusCode::UNAUTHORIZED
+    );
+    let no_csrf = Request::post(act("ctl-amy", "pause"))
+        .header(header::COOKIE, &amy)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(status(no_csrf).await, StatusCode::FORBIDDEN);
+
+    // The owner controls her own call; repeats are harmless.
+    for _ in 0..2 {
+        assert_eq!(
+            status(post(&act("ctl-amy", "pause"), &amy)).await,
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert_eq!(
+        hub().control("ctl-amy"),
+        Control {
+            paused: true,
+            stop: false
+        }
+    );
+    assert_eq!(
+        status(post(&act("ctl-amy", "resume"), &amy)).await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(!hub().control("ctl-amy").paused);
+    // An admin may stop a call they do not own (once it is shared with the workspace so they see it).
+    assert_eq!(
+        status(post(&act("ctl-amy", "stop"), &boss)).await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(hub().control("ctl-amy").stop);
+    // A call that is not live (never started, or already cleared) is a 404.
+    hub().clear("ctl-shared");
+    assert_eq!(
+        status(post(&act("ctl-shared", "stop"), &boss)).await,
+        StatusCode::NOT_FOUND
+    );
+    hub().clear("ctl-amy");
+    hub().clear("ctl-boss");
 }

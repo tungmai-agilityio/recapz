@@ -16,8 +16,81 @@ fn render(m: &Msg) -> String {
             event("final", serde_json::json!({ "at_ms": at_ms, "text": text }))
         }
         Msg::Unavailable => event("unavailable", serde_json::json!({})),
+        Msg::Paused { at_ms } => event("paused", serde_json::json!({ "at_ms": at_ms })),
+        Msg::Resumed { at_ms } => event("resumed", serde_json::json!({ "at_ms": at_ms })),
         Msg::End => event("end", serde_json::json!({})),
     }
+}
+
+/// What the owner or an admin can do to a call in progress.
+#[derive(Clone, Copy)]
+pub enum Control {
+    Pause,
+    Resume,
+    Stop,
+}
+
+/// `POST /api/meetings/{id}/live/{pause,resume,stop}`: owner or admin only (a meeting the member may
+/// not see is a 404, one they see but do not own a 403). 404 as well when the call is not live. Pause
+/// and resume repeat harmlessly; stop makes the notetaker leave and the meeting goes on to transcription.
+pub async fn control(app: App, jar: CookieJar, id: String, what: Control) -> Res<StatusCode> {
+    let u = app.current_user(&jar).await?;
+    let (uid, role, mid) = (u.id.clone(), u.role.clone(), id.clone());
+    let allowed = app
+        .tenant(u.tenant_id.clone(), move |c| {
+            ensure_member(c, &u)?;
+            if visible_meeting(c, &uid, &mid)?.is_none() {
+                return Ok(None);
+            }
+            let owner: Option<String> =
+                c.query_row("SELECT owner_id FROM meetings WHERE id = ?1", [&mid], |r| {
+                    r.get(0)
+                })?;
+            Ok(Some(
+                owner.as_deref() == Some(uid.as_str()) || role == "admin",
+            ))
+        })
+        .await?;
+    match allowed {
+        None => return Err(ApiError::NotFound),
+        Some(false) => {
+            return Err(ApiError::Denied(
+                "only the owner or an admin can control this recording",
+            ))
+        }
+        Some(true) => {}
+    }
+    let done = match what {
+        Control::Pause => hub().set_paused(&id, true),
+        Control::Resume => hub().set_paused(&id, false),
+        Control::Stop => hub().request_stop(&id),
+    };
+    done.ok_or(ApiError::NotFound)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn pause(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    control(app, jar, id, Control::Pause).await
+}
+
+pub async fn resume(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    control(app, jar, id, Control::Resume).await
+}
+
+pub async fn stop(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Res<StatusCode> {
+    control(app, jar, id, Control::Stop).await
 }
 
 pub async fn live(State(app): State<App>, jar: CookieJar, Path(id): Path<String>) -> Res<Response> {
@@ -47,6 +120,12 @@ pub async fn live(State(app): State<App>, jar: CookieJar, Path(id): Path<String>
         }
         if snap.unavailable {
             head.push(Msg::Unavailable);
+        }
+        for (from, to) in snap.gaps {
+            head.push(Msg::Paused { at_ms: from });
+            if let Some(at_ms) = to {
+                head.push(Msg::Resumed { at_ms });
+            }
         }
         for m in head {
             if pipe.write_all(render(&m).as_bytes()).await.is_err() {

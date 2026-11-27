@@ -19,6 +19,10 @@ pub enum Msg {
     Final { at_ms: i64, text: String },
     /// Streaming failed; recording goes on.
     Unavailable,
+    /// The owner or an admin paused recording, `at_ms` into the call.
+    Paused { at_ms: i64 },
+    /// Recording resumed. The span since the matching `Paused` is a gap.
+    Resumed { at_ms: i64 },
     /// The call ended or someone opted out.
     End,
 }
@@ -28,7 +32,18 @@ struct Call {
     lines: Vec<(i64, String)>,
     partial: String,
     unavailable: bool,
+    /// Pauses so far as `(from, to)` in call ms; `to` is `None` while one is still open.
+    gaps: Vec<(i64, Option<i64>)>,
+    /// Someone with the right asked the notetaker to stop and leave.
+    stop: bool,
     tx: broadcast::Sender<Msg>,
+}
+
+/// What the call loop must do right now.
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+pub struct Control {
+    pub paused: bool,
+    pub stop: bool,
 }
 
 /// What a viewer gets on connecting: the lines so far, then everything new.
@@ -36,6 +51,7 @@ pub struct Snapshot {
     pub lines: Vec<(i64, String)>,
     pub partial: String,
     pub unavailable: bool,
+    pub gaps: Vec<(i64, Option<i64>)>,
     pub rx: broadcast::Receiver<Msg>,
 }
 
@@ -54,6 +70,8 @@ impl LiveHub {
                 lines: Vec::new(),
                 partial: String::new(),
                 unavailable: false,
+                gaps: Vec::new(),
+                stop: false,
                 tx,
             },
         );
@@ -72,9 +90,44 @@ impl LiveHub {
                 }
             }
             Msg::Unavailable => c.unavailable = true,
-            Msg::End => {}
+            Msg::Paused { .. } | Msg::Resumed { .. } | Msg::End => {}
         }
         let _ = c.tx.send(m);
+    }
+
+    /// Pauses or resumes recording; `None` when the call is not live here, and a repeat changes nothing.
+    pub fn set_paused(&self, id: &str, paused: bool) -> Option<()> {
+        let mut calls = self.calls.lock().unwrap();
+        let c = calls.get_mut(id)?;
+        let at_ms = c.started.elapsed().as_millis() as i64;
+        let open = matches!(c.gaps.last(), Some((_, None)));
+        if paused && !open {
+            c.gaps.push((at_ms, None));
+            let _ = c.tx.send(Msg::Paused { at_ms });
+        } else if !paused && open {
+            c.gaps.last_mut().unwrap().1 = Some(at_ms);
+            let _ = c.tx.send(Msg::Resumed { at_ms });
+        }
+        Some(())
+    }
+
+    /// Asks the call loop to leave; `None` when the call is not live here.
+    pub fn request_stop(&self, id: &str) -> Option<()> {
+        self.calls.lock().unwrap().get_mut(id)?.stop = true;
+        Some(())
+    }
+
+    /// What the call loop must do; nothing for a call that is not live here.
+    pub fn control(&self, id: &str) -> Control {
+        self.calls
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|c| Control {
+                paused: matches!(c.gaps.last(), Some((_, None))),
+                stop: c.stop,
+            })
+            .unwrap_or_default()
     }
 
     /// Drops the transcript and tells viewers the call is over.
@@ -118,6 +171,7 @@ impl LiveHub {
             lines: c.lines.clone(),
             partial: c.partial.clone(),
             unavailable: c.unavailable,
+            gaps: c.gaps.clone(),
             rx: c.tx.subscribe(),
         })
     }
@@ -156,6 +210,49 @@ mod tests {
             },
         );
         assert_eq!(h.subscribe("m").unwrap().partial, "");
+    }
+
+    #[test]
+    fn pause_resume_and_stop_are_tracked_per_call_and_repeats_change_nothing() {
+        let h = LiveHub::default();
+        assert!(h.set_paused("m", true).is_none() && h.request_stop("m").is_none());
+        assert_eq!(
+            h.control("m"),
+            Control::default(),
+            "an unknown call has nothing to do"
+        );
+        h.start("m");
+        let mut s = h.subscribe("m").unwrap();
+        h.set_paused("m", true).unwrap();
+        h.set_paused("m", true).unwrap();
+        assert_eq!(
+            h.control("m"),
+            Control {
+                paused: true,
+                stop: false
+            }
+        );
+        h.set_paused("m", false).unwrap();
+        h.set_paused("m", false).unwrap();
+        assert_eq!(h.control("m"), Control::default());
+        h.request_stop("m").unwrap();
+        assert_eq!(
+            h.control("m"),
+            Control {
+                paused: false,
+                stop: true
+            }
+        );
+        let kinds: Vec<_> = std::iter::from_fn(|| s.rx.try_recv().ok())
+            .map(|m| matches!(m, Msg::Paused { .. }))
+            .collect();
+        assert_eq!(
+            kinds,
+            [true, false],
+            "one Paused then one Resumed, not one per repeat"
+        );
+        let gaps = h.subscribe("m").unwrap().gaps;
+        assert_eq!((gaps.len(), gaps[0].1.is_some()), (1, true));
     }
 
     #[test]

@@ -2,14 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { getMeeting, liveAsk, NoModel, NotLive, RateLimited, Unauthorized, watchLive, type Citation, type LiveEvent } from '../api'
+import { controlLive, getMeeting, liveAsk, NoModel, NotLive, RateLimited, Unauthorized, watchLive, type Citation, type LiveEvent } from '../api'
 import { clock } from '../clock'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { inputClass } from '../ui/Field'
 import { RecorderBar } from './Record'
 
-interface Line { at_ms: number; text: string }
+interface Line { at_ms: number; text: string; gap?: boolean }
 interface Card { id: number; context: string; ms: number; answer: string; cites: Citation[]; error: string }
 
 function errorText(err: unknown) {
@@ -135,6 +136,10 @@ function LiveView({ id }: { id: string }) {
   const [state, setState] = useState<'live' | 'unavailable' | 'ended' | 'not-live'>('live')
   const [endedAt, setEndedAt] = useState<number | null>(null)
   const [picked, setPicked] = useState<Line | null>(null)
+  const [paused, setPaused] = useState(false)
+  const [confirmStop, setConfirmStop] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [controlError, setControlError] = useState('')
   const bottom = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -142,6 +147,8 @@ function LiveView({ id }: { id: string }) {
     const on = (e: LiveEvent) => {
       if (e.type === 'final') { setLines((ls) => [...ls, { at_ms: e.at_ms, text: e.text }]); setPartial('') }
       else if (e.type === 'partial') setPartial(e.text)
+      else if (e.type === 'paused') { setPaused(true); setPartial(''); setLines((ls) => [...ls, { at_ms: e.at_ms, text: 'Recording paused', gap: true }]) }
+      else if (e.type === 'resumed') { setPaused(false); setLines((ls) => [...ls, { at_ms: e.at_ms, text: 'Recording resumed', gap: true }]) }
       else if (e.type === 'unavailable') setState('unavailable')
       else if (e.type === 'end') { setState('ended'); setEndedAt(Date.now()) }
     }
@@ -152,6 +159,13 @@ function LiveView({ id }: { id: string }) {
     return () => stop.abort()
   }, [id])
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }) }, [lines.length])
+
+  async function control(what: 'pause' | 'resume' | 'stop') {
+    setBusy(true); setControlError('')
+    try { await controlLive(id, what); setConfirmStop(false) }
+    catch (err) { setControlError(err instanceof NotLive ? 'This call is no longer live.' : 'Could not do that. Try again.') }
+    finally { setBusy(false) }
+  }
 
   const title = meeting.data?.title ?? 'Live meeting'
   if (state === 'not-live')
@@ -167,8 +181,22 @@ function LiveView({ id }: { id: string }) {
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {state === 'ended' ? <Badge>Call ended</Badge> : <Badge tone="signal">Recording</Badge>}
+          {state === 'ended' ? <Badge>Call ended</Badge> : paused ? <Badge>Paused</Badge> : <Badge tone="signal">Recording</Badge>}
         </div>
+        {meeting.data?.can_edit && state !== 'ended' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => void control(paused ? 'resume' : 'pause')} disabled={busy}>{paused ? 'Resume recording' : 'Pause recording'}</Button>
+            <Button variant="danger" onClick={() => { setControlError(''); setConfirmStop(true) }} disabled={busy}>Stop and leave</Button>
+            {controlError && !confirmStop && <p role="alert" className="text-sm text-bad">{controlError}</p>}
+          </div>
+        )}
+        {paused && state !== 'ended' && <p role="status" className="text-sm text-mute">Paused. Nothing said now is recorded or transcribed until you resume.</p>}
+        {confirmStop && (
+          <ConfirmDialog title="Stop and leave this call?" confirmLabel="Stop and leave" busy={busy} error={controlError}
+            onConfirm={() => void control('stop')} onCancel={() => setConfirmStop(false)}>
+            The notetaker leaves now. What was recorded so far is kept and the meeting report follows. It cannot rejoin this call.
+          </ConfirmDialog>
+        )}
         {meeting.data && (
           <p className="flex flex-wrap gap-x-2 text-sm text-mute">
             <span>{meeting.data.platform}</span>
@@ -183,7 +211,9 @@ function LiveView({ id }: { id: string }) {
         {state === 'ended' && <p role="status" className="text-sm text-mute">The call has ended. <Link to={`/meetings/${id}`} className="underline">Open the meeting</Link></p>}
         <div className="frame flex max-h-[60vh] min-h-40 flex-col gap-1.5 overflow-y-auto" aria-label="Live transcript">
           {lines.length === 0 && !partial && <p className="text-sm text-mute">Waiting for the first words…</p>}
-          {lines.map((l, i) => (
+          {lines.map((l, i) => l.gap ? (
+            <p key={i} className="flex gap-3 px-2 py-1 text-xs text-mute"><time className="w-12 shrink-0 font-mono">{clock(l.at_ms)}</time><span>{l.text}</span></p>
+          ) : (
             <button key={i} type="button" onClick={() => setPicked(l)} aria-pressed={picked?.at_ms === l.at_ms}
               className={`flex gap-3 rounded-md px-2 py-1 text-left hover:bg-hair-2 ${picked?.at_ms === l.at_ms ? 'bg-signal-wash' : ''}`}>
               <time className="w-12 shrink-0 font-mono text-xs text-mute">{clock(l.at_ms)}</time><span>{l.text}</span>

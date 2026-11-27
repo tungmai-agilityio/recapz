@@ -330,11 +330,20 @@ export const deleteDocument = async (id: string) => { await check(await fetch(`/
 export type LiveEvent =
   | { type: 'final'; at_ms: number; text: string }
   | { type: 'partial'; text: string }
+  | { type: 'paused'; at_ms: number }
+  | { type: 'resumed'; at_ms: number }
   | { type: 'unavailable' }
   | { type: 'end' }
 
 /** The meeting is not being recorded right now, or the member cannot see it. */
 export class NotLive extends Error {}
+
+/** Pauses or resumes the recording, or stops it (the notetaker leaves and the meeting goes on to transcription). */
+export const controlLive = async (id: string, what: 'pause' | 'resume' | 'stop') => {
+  const res = await fetch(`/api/meetings/${id}/live/${what}`, { method: 'POST', headers: csrf() })
+  if (res.status === 404) throw new NotLive()
+  await check(res)
+}
 
 /** Reads the live transcript until the call ends, the stream drops or `signal` aborts. */
 export async function watchLive(id: string, onEvent: (e: LiveEvent) => void, signal: AbortSignal): Promise<void> {
