@@ -233,6 +233,7 @@ impl Config {
         cfg.mail.username = std::env::var("RECAPZ_SMTP_USER").unwrap_or_default();
         cfg.mail.password = std::env::var("RECAPZ_SMTP_PASSWORD").unwrap_or_default();
         cfg.llm_key_from_env(std::env::var("RECAPZ_LLM_KEY").ok());
+        cfg.google_secret_from_env(std::env::var("RECAPZ_GOOGLE_CLIENT_SECRET").ok());
         Ok(cfg)
     }
 
@@ -240,6 +241,13 @@ impl Config {
     fn llm_key_from_env(&mut self, key: Option<String>) {
         if let Some(k) = key.filter(|k| !k.trim().is_empty()) {
             self.llm.api_key = k;
+        }
+    }
+
+    /// `RECAPZ_GOOGLE_CLIENT_SECRET` (when set and not blank) wins over `[google] client_secret`.
+    fn google_secret_from_env(&mut self, secret: Option<String>) {
+        if let Some(v) = secret.filter(|v| !v.trim().is_empty()) {
+            self.google.client_secret = v;
         }
     }
 }
@@ -292,5 +300,16 @@ mod tests {
         assert_eq!(cfg.llm.api_key, "file");
         cfg.llm_key_from_env(Some("env".into()));
         assert_eq!(cfg.llm.api_key, "env");
+    }
+
+    #[test]
+    fn the_google_secret_env_overrides_the_file_only_when_set() {
+        let mut cfg: Config = toml::from_str("[google]\nclient_secret = \"file\"").unwrap();
+        cfg.google_secret_from_env(None);
+        assert_eq!(cfg.google.client_secret, "file");
+        cfg.google_secret_from_env(Some("  ".into()));
+        assert_eq!(cfg.google.client_secret, "file");
+        cfg.google_secret_from_env(Some("env".into()));
+        assert_eq!(cfg.google.client_secret, "env");
     }
 }

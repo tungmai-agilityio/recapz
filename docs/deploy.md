@@ -11,8 +11,8 @@ Destroying the Droplet saves cost (billing is hourly). What is lost and what to 
 | On the Droplet | Lost on destroy | Keep before destroying |
 |---|---|---|
 | `/var/lib/recapz` (per-tenant SQLite, recordings, uploads) | yes | `/var/backups/recapz` copied off the host (encrypted), or a snapshot (below) |
-| `/etc/recapz/recapz.env` (`RECAPZ_SECRET_KEY`, speech, LLM and storage keys) | yes | the keys, in your password manager. Without the old `RECAPZ_SECRET_KEY` every member reconnects the calendar |
-| `/etc/recapz/config.toml` (Google `client_id`/`client_secret`, `base_url`, `bootstrap_admin_email`) | yes | a private copy outside the repo |
+| `/etc/recapz/recapz.env` (`RECAPZ_SECRET_KEY`, speech, LLM, Google client secret and storage keys) | yes | the keys, in your password manager. Without the old `RECAPZ_SECRET_KEY` every member reconnects the calendar |
+| `/etc/recapz/config.toml` (Google `client_id`, `base_url`, `bootstrap_admin_email`) | yes | a private copy outside the repo |
 | `notetaker-profile/` (the bot's Google sign-in) | yes, and never in backups | nothing: sign in again after the rebuild |
 | Release history under `/opt/recapz/releases`, the SSH host key, the `deploy` user | yes | nothing: recreated below |
 
@@ -37,11 +37,11 @@ Run on your machine unless a step says "on the host". Never paste a key into cha
    ssh -i $KEY root@$HOST 'cd /root/recapz && ./scripts/provision-host.sh'
    ssh -i $KEY root@$HOST 'cat /etc/chromium/policies/managed/recapz.json'   # must print {"BrowserSignin": 0}
    ```
-4. **Config and keys, on the host.** `config.toml` comes from `config.example.toml` with `data_dir = "/var/lib/recapz"`, `base_url = "https://recapz.tungmai.com"`, `dev_login = false`, `bootstrap_admin_email`, and the Google `client_id`/`client_secret` from your private copy. Put them in place and edit the env file in the editor, so no key is typed on a command line or sent through chat:
+4. **Config and keys, on the host.** `config.toml` comes from `config.example.toml` with `data_dir = "/var/lib/recapz"`, `base_url = "https://recapz.tungmai.com"`, `dev_login = false`, `bootstrap_admin_email`, and the Google `client_id` from your private copy. Keep `[google] client_secret` and `[llm] api_key` empty there: both keys go in the env file (`RECAPZ_GOOGLE_CLIENT_SECRET`, `RECAPZ_LLM_KEY`), which wins over the file; an older `config.toml` that still holds them keeps working. Put them in place and edit the env file in the editor, so no key is typed on a command line or sent through chat:
    ```bash
    scp -i $KEY config.example.toml root@$HOST:/etc/recapz/config.toml
    ssh -t -i $KEY root@$HOST 'install -m 0640 -o root -g recapz /root/recapz/deploy/recapz.env.example /etc/recapz/recapz.env && chown root:recapz /etc/recapz/config.toml && chmod 0640 /etc/recapz/config.toml && nano /etc/recapz/config.toml'
-   ssh -t -i $KEY root@$HOST 'nano /etc/recapz/recapz.env'   # RECAPZ_SECRET_KEY (reuse the old one to keep calendar connections, or `openssl rand -hex 32`), RECAPZ_SPEECH_KEY, RECAPZ_LLM_KEY
+   ssh -t -i $KEY root@$HOST 'nano /etc/recapz/recapz.env'   # RECAPZ_SECRET_KEY (reuse the old one to keep calendar connections, or `openssl rand -hex 32`), RECAPZ_SPEECH_KEY, RECAPZ_LLM_KEY, RECAPZ_GOOGLE_CLIENT_SECRET
    ```
    The service refuses to start without `RECAPZ_SPEECH_KEY`.
 5. **Caddy:** on the host, `install -m 0644 /root/recapz/deploy/Caddyfile /etc/caddy/Caddyfile && systemctl restart caddy`. (`restart`, not `reload`, this once: the running Caddy still has its admin API on the old port, and only a restart moves it to the socket; after that `reload` works.) Check `https://recapz.tungmai.com` answers (502 is fine until step 7).
