@@ -969,6 +969,81 @@ async fn delete_meeting_is_owner_or_admin_only_and_removes_everything() {
 }
 
 #[tokio::test]
+async fn rename_speaker_follows_the_access_rule_and_shows_in_the_transcript() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (_, boss, _) = send(&app, login("boss@example.com")).await;
+    let boss = boss.unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let (_, amy, _) = send(&app, login("amy@example.com")).await;
+    let amy = amy.unwrap();
+    for c in [&boss, &amy] {
+        send(&app, get("/api/meetings", c)).await;
+    }
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    let boss_id: String = t
+        .query_row(
+            "SELECT id FROM members WHERE email = 'boss@example.com'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let id = seed_full_meeting(&t, dir.path(), &tid, &boss_id, "ready");
+    let other = seed_full_meeting(&t, dir.path(), &tid, &boss_id, "transcribing");
+    let name = |sid: &str| -> Option<String> {
+        t.query_row(
+            "SELECT display_name FROM speakers WHERE id = ?1",
+            [sid],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    let sid = format!("s-{id}");
+    let path = format!("/api/meetings/{id}/speakers/{sid}");
+    let patch = |p: &str, c: &str, b: &str| json_req("PATCH", p, c, b);
+
+    // Amy cannot see the private meeting: 404 and nothing changes.
+    let (s, ..) = send(&app, patch(&path, &amy, r#"{"name":"Hacker"}"#)).await;
+    assert_eq!((s, name(&sid)), (StatusCode::NOT_FOUND, None));
+    // Empty names, unknown speakers and a speaker of another meeting are refused.
+    let (s, ..) = send(&app, patch(&path, &boss, r#"{"name":"   "}"#)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, ..) = send(
+        &app,
+        patch(
+            &format!("/api/meetings/{id}/speakers/nope"),
+            &boss,
+            r#"{"name":"Lan"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let foreign = format!("/api/meetings/{id}/speakers/s-{other}");
+    let (s, ..) = send(&app, patch(&foreign, &boss, r#"{"name":"Lan"}"#)).await;
+    assert_eq!(
+        (s, name(&format!("s-{other}"))),
+        (StatusCode::NOT_FOUND, None)
+    );
+
+    let (s, _, body) = send(&app, patch(&path, &boss, r#"{"name":"  Lan  "}"#)).await;
+    assert_eq!((s, body.as_str()), (StatusCode::OK, r#"{"name":"Lan"}"#));
+    assert_eq!(name(&sid).as_deref(), Some("Lan"));
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id}/transcript"), &boss)).await;
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v[0]["speaker_name"], json!("Lan"));
+    let (_, _, body) = send(&app, get(&format!("/api/meetings/{id}"), &boss)).await;
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["speakers"][0]["name"], json!("Lan"));
+}
+
+#[tokio::test]
 async fn rename_meeting_trims_validates_and_is_owner_or_admin_only() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(dir.path());

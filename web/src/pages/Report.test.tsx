@@ -461,3 +461,19 @@ test('Details shows the deletion date from the retention period, and nothing whe
   await screen.findByText('Weekly sync')
   expect(screen.queryByText(/Deleted automatically/)).toBeNull()
 })
+
+test('renaming a speaker in talk time sends the trimmed name and refuses an empty one', async () => {
+  const patches: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+    if (init?.method === 'PATCH') { patches.push(`${u} ${init.body}`); return new Response('{"name":"Linh"}') }
+    return new Response(JSON.stringify(u.endsWith('/transcript') ? people : u.endsWith('/report') ? withReport : { ...meeting, speakers }))
+  }))
+  show()
+  fireEvent.click(await screen.findByRole('button', { name: 'Rename Khoa' }))
+  const input = screen.getByLabelText('Name of Khoa')
+  fireEvent.change(input, { target: { value: '   ' } })
+  expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.change(input, { target: { value: '  Linh ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await vi.waitFor(() => expect(patches).toEqual(['/api/meetings/m1/speakers/a {"name":"Linh"}']))
+})

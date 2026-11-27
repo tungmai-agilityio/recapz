@@ -159,6 +159,10 @@ pub fn router_with_mail(
         .route("/api/action-items/{id}", patch(update_action_item))
         .route("/api/meetings/{id}/language", patch(set_meeting_language))
         .route("/api/meetings/{id}/transcript", get(meeting_transcript))
+        .route(
+            "/api/meetings/{id}/speakers/{speaker_id}",
+            patch(rename_speaker),
+        )
         .route("/api/meetings/{id}/report", get(meeting_report))
         .route("/api/meetings/{id}/retry", post(retry_meeting))
         .route(
@@ -1074,6 +1078,43 @@ async fn update_meeting(
         out.insert("share".into(), s.into());
     }
     Ok(Json(out.into()))
+}
+
+#[derive(Deserialize)]
+struct SpeakerName {
+    name: String,
+}
+
+/// Any member who can see the meeting may fix a speaker's name; every screen reads `display_name`.
+async fn rename_speaker(
+    State(app): State<App>,
+    jar: CookieJar,
+    Path((id, speaker_id)): Path<(String, String)>,
+    Json(body): Json<SpeakerName>,
+) -> Res<Json<serde_json::Value>> {
+    let u = app.current_user(&jar).await?;
+    let name = body.name.trim().to_owned();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(ApiError::BadRequest("name must be 1 to 100 characters"));
+    }
+    let saved = name.clone();
+    app.tenant(u.tenant_id.clone(), move |c| {
+        ensure_member(c, &u)?;
+        if visible_meeting(c, &u.id, &id)?.is_none() {
+            return Ok(Err(ApiError::NotFound));
+        }
+        let n = c.execute(
+            "UPDATE speakers SET display_name = ?1 WHERE id = ?2 AND meeting_id = ?3",
+            params![name, speaker_id, id],
+        )?;
+        Ok(if n == 1 {
+            Ok(())
+        } else {
+            Err(ApiError::NotFound)
+        })
+    })
+    .await??;
+    Ok(Json(serde_json::json!({ "name": saved })))
 }
 
 #[derive(Deserialize)]
