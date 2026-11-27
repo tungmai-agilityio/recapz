@@ -28,6 +28,8 @@ fn open(path: &Path, migrations: &Migrations) -> Result<Connection> {
     let mut conn = Connection::open(path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Deleted rows are zeroed in place, so purged text does not linger in free pages.
+    conn.pragma_update(None, "secure_delete", "ON")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     migrations.to_latest(&mut conn)?;
     Ok(conn)
