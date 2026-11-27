@@ -48,7 +48,7 @@ done
 
 step "DNS and Caddy"
 [ "$(dig +short "$domain" | tail -1)" = "$ip" ] || { echo "point the $domain A record (DNS only) at $ip, then run this again" >&2; exit 1; }
-"${host[@]}" "sed 's/recapz\.tungmai\.com/$domain/' /root/recapz/deploy/Caddyfile > /etc/caddy/Caddyfile && systemctl reload caddy"
+"${host[@]}" "sed 's/recapz\.tungmai\.com/$domain/' /root/recapz/deploy/Caddyfile > /etc/caddy/Caddyfile && systemctl restart caddy"
 
 step "CI deploy user and GitHub settings"
 ssh-keygen -R "$domain" >/dev/null 2>&1 || true
