@@ -25,7 +25,17 @@ fn scrub(c: &Connection) -> Result<()> {
     for t in ["chunks_fts", "document_chunks_fts"] {
         c.execute(&format!("INSERT INTO {t}({t}) VALUES('optimize')"), [])?;
     }
-    c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+    truncate_wal(c)?;
+    Ok(())
+}
+
+/// Empties the WAL. A busy answer (another connection is reading) leaves it in place, so it is an
+/// error: the delete is already committed and a retry of the purge finishes the job.
+fn truncate_wal(c: &Connection) -> Result<()> {
+    let busy: i64 = c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+    if busy != 0 {
+        bail!("the WAL could not be truncated: the database is busy");
+    }
     Ok(())
 }
 
@@ -34,7 +44,7 @@ fn scrub(c: &Connection) -> Result<()> {
 pub fn vacuum(c: &Connection) -> Result<()> {
     scrub(c)?;
     c.execute_batch("VACUUM")?;
-    c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+    truncate_wal(c)?;
     Ok(())
 }
 
