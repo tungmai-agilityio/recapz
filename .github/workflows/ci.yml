@@ -44,7 +44,12 @@ jobs:
         if: needs.changes.outputs.code == 'true'
       # Caches dependencies only and prunes stale build output; caching all of `target` grew past the
       # runner's free disk and failed the restore ("No space left on device").
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        if: needs.changes.outputs.code == 'true'
+      # Fails on any new RustSec advisory
+      - run: cargo install cargo-audit --locked
+        if: needs.changes.outputs.code == 'true'
+      - run: cargo audit
         if: needs.changes.outputs.code == 'true'
       - run: cargo fmt --check
         if: needs.changes.outputs.code == 'true'

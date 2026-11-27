@@ -33,12 +33,12 @@ const MIN_CRASH_AUDIO_MS: i64 = 30_000;
 pub fn claim_scheduled(c: &Connection, max_concurrent: usize) -> Result<Vec<(String, String)>> {
     c.execute_batch("BEGIN IMMEDIATE")?;
     let done = (|| -> Result<Vec<(String, String)>> {
-        let active: usize = c.query_row(
+        let active: i64 = c.query_row(
             "SELECT COUNT(*) FROM meetings WHERE status IN ('joining','recording')",
             [],
             |r| r.get(0),
         )?;
-        let room = max_concurrent.saturating_sub(active);
+        let room = max_concurrent.saturating_sub(active as usize);
         let claimed = c
             .prepare(
                 "SELECT id, join_url FROM meetings WHERE status = 'scheduled' AND join_url IS NOT NULL

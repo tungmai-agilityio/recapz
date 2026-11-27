@@ -12,7 +12,7 @@ recapz-core = { path = "../core" }
 recapz-llm = { path = "../llm" }
 # `ask --embedder hosted` builds the server's own hosted embedder from its config, so both read the same settings.
 recapz-server = { path = "../server" }
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 serde_json = "1"
 # Runs the async model calls from main; already used by recapz-llm and the server.
 tokio = { version = "1", features = ["macros", "rt"] }

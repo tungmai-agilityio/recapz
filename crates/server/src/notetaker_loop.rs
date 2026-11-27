@@ -122,7 +122,7 @@ fn open_and_count(
     let c = db::open_tenant(data_dir, tenant)?;
     book_due(&c, now, LEAD_MS)?;
     // (notetaker calls, all calls) that are active.
-    let (notetaker, all) = c.query_row(
+    let (notetaker, all): (i64, i64) = c.query_row(
         "SELECT COALESCE(SUM(platform != 'browser'), 0), COUNT(*) FROM meetings
          WHERE status IN ('joining','recording')",
         [],
@@ -135,7 +135,7 @@ fn open_and_count(
         [],
         |r| r.get(0),
     )?;
-    Ok((c, notetaker, all, last))
+    Ok((c, notetaker as usize, all as usize, last))
 }
 
 /// Why a call cannot start at all, as the error shown on the meeting.
