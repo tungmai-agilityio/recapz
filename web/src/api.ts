@@ -17,6 +17,9 @@ export interface MeetingDetail extends Meeting {
   share: MeetingShare
   /** The owner or an admin: may rename, re-share and delete. */
   can_edit: boolean
+  /** What the meeting cost; sent to admins only. */
+  speech_micro_usd?: number
+  llm_micro_usd?: number
 }
 
 export type MeetingShare = 'attendees' | 'workspace' | 'owner'

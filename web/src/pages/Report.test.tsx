@@ -477,3 +477,17 @@ test('renaming a speaker in talk time sends the trimmed name and refuses an empt
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   await vi.waitFor(() => expect(patches).toEqual(['/api/meetings/m1/speakers/a {"name":"Linh"}']))
 })
+
+test('Details shows the meeting cost to admins and nothing when the fields are absent', async () => {
+  const withCost = { ...meeting, speakers, speech_micro_usd: 468_000, llm_micro_usd: 1_500 }
+  const serveMeeting = (m: unknown) =>
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? withReport : m))))
+  serveMeeting(withCost)
+  show()
+  expect(await screen.findByText('Cost: $0.47 (speech $0.47, language model $0.0015)')).toBeTruthy()
+  cleanup()
+  serveMeeting({ ...meeting, speakers })
+  show()
+  await screen.findByText('Plan agreed')
+  expect(screen.queryByText(/^Cost:/)).toBeNull()
+})

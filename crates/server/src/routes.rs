@@ -945,6 +945,11 @@ struct MeetingDetail {
     can_edit: bool,
     /// Same order, cap and names as the list rows: the colour index every screen derives from.
     speakers: Vec<ListSpeaker>,
+    /// What the meeting cost; present for admins only, so a member's response has no cost fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speech_micro_usd: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    llm_micro_usd: Option<i64>,
 }
 
 /// The one meeting access rule (`db::MEETING_VISIBLE`): the owner, an attendee, or anyone when shared with the workspace.
@@ -972,6 +977,8 @@ fn visible_meeting(c: &Connection, uid: &str, id: &str) -> anyhow::Result<Option
                 share: r.get(9)?,
                 can_edit: r.get(10)?,
                 speakers: Vec::new(),
+                speech_micro_usd: None,
+                llm_micro_usd: None,
             })
         },
     )
@@ -994,6 +1001,11 @@ async fn meeting_detail(
                 return Ok(None);
             };
             m.can_edit |= role == "admin";
+            if role == "admin" {
+                let t = recapz_core::usage::meeting_cost(c, &id)?;
+                m.speech_micro_usd = Some(t.speech_micro_usd);
+                m.llm_micro_usd = Some(t.llm_micro_usd);
+            }
             let mut sp = c.prepare(
                 "SELECT id, COALESCE(NULLIF(display_name, ''), label) FROM speakers
                  WHERE meeting_id = ?1 ORDER BY rowid LIMIT ?2",

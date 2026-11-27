@@ -12,6 +12,7 @@ import { Menu, MenuItem } from '../ui/Menu'
 import { useTranscriptRetention } from '../speech'
 import { useToast } from '../ui/toast-context'
 import { Button } from '../ui/Button'
+import { usd } from '../money'
 import { inputClass } from '../ui/Field'
 import { deleteMeeting, regenerateReport, retryMeeting, getMeeting, getReport, getTranscript, renameMeeting, renameSpeaker, setMeetingLanguage, setMeetingShare, updateActionItem, Unauthorized, type MeetingLanguage, type MeetingShare, type MeetingDetail, type ReportData } from '../api'
 
@@ -255,7 +256,7 @@ export function Report() {
       {tab === 'summary' ? (
         <div role="tabpanel" className="mt-6">
           {report.data ? (
-            <ReportSections id={id} r={report.data} talk={talk} language={m.language} sharing={sharing} deletion={deletion} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
+            <ReportSections id={id} r={report.data} talk={talk} language={m.language} sharing={sharing} deletion={deletion} cost={m.speech_micro_usd === undefined ? null : { speech: m.speech_micro_usd, llm: m.llm_micro_usd ?? 0 }} seek={seek} open={(ms) => { setTab('transcript'); seek(ms) }} />
           ) : (
             <p className="text-mute">
               {m.status === 'ready' ? 'No report was written for this meeting.'
@@ -301,7 +302,7 @@ const Heading = ({ children }: { children: string }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
 )
 
-function ReportSections({ id, r, talk, language, sharing, deletion, seek, open }: { id: string; sharing: ReactNode; deletion: string | null; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
+function ReportSections({ id, r, talk, language, sharing, deletion, cost, seek, open }: { id: string; sharing: ReactNode; deletion: string | null; cost: { speech: number; llm: number } | null; r: ReportData; talk: { people: { id: string; index: number | null; name: string; ms: number }[]; all: number }; language: string; seek: (ms: number) => void; open: (ms: number) => void }) {
   const done = r.action_items.filter((a) => a.done).length
   const qc = useQueryClient()
   const toast = useToast()
@@ -408,6 +409,7 @@ function ReportSections({ id, r, talk, language, sharing, deletion, seek, open }
         <section className="space-y-1">
           <Heading>Details</Heading>
           <p className="text-sm text-mute">Language: {language}</p>
+          {cost && <p className="text-sm text-mute">Cost: {usd(cost.speech + cost.llm)} (speech {usd(cost.speech)}, language model {usd(cost.llm)})</p>}
           {deletion && <p className="text-sm text-mute">Deleted automatically on {deletion}</p>}
           {sharing}
         </section>

@@ -79,6 +79,22 @@ pub struct MeetingCost {
     pub llm_micro_usd: i64,
 }
 
+/// Everything one meeting has cost so far (speech, language model), not limited to the month. The
+/// caller decides who may see it.
+pub fn meeting_cost(c: &Connection, meeting_id: &str) -> Result<Totals> {
+    let q = |table: &str| -> Result<i64> {
+        Ok(c.query_row(
+            &format!("SELECT COALESCE(SUM(cost_micro_usd), 0) FROM {table} WHERE meeting_id = ?1"),
+            [meeting_id],
+            |r| r.get(0),
+        )?)
+    };
+    Ok(Totals {
+        speech_micro_usd: q("speech_usage")?,
+        llm_micro_usd: q("llm_usage")?,
+    })
+}
+
 /// This month's costliest meetings first, only those `member_id` may see (owner, or shared with the
 /// workspace). Rows without a meeting (Ask) are not listed here.
 pub fn per_meeting(
@@ -160,6 +176,25 @@ mod tests {
         // 60 min at 7800 micro-USD a minute = $0.468; 10 min = $0.078
         let t = month_totals(&c, NOV).unwrap();
         assert_eq!(t.speech_micro_usd, 468_000 + 78_000);
+    }
+
+    #[test]
+    fn a_meeting_costs_the_sum_of_its_own_speech_and_llm_rows_in_any_month() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_tenant(dir.path(), "t1").unwrap();
+        seed(&c);
+        record_speech(&c, "a", 7_800, OCT).unwrap();
+        record_speech(&c, "b", 7_800, NOV).unwrap();
+        for (m, cost, at) in [("a", 500, OCT), ("a", 250, NOV), ("b", 9, NOV)] {
+            c.execute(
+                "INSERT INTO llm_usage (meeting_id, task, provider, model, cost_micro_usd, at) VALUES (?1, 'summary', 'p', 'm', ?2, ?3)",
+                params![m, cost, at],
+            )
+            .unwrap();
+        }
+        let t = meeting_cost(&c, "a").unwrap();
+        assert_eq!((t.speech_micro_usd, t.llm_micro_usd), (468_000, 750));
+        assert_eq!(meeting_cost(&c, "none").unwrap().total(), 0);
     }
 
     #[test]
