@@ -173,12 +173,10 @@ non-owners once the list returns the owner.
       ribbon. Checked by eye on 2026-11-26 at 1280 and 390 px, Daylight light and Ink dark, with the page served by
       Vite and the Ask and `/api/me` replies mocked (synthetic text, no server). Not compared side by side with the
       prototype Ask state; Daylight dark and Ink light were not shot.
-- [ ] Document citation card (#701): a card for a document source links to the document page (`/documents/:id`);
-      meeting cards are unchanged. In the prototype since v14 (security-faq.txt card, no ribbon). Not built yet.
 - [x] Suggestion (#136) chips, sticky composer with Ask button, Cmd/Ctrl+K focus
 - [ ] Filters: From, To and Person above the composer, Clear filters (jsdom test only; the prototype has no filters,
       so the layout is not compared and not seen in a browser: unverified)
-- [ ] History (#698, planned in `docs/specs/ask-history.md`): earlier turns load on open, a delete button on each turn, Clear history with an inline confirmation; both skins and mobile
+- [x] History (#698, `docs/specs/ask-history.md`): earlier turns load on open, a Delete button on each turn, Clear history above the list; both ask first in the same confirm dialog the Documents page uses (the prototype draws an inline bar; the dialog is the app's existing pattern). Checked by eye on 2026-11-27 at 1280 px (Daylight light, Ink dark) and 390 px (Ink dark), page served by Vite with the history and `/api/me` replies mocked (synthetic text, no server). Not compared side by side with the prototype; Daylight dark, Ink light and Daylight mobile were not shot. Behaviour (restored turns, delete one, clear, cancel, failed delete) is covered by `Ask.test.tsx`.
 - [x] States (#136): streaming, error, 401 "Sign in to ask.", rate limited (429), 503 "Ask needs a language model", no results
 
 ## S5 Upload
@@ -233,11 +231,7 @@ non-owners once the list returns the owner.
 - [x] Aside: storage meter (used of 500 MB) above the explainer with the prototype's spacing; the bar has a minimum width so a few KB still shows. The explainer names no provider. Checked in a browser in #269
 - [x] Rail: icon beside every item (Meetings, Upload, Ask, My documents, Live meeting, Recording & privacy), also in the mobile row; groups Work and Workspace. The prototype's Insights group is not shown: none of its screens exist in the app. Breadcrumb "Work / My documents" matches. Checked in a browser in #269
       Not checked in a browser: the empty, loading and error states, a nearly full meter and the Delete dialog.
-- [ ] Document page (#701, prototype v14 "Document" screen): back link, name, type, size, added date, status badge,
-      the "May be sent to the language model" switch, Download, Delete with confirm, plain preformatted text, a
-      notice when only the first 1 MB is shown, a not-found state; names in the table link to it. Not built yet:
-      tick with screenshots at 1280 and 390 px, Daylight and Ink, light and dark. The prototype confirms Delete
-      inline; the app may use the shared modal like the table.
+- [x] Document page (#701, `docs/specs/document-view.md`): `/documents/:id` opened from the name in the table or from an Ask document card. Back link, name, Download and Delete (shared confirm dialog, then back to the list), type, size, added, status badge, the language-model switch, the text as plain wrapped lines, and a notice that only the first 1 MB is shown with a Download link when the file is longer; a missing or someone else's document says "Document not found." Checked by eye on 2026-11-27 at 1280 px (Daylight light with the truncated notice, Ink dark) and 390 px (Ink dark), page served by Vite with the replies mocked (synthetic text, no server). The prototype's document screen was not compared side by side; Daylight dark, Ink light and Daylight mobile were not shot. Behaviour is covered by `Document.test.tsx`; the 1 MB threshold in a real browser is unverified.
 
 ## S7 Members
 - [x] Invite form (email, role) with validation errors, and a Copy link button for the sign-in link the server returns; the notice says whether the invite was emailed, email is not set up, or the email failed (#633, jsdom tests; not checked in a browser). Members never see the form: the page shows "Only an admin can manage members." and never requests `/api/members`; the rail item and the account menu's "Manage members" show for admins only (jsdom tests). Checked in Chromium on 2026-11-26 at 1280 px (Daylight light) and 390 px (Daylight and Ink light) against a mocked API; the prototype was not opened side by side, so no prototype screenshot (written reason: compared with the Documents and Recording screens' shared `frame`, `Table` and `Field` only)
