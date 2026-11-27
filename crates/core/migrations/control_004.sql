@@ -3,3 +3,7 @@
 DELETE FROM sessions;
 ALTER TABLE invites ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
 UPDATE invites SET created_at = CAST(strftime('%s','now') AS INTEGER) * 1000;
+-- An insert without a time (the old shape) is stamped now.
+CREATE TRIGGER invites_created_at AFTER INSERT ON invites WHEN NEW.created_at = 0 BEGIN
+  UPDATE invites SET created_at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE email = NEW.email;
+END;
