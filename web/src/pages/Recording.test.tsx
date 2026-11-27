@@ -81,6 +81,7 @@ test('an unknown outcome shows nothing, and Dismiss removes a shown one', async 
 test('names no speech provider', async () => {
   show('/recording', { email: 'a@b.c', name: null, role: 'admin', connected: false, needs_reconnect: false })
   expect(await screen.findByText('Where audio goes')).toBeTruthy()
+  expect(screen.getByText(/A downloaded copy is outside Recapz: audio retention and deleting a meeting do not remove it\./)).toBeTruthy()
   expect(document.body.textContent).not.toMatch(/is sent to|Deepgram/)
 })
 

@@ -503,3 +503,37 @@ test('Details shows the meeting cost to admins and nothing when the fields are a
   await screen.findByText('Plan agreed')
   expect(screen.queryByText(/^Cost:/)).toBeNull()
 })
+
+const menuItems = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Meeting actions' }))
+  return screen.getAllByRole('menuitem').map((i) => i.textContent)
+}
+const stubMeeting = (m: object) =>
+  vi.stubGlobal('fetch', vi.fn(async (u: string) => new Response(JSON.stringify(u.endsWith('/transcript') ? [] : u.endsWith('/report') ? null : m))))
+
+test('the ⋯ menu offers Download audio as a plain download link', async () => {
+  stubMeeting(meeting)
+  show()
+  expect(await menuItems()).toEqual(['Rename', 'Download audio', 'Delete'])
+  const link = screen.getByRole('menuitem', { name: 'Download audio' })
+  expect([link.tagName, link.getAttribute('href'), link.hasAttribute('download')]).toEqual(['A', '/api/meetings/m1/audio?download=1', true])
+  fireEvent.click(link) // the link must stay in the page for the browser to follow it
+  expect(link.isConnected).toBe(true)
+})
+
+test('the ⋯ menu has no Download audio when the audio cannot load', async () => {
+  stubMeeting(meeting)
+  const { container } = show()
+  await screen.findByText('Weekly sync')
+  fireEvent.error(container.querySelector('audio')!)
+  expect(await menuItems()).toEqual(['Rename', 'Delete'])
+})
+
+test('the ⋯ menu has no Download audio while the call is joining or recording', async () => {
+  for (const status of ['joining', 'recording']) {
+    stubMeeting({ ...meeting, status })
+    const { unmount } = show()
+    expect(await menuItems()).toEqual(['Rename', 'Delete'])
+    unmount()
+  }
+})
