@@ -1,6 +1,6 @@
 # Zoom join path decision
 
-Status: **proposed, never confirmed; no Zoom join path is built (2026-11-25).** Zoom calls can be recorded today with the macOS app ("Meeting app" mode, `docs/specs/desktop-app.md`) or by upload. Several facts below are from general knowledge and must be checked against Zoom's current developer terms before building.
+Status: **Meeting SDK bot confirmed by the maintainer (2026-11-27); not built yet, plan in `docs/specs/zoom-notetaker.md`.** Zoom calls can be recorded today with the macOS app ("Meeting app" mode, `docs/specs/desktop-app.md`) or by upload. Several facts below are from general knowledge and must be checked against Zoom's current developer terms before building.
 
 ## Options
 
@@ -13,7 +13,7 @@ Status: **proposed, never confirmed; no Zoom join path is built (2026-11-25).** 
 ## Decision
 
 1. **v1: Meeting SDK bot.** Per-participant audio feeds the speaker ribbon directly, so Zoom meetings need no diarization. Start the app review early; it is the longest step.
-2. **Rejected: hosted recording-bot service.** It sends audio to a third party, which used to break the rule that audio never leaves the server. That rule ended with hosted speech (2026-11-18, `docs/decisions/hosted-speech.md`), so this reason no longer applies; the other options' trade-offs above are unchanged and the choice is open again.
+2. **Rejected (maintainer chose the SDK bot, 2026-11-27): hosted recording-bot service.** It sends audio to a third party, which used to break the rule that audio never leaves the server. That rule ended with hosted speech (2026-11-18, `docs/decisions/hosted-speech.md`), so this reason no longer applies; the other options' trade-offs above are unchanged and the choice is open again.
 3. **Rejected for Zoom: headless browser.** Terms risk and fragility. It may still be the only practical route for Google Meet; decide that separately.
 4. **Fallback, available now:** upload a Zoom recording through the existing upload feature. Zoom's real-time media streaming for meetings in our own account is worth a look; availability on our plan is unverified.
 
