@@ -153,12 +153,12 @@ const saved = (id: string, q: string) => ({
   citations: [{ meeting_id: 'm1', document_id: null, title: 'Weekly sync', start_ms: 65000, quote: `quote ${id}`, answered: true, n: 1 }],
 })
 
-test('saved turns show again on open, oldest first, with their citation cards', async () => {
+test('saved turns show again on open, newest first, with their citation cards', async () => {
   stubFetch(() => new Response(''), [saved('t1', 'first question'), saved('t2', 'second question')])
   render(<MemoryRouter><Ask /></MemoryRouter>)
   expect(await screen.findByText('first question')).toBeTruthy()
   const qs = screen.getAllByText(/question$/).map((e) => e.textContent)
-  expect(qs).toEqual(['first question', 'second question'])
+  expect(qs).toEqual(['second question', 'first question'])
   expect(screen.getByText('quote t1').closest('a')!.getAttribute('href')).toBe('/meetings/m1?t=65000')
   expect(screen.getByText('quote t2')).toBeTruthy()
 })
@@ -179,7 +179,7 @@ test('deleting one turn removes only that turn', async () => {
   const calls = stubFetch(() => new Response(null, { status: 204 }), [saved('t1', 'first question'), saved('t2', 'second question')])
   render(<MemoryRouter><Ask /></MemoryRouter>)
   await screen.findByText('first question')
-  fireEvent.click(screen.getAllByRole('button', { name: 'Delete this question' })[0])
+  fireEvent.click(screen.getAllByRole('button', { name: 'Delete this question' })[1])
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
   await vi.waitFor(() => expect(screen.queryByText('first question')).toBeNull())
   expect(screen.getByText('second question')).toBeTruthy()
@@ -216,4 +216,19 @@ test('with no saved turns there is no Clear history button', async () => {
   render(<MemoryRouter><Ask /></MemoryRouter>)
   await Promise.resolve()
   expect(screen.queryByRole('button', { name: 'Clear history' })).toBeNull()
+})
+
+test('the question box is above the history, and a new question lands on top of it', async () => {
+  stubFetch(() => new Response('event: token\ndata: {"text":"Hi"}\n\nevent: citations\ndata: []\n\nevent: done\ndata: {"id":"n1"}\n\n'),
+    [saved('t1', 'first question'), saved('t2', 'second question')])
+  render(<MemoryRouter><Ask /></MemoryRouter>)
+  await screen.findByText('first question')
+  const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+  const box = screen.getByLabelText('Question')
+  expect(before(box, screen.getByText('second question'))).toBe(true)
+  expect(before(screen.getByRole('button', { name: 'What are the open action items?' }), screen.getByText('second question'))).toBe(true)
+  fireEvent.change(box, { target: { value: 'newest one' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+  await screen.findByText('Hi')
+  expect(screen.getAllByText(/(question|one)$/).map((e) => e.textContent)).toEqual(['newest one', 'second question', 'first question'])
 })

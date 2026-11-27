@@ -49,8 +49,9 @@ stream sent, so a restored turn looks as it did.
 
 ## UI
 
-Prototype: https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH (Ask, updated 2026-11-27): a delete button on each turn
-and a Clear history button with an inline confirmation. The new rows are in `docs/ui-parity.md` (S4 Ask), unticked
+Prototype: https://claude.ai/artifact/KxQaWLV4L9kusPFz1eonzH (Ask, v13 2026-11-27): the question box and suggestions come
+first and the history sits under them, newest first, with a History heading; a new question lands on top. A delete
+button on each turn and a Clear history button with an inline confirmation (the app uses its confirm dialog). The new rows are in `docs/ui-parity.md` (S4 Ask), unticked
 until #698.
 
 ## Tickets
