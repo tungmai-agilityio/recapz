@@ -145,7 +145,8 @@ non-owners once the list returns the owner.
       not ticked); the deletion date is not in
       the meeting API. Not ticked: Chapters and Details language checked by eye on 2026-11-20 (#327) at 1280 and
       390 px, but Talk time could not be seen (the test meeting has no speakers), the prototype uses uppercase
-      muted labels for Chapters, Talk time and Details, and its Details also show Shared with and the deletion date)
+      muted labels for Chapters, Talk time and Details, and its Details also show Shared with and the deletion date;
+      admins also see a Cost line (speech, language model) under Details: covered by a jsdom test only, not compared to the prototype or seen in a browser, so unverified)
 - [ ] Transcript: speaker colour bar, time, speaker name, text, current line highlighted, click seeks
       (colour bar, time, speaker name, text, highlight, seek done. The name shows only on lines with a speaker; a
       speaker with no name reads "Unknown". One colour per person, by order of first speaking, shared with the
