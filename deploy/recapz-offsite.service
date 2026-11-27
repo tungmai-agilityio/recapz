@@ -1,0 +1,13 @@
+[Unit]
+Description=Recapz offsite backup (encrypted)
+After=recapz-backup.service
+
+[Service]
+Type=oneshot
+User=recapz
+# RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+EnvironmentFile=/etc/recapz/offsite.env
+# keep restic's cache out of /var/lib/recapz, or the next local backup copies it
+CacheDirectory=recapz-offsite
+Environment=RESTIC_CACHE_DIR=/var/cache/recapz-offsite
+ExecStart=/usr/local/bin/recapz-offsite /var/backups/recapz
