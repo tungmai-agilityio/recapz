@@ -1,6 +1,6 @@
 # Ask history
 
-Status: **agreed with the maintainer (2026-11-27); storage (#696) and server (#697) built, page not yet.** Ticket #698 is open. Nothing here is verified in a running app.
+Status: **agreed with the maintainer (2026-11-27); built in #696 to #698 (the tickets' PRs; the first two need the maintainer to merge). Not yet seen against a real server: unverified. Nothing here is verified in a running app.
 Intent: #695. Docs ticket: #699.
 
 ## Problem
