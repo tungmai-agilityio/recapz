@@ -27,12 +27,20 @@ use std::{
 /// After a crash, less audio than this is not worth transcribing.
 const MIN_CRASH_AUDIO_MS: i64 = 30_000;
 
+/// Shown on a Zoom meeting until a Zoom driver ships; the Meet driver would only fail it as `meet_ui_changed`.
+const ZOOM_UNSUPPORTED: &str = "The notetaker cannot join Zoom meetings yet";
+
 /// Moves up to `max_concurrent` minus the calls already active from `scheduled` to `joining`, in one
 /// transaction, and returns `(meeting id, join url)` for each. The cap counts rows, so it holds
-/// across restarts.
+/// across restarts. Only Meet rows are claimed; a scheduled Zoom meeting is failed here instead.
 pub fn claim_scheduled(c: &Connection, max_concurrent: usize) -> Result<Vec<(String, String)>> {
     c.execute_batch("BEGIN IMMEDIATE")?;
     let done = (|| -> Result<Vec<(String, String)>> {
+        c.execute(
+            "UPDATE meetings SET status='failed', error=?1, ended_at=?2
+             WHERE status = 'scheduled' AND platform = 'zoom' AND join_url IS NOT NULL",
+            params![ZOOM_UNSUPPORTED, now_ms()],
+        )?;
         let active: i64 = c.query_row(
             "SELECT COUNT(*) FROM meetings WHERE status IN ('joining','recording')",
             [],
@@ -41,7 +49,7 @@ pub fn claim_scheduled(c: &Connection, max_concurrent: usize) -> Result<Vec<(Str
         let room = max_concurrent.saturating_sub(active as usize);
         let claimed = c
             .prepare(
-                "SELECT id, join_url FROM meetings WHERE status = 'scheduled' AND join_url IS NOT NULL
+                "SELECT id, join_url FROM meetings WHERE status = 'scheduled' AND platform = 'meet' AND join_url IS NOT NULL
                  ORDER BY created_at, id LIMIT ?1",
             )?
             .query_map([room as i64], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -460,6 +468,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(joining, 3);
+    }
+
+    #[test]
+    fn a_zoom_meeting_is_failed_with_a_reason_and_never_claimed() {
+        let (dir, tenant) = setup();
+        let c = open(&dir, &tenant);
+        meeting(&c, "m", "scheduled", 2);
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, status, join_url, created_at) VALUES ('z', 't', 'zoom', 'scheduled', 'https://zoom.us/j/123456789', 1)",
+            [],
+        )
+        .unwrap();
+        let claimed = claim_scheduled(&c, 5).unwrap();
+        assert_eq!(
+            claimed.iter().map(|(i, _)| i.as_str()).collect::<Vec<_>>(),
+            vec!["m"]
+        );
+        let (status, error): (String, Option<String>) = c
+            .query_row("SELECT status, error FROM meetings WHERE id='z'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(status, "failed");
+        assert_eq!(
+            error.as_deref(),
+            Some("The notetaker cannot join Zoom meetings yet")
+        );
     }
 
     #[test]
