@@ -45,8 +45,8 @@ Run on your machine unless a step says "on the host". Never paste a key into cha
    ```
    The service refuses to start without `RECAPZ_SPEECH_KEY`.
 5. **Caddy:** on the host, `install -m 0644 /root/recapz/deploy/Caddyfile /etc/caddy/Caddyfile && systemctl restart caddy`. (`restart`, not `reload`, this once: the running Caddy still has its admin API on the old port, and only a restart moves it to the socket; after that `reload` works.) Check `https://recapz.tungmai.com` answers (502 is fine until step 7).
-6. **CI access (once per new host):** do "Deploy from CI" step 1 (a new `ssh-keygen` for `~/recapz-ci-deploy`, since the old private key was deleted after it was stored in GitHub; `scp`, `setup-deploy-user.sh`, `status`). Then step 2, only the part that changes: `gh secret set DEPLOY_SSH_KEY --env production < ~/recapz-ci-deploy`, and re-set `DEPLOY_KNOWN_HOSTS` (the new host key; compare fingerprints first as described). `DEPLOY_HOST` and `DEPLOY_URL` stay the same because the domain is the same; the `production` environment, its reviewer and branch policies are kept by GitHub. The `status` check fails until the first release exists.
-7. **First deploy:** only after steps 4 and 5, because a release that does not answer `/api/health` is rolled back and removed. Push a new tag name (an already pushed tag such as `v0.1.0` cannot be pushed again), or skip tagging: `gh workflow run release-build.yml --ref main -f deploy=true`. Follow "3. Release" below and press **Approve and deploy**. Then on the host: `systemctl enable --now recapz-xvfb recapz recapz-backup.timer` (the deploy restarts the service but nothing enables it at boot). The smoke test in the job must pass; run `./scripts/smoke-deploy.sh https://recapz.tungmai.com` again by hand if in doubt.
+6. **CI access (once per new host):** do "Deploy from CI" step 1 (a new `ssh-keygen` for `~/recapz-ci-deploy`, since the old private key was deleted after it was stored in GitHub; `scp`, `setup-deploy-user.sh`, `status`). Then step 2, only the part that changes: `gh secret set DEPLOY_SSH_KEY --env production < ~/recapz-ci-deploy`, and re-set `DEPLOY_KNOWN_HOSTS` (the new host key; compare fingerprints first as described). `DEPLOY_HOST` and `DEPLOY_URL` stay the same because the domain is the same; the `production` environment and its branch policies are kept by GitHub. The `status` check fails until the first release exists.
+7. **First deploy:** only after steps 4 and 5, because a release that does not answer `/api/health` is rolled back and removed. Push a new tag name (an already pushed tag such as `v0.1.0` cannot be pushed again), or skip tagging: `gh workflow run release-build.yml --ref main -f deploy=true`. Follow "3. Release" below. Then on the host: `systemctl enable --now recapz-xvfb recapz recapz-backup.timer` (the deploy restarts the service but nothing enables it at boot). The smoke test in the job must pass; run `./scripts/smoke-deploy.sh https://recapz.tungmai.com` again by hand if in doubt.
 8. **Bot Google sign-in (VNC):** the notetaker has no saved sign-in on a new host. One command from your Mac: `scripts/host-notetaker-login.sh <ip>` opens the tunnel and VNC (localhost only, a one-time password it prints), opens Screen Sharing, runs `notetaker-login` as `recapz`; sign in, close the window, and it stops VNC and the tunnel and warns if a profile file is not owned by `recapz` (checked on the live host 2026-11-27). By hand instead: on the host install the VNC server once: `apt install x11vnc`. Then, from your machine:
    ```bash
    ssh -i $KEY -L 5900:localhost:5900 root@$HOST      # keep this open; on the host:
@@ -185,7 +185,7 @@ Runs daily at 06:00 UTC. Someone must be in the test call (or it must admit the 
 
 ## Deploy from CI
 
-`release-build` builds the binary and then, after you approve, deploys it. The `deploy` job runs for a `v*` tag, or for a manual run on `main` with `deploy=true`; never on a plain merge. It sends the binary and its sha256 to a restricted `deploy` user on the host, runs `scripts/smoke-deploy.sh` against the live URL and rolls back if that fails (`deploy-release.sh` also rolls back by itself when the service does not become healthy). The CI key can only run `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin), `rollback` and `status`; no shell, no forwarding. It can still ship any binary, so keep it only in the GitHub `production` environment.
+`release-build` builds the binary and then deploys it (the `production` environment has no required reviewer, so nothing waits for approval; the tag ruleset in step 2 is the guard). The `deploy` job runs for a `v*` tag, or for a manual run on `main` with `deploy=true`; never on a plain merge. It sends the binary and its sha256 to a restricted `deploy` user on the host, runs `scripts/smoke-deploy.sh` against the live URL and rolls back if that fails (`deploy-release.sh` also rolls back by itself when the service does not become healthy). The CI key can only run `scripts/deploy-recv.sh`: `deploy <name> <sha256>` (binary on stdin), `rollback` and `status`; no shell, no forwarding. It can still ship any binary, so keep it only in the GitHub `production` environment.
 
 ### 1. One-time host setup
 
@@ -224,13 +224,12 @@ ssh -i ~/recapz-ci-deploy deploy@$HOST status
 
 Needs the `gh` CLI logged in as an admin of the repo; run from the repo root. Everything here can also be done in the web UI (repo **Settings → Environments**).
 
-Create the `production` environment with you as required reviewer. Replace `<your-numeric-id>` with the output of `gh api user -q .id`, and limit deployments to `main` and `v*` tags:
+Create the `production` environment with no required reviewer (the maintainer's choice) and limit deployments to `main` and `v*` tags. To bring an approval gate back, add `"reviewers":[{"type":"User","id":<your-numeric-id>}]` (from `gh api user -q .id`) to the JSON:
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 gh api -X PUT repos/$REPO/environments/production --input - <<EOF
-{"reviewers":[{"type":"User","id":<your-numeric-id>}],
- "deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
 EOF
 gh api -X POST repos/$REPO/environments/production/deployment-branch-policies -f name=main -f type=branch
 gh api -X POST repos/$REPO/environments/production/deployment-branch-policies -f name='v*' -f type=tag
@@ -259,7 +258,19 @@ gh secret list --env production
 gh variable list --env production
 ```
 
-Optional: stop others from creating release tags. In the web UI: **Settings → Rules → Rulesets → New tag ruleset**, target pattern `v*`, restrict creations. Once the key is in GitHub you can delete it from your machine: `rm ~/recapz-ci-deploy`.
+Protect release tags. With no environment reviewer, any `v*` tag on any commit, even one never merged, deploys to production, so only the repo admin may create, move or delete one (repository role 5 = admin bypasses the ruleset; web UI: **Settings → Rules → Rulesets → New tag ruleset**):
+
+```bash
+gh api -X POST repos/$REPO/rulesets --input - <<EOF
+{"name":"release-tags","target":"tag","enforcement":"active",
+ "conditions":{"ref_name":{"include":["refs/tags/v*"],"exclude":[]}},
+ "rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}],
+ "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]}
+EOF
+gh api repos/$REPO/rulesets -q '.[] | select(.name=="release-tags") | .enforcement'   # active
+```
+
+Once the key is in GitHub you can delete it from your machine: `rm ~/recapz-ci-deploy`.
 
 ### 3. Release
 
@@ -271,13 +282,13 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Before approving, read what the tagged commit changes; anyone who can push a `v*` tag can run a workflow from that commit, and your approval is the only check. Look at `.github/` and `scripts/` first:
+Before tagging, read what the commit changes; a `v*` tag deploys with no approval step, and the tag ruleset (step 2) is the only check. Look at `.github/` and `scripts/` first:
 
 ```bash
 git diff --stat <previous-tag-or-live-release>..v0.1.0 -- .github scripts
 ```
 
-Then find the run, wait for the build, and approve in the web UI (the run page → **Review deployments** → tick `production` → **Approve and deploy**):
+Then find the run and wait for the build and deploy:
 
 ```bash
 gh run list --workflow release-build.yml --limit 3
