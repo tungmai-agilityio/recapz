@@ -34,8 +34,10 @@ if [ "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -lt 3500000 ] && ! swapon --s
 fi
 
 id recapz >/dev/null 2>&1 || useradd --system --home /var/lib/recapz --create-home --shell /usr/sbin/nologin recapz
+id recapz-offsite >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin recapz-offsite
 install -d -m 0750 -o root -g recapz /etc/recapz   # root owns config and keys; recapz only reads
-install -d -m 0700 -o recapz -g recapz /var/backups/recapz
+install -d -m 0750 -o recapz -g recapz /var/backups/recapz   # recapz-offsite reads it via SupplementaryGroups=recapz
+chmod 0750 /var/backups/recapz
 install -d -m 0755 /opt/recapz/releases
 install -m 0755 "$repo/scripts/backup.sh" /usr/local/bin/recapz-backup
 install -m 0755 "$repo/scripts/offsite-backup.sh" /usr/local/bin/recapz-offsite

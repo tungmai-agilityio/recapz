@@ -4,4 +4,5 @@ Description=Recapz backup
 [Service]
 Type=oneshot
 User=recapz
+UMask=0027
 ExecStart=/usr/local/bin/recapz-backup /var/lib/recapz /var/backups/recapz
