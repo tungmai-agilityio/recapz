@@ -13,3 +13,4 @@ Recapz.app.tar.gz.sig
 latest.json
 *.key
 graphify-out/
+/.secrets/

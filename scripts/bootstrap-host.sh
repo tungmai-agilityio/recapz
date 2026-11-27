@@ -3,7 +3,7 @@
 # Sets up a fresh Debian 13 host end to end: provision, config and env files, Caddy, the CI deploy user and
 # DEPLOY_* settings, the units, a first deploy of main, and one run of both backups. Every step can run again.
 #
-# Secrets are read from RECAPZ_SECRETS (default ~/.config/recapz, keep it 0700 and out of the repo):
+# Secrets are read from RECAPZ_SECRETS (default .secrets/ in the repo root: git-ignored, keep it 0700):
 #   config.toml   your config (data_dir, base_url, dev_login and, under 4 GB RAM, max_concurrent_calls are set here)
 #   recapz.env    RECAPZ_SECRET_KEY, RECAPZ_SPEECH_KEY, RECAPZ_LLM_KEY, ... (deploy/recapz.env.example)
 #   offsite.env   optional, restic settings (docs/deploy.md, "Offsite")
@@ -13,7 +13,7 @@
 set -euo pipefail
 ip=${1:?usage: bootstrap-host.sh <droplet-ip>}
 domain=${RECAPZ_DOMAIN:-recapz.tungmai.com}
-secrets=${RECAPZ_SECRETS:-$HOME/.config/recapz}
+secrets=${RECAPZ_SECRETS:-.secrets}
 key=${RECAPZ_SSH_KEY:-$HOME/.ssh/recapz_do}
 host=(ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "root@$ip")
 step() { echo "== $*"; }
