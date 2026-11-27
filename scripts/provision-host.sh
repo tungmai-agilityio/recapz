@@ -33,7 +33,7 @@ printf '[Service]\nRuntimeDirectory=caddy\n' > /etc/systemd/system/caddy.service
 systemctl disable --now avahi-daemon.socket avahi-daemon.service 2>/dev/null || true
 install -d /etc/systemd/resolved.conf.d
 printf '[Resolve]\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/10-recapz.conf
-systemctl try-reload-or-restart systemd-resolved
+if systemctl cat systemd-resolved >/dev/null 2>&1; then systemctl try-reload-or-restart systemd-resolved; fi
 apt-get install -y unattended-upgrades
 printf 'Unattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Automatic-Reboot-Time "04:30";\n' > /etc/apt/apt.conf.d/52-recapz-reboot
 
@@ -63,7 +63,8 @@ install -m 0644 "$repo"/deploy/recapz.service "$repo"/deploy/recapz-xvfb.service
   "$repo"/deploy/recapz-health.service "$repo"/deploy/recapz-health.timer \
   "$repo"/deploy/recapz-restore-test.service "$repo"/deploy/recapz-restore-test.timer \
   "$repo"/deploy/recapz-smoke.service "$repo"/deploy/recapz-smoke.timer /etc/systemd/system/
-systemctl daemon-reload   # also picks up the caddy drop-in
+systemctl daemon-reload
+systemctl restart caddy   # picks up the drop-in (a reload cannot create the socket directory)
 
 # firewall: SSH, HTTP (certificate challenge and redirect) and HTTPS only; the Xvfb display has no TCP listener
 ufw default deny incoming && ufw default allow outgoing
