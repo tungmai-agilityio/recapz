@@ -11,6 +11,11 @@ for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
       ;;
   esac
 done
+# Deploy secrets (.secrets/, used by scripts/bootstrap-host.sh) must never be committed, even with git add -f.
+if git diff --cached --name-only | grep -q '^\.secrets/'; then
+  echo "pre-commit: a file under .secrets/ is staged; unstage it" >&2
+  exit 1
+fi
 # The updater signing key must never be committed (docs/deploy.md, "macOS app").
 if git diff --cached --name-only | grep -qE '\.key$' ||
   git diff --cached -U0 | grep -qiE '^\+untrusted comment: .*secret key'; then
