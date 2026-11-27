@@ -10,7 +10,7 @@ and a hosted provider was an opt-in. Provider facts were read from provider docs
 |---|---|
 | Speech provider | Deepgram Nova-3 multilingual, batch and streaming, behind the `Transcriber` trait |
 | Modes | Batch on the recorded file after the call gives the stored transcript and speaker labels. A streaming WebSocket feeds the live view and Live Ask |
-| Speaker labels | Deepgram diarization on the batch pass. The live view shows text without speakers |
+| Speaker labels | Deepgram diarization on the batch pass. The live stream also asks for diarization: lines carry the speaker number, named from the notetaker's active-speaker samples when it has them, else "Speaker 1, 2" (unverified against a real call) |
 | LLM and embeddings | Provider-agnostic adapters, OpenAI as the default, per-task `Router` kept so reports and live answers can use different models. Anthropic and any OpenAI-compatible server stay as adapters |
 | Privacy rule | **Superseded 2026-11-20 (#323 to #326).** The original rule (audio only to the speech provider, providers named to members, a "Data sent to providers" section in `docs/spec.md`) is gone: members are no longer told which provider handles their data, and sending meeting text to the configured LLM is allowed. What stays: keys in the env file, local hard deletes, the per-document toggle |
 | Documents | The per-document "May be sent to the language model" toggle stays, default off |

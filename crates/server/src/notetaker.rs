@@ -1,7 +1,7 @@
 //! Runs the notetaker for `scheduled` meetings: claim them (capped), join through a `CallDriver`,
 //! record, then hand the audio to transcription or fail the meeting with a reason.
 //! A real driver and the spawned loop come with the Meet driver; this is the part that needs no browser.
-use crate::live::{hub, Msg};
+use crate::live::{hub, Labels, Msg, Who};
 use anyhow::Result;
 use recapz_core::{
     db::{now_ms, tenant_dir},
@@ -121,13 +121,22 @@ pub struct Live {
 }
 
 /// Moves what the stream has produced so far into the live view. `at_ms` is how far into the call we are.
-fn pump(id: &str, rx: &Receiver<LiveEvent>, at_ms: i64) {
+/// `active` is the participant the call shows as speaking now, which names the provider's speaker numbers.
+fn pump(id: &str, rx: &Receiver<LiveEvent>, at_ms: i64, active: Option<&str>, labels: &mut Labels) {
     while let Ok(e) = rx.try_recv() {
         hub().push(
             id,
             match e {
                 LiveEvent::Partial(t) => Msg::Partial(t),
-                LiveEvent::Final(text) => Msg::Final { at_ms, text },
+                LiveEvent::Final { text, speaker, ms } => Msg::Final {
+                    at_ms,
+                    text,
+                    who: speaker.map(|n| Who {
+                        n,
+                        label: labels.label(n, active),
+                        ms,
+                    }),
+                },
                 LiveEvent::Unavailable => Msg::Unavailable,
             },
         );
@@ -229,6 +238,8 @@ async fn capture<D: CallDriver>(
     // Opened on admission: audio and speaker samples before that are not part of the call.
     let mut files: Option<(WavWriter<BufWriter<File>>, BufWriter<File>)> = None;
     let mut stream: Option<(DeepgramStream, Receiver<LiveEvent>)> = None;
+    let mut labels = Labels::default();
+    let mut active: Option<String> = None;
     let end = loop {
         let event = driver.next().await;
         // The live view's controls: stop leaves (the audio so far goes to transcription), pause mutes.
@@ -285,11 +296,18 @@ async fn capture<D: CallDriver>(
                     }
                     samples += a.len() as u64;
                     if let Some((_, rx)) = &stream {
-                        pump(id, rx, (samples / 16) as i64);
+                        pump(
+                            id,
+                            rx,
+                            (samples / 16) as i64,
+                            active.as_deref(),
+                            &mut labels,
+                        );
                     }
                 }
             }
             Ok(DriverEvent::Speaker(s)) => {
+                active = Some(s.speaker.clone());
                 if let (Some((_, j)), false) = (&mut files, ctl.paused) {
                     // Names are participant data: written to the call's own folder, never logged.
                     writeln!(
@@ -461,15 +479,24 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         for e in [
             LiveEvent::Partial("hel".into()),
-            LiveEvent::Final("hello".into()),
+            LiveEvent::Final {
+                text: "hello".into(),
+                speaker: Some(1),
+                ms: 900,
+            },
             LiveEvent::Partial("wor".into()),
             LiveEvent::Unavailable,
         ] {
             tx.send(e).unwrap();
         }
-        pump("pump1", &rx, 5_000);
+        pump("pump1", &rx, 5_000, Some("Ann"), &mut Labels::default());
         let s = hub().subscribe("pump1").unwrap();
-        assert_eq!(s.lines, vec![(5_000, "hello".to_string())]);
+        let who = Who {
+            n: 1,
+            label: "Ann".into(),
+            ms: 900,
+        };
+        assert_eq!(s.lines, vec![(5_000, "hello".to_string(), Some(who))]);
         assert_eq!((s.partial.as_str(), s.unavailable), ("wor", true));
         hub().clear("pump1");
     }

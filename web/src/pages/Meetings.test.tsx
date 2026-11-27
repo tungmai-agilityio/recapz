@@ -245,6 +245,17 @@ test('a call being recorded gets a card with its elapsed time that keeps countin
   await waitFor(() => expect(within(cards[0]).getByText('2:10')).toBeTruthy(), { timeout: 2500 })
 })
 
+test('a recording call shows a speaker ribbon once someone has spoken', async () => {
+  const rows = [{ id: 'r1', title: 'Client call', platform: 'meet', status: 'recording', started_at: 1, created_at: 1 }]
+  const sse = 'event: final\ndata: {"at_ms":1000,"text":"hi","speaker":0,"label":"Speaker 1","ms":3000}\n\n' +
+    'event: final\ndata: {"at_ms":2000,"text":"yo","speaker":1,"label":"Speaker 2","ms":1000}\n\n'
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(url === '/api/meetings/r1/live' ? sse : JSON.stringify(rows))))
+  show()
+  const card = await screen.findByTestId('live-card')
+  await waitFor(() => expect(card.querySelectorAll('[data-variant="card"] > span')).toHaveLength(2))
+  expect([...card.querySelectorAll('[data-variant="card"] > span')].map((c) => c.getAttribute('data-speaker'))).toEqual(['0', '1'])
+})
+
 test('no card without a recording call', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ id: '1', title: 'Weekly sync', platform: 'meet', status: 'ready', started_at: 1, created_at: 1 }]))))
   show()
