@@ -382,3 +382,9 @@ label, must be confirmed in the live check (row 16).
 - Added insurance: if the worklet is refused or fails, a script processor delivers the same audio (tested by making `addModule` reject). The hook also covers the `webkitRTCPeerConnection` alias, not tested against a page that uses it.
 - `notetaker` now depends on `tracing` (already used by the server) to log the capture line.
 - Cause found: on the live call page (signed in, `crossOriginIsolated` true) `URL.createObjectURL` returns `blob:null/…`, and `addModule` fails with `AbortError` ("a dependency or cross-origin script failed to load"). The worklet now loads from a `data:` URL; on the same page that gave `path=worklet` and frames, and a live call recorded audio. Local fixtures with COOP/COEP or Document-Isolation-Policy still mint `blob:http://…` URLs, so there is no automated test for the opaque origin; the processor fallback stays as insurance.
+### Finding the chat box (T-687, after `meet_ui_changed: chat_input` on the demo host)
+- A live call on 2026-11-27 found the chat button but no box named like a message box within 3 s. No page dump exists for it, so the cause is unverified; the demo host now runs with `RECAPZ_NOTETAKER_DEBUG=1` so the next failure saves one.
+- The box is now also matched by `aria-labelledby`, `placeholder` and `aria-placeholder`. With no named match, the page's only text box is used; two unnamed boxes still fail as `chat_input`.
+- The wait for the box is 10 s (was 3 s), for a slow host. The chat button is not clicked a second time: it toggles the panel, so a late second click could close it.
+- A panel that shows a chat-off notice instead of a box is `ChatOff`, not `chat_input`. The Vietnamese chat-off words are our guess, not seen live.
+- Tested on our own fixture only (placeholder-only box, unnamed box, a panel drawn after 5 s, a Vietnamese chat-off notice).
