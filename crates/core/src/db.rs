@@ -41,6 +41,7 @@ pub fn open_control(data_dir: &Path) -> Result<Connection> {
         M::up(include_str!("../migrations/control_001.sql")),
         M::up(include_str!("../migrations/control_002.sql")),
         M::up(include_str!("../migrations/control_003.sql")),
+        M::up(include_str!("../migrations/control_004.sql")),
     ]);
     open(&data_dir.join("control.sqlite"), &m)
 }
@@ -223,7 +224,7 @@ fn pick_tenant(control: &Connection, user_id: &str) -> Result<Option<String>> {
 
 /// Invite-only sign-in: an existing user, or a pending invite which becomes a user. Every unexpired invite
 /// for the email (14 days) is accepted as a membership. Returns None for anyone else.
-/// `invites` is the pre-workspaces table: its rows never expire and are accepted the same way.
+/// `invites` is the pre-workspaces table: its rows expire after the same 14 days.
 pub fn user_for_sign_in(
     control: &Connection,
     email: &str,
@@ -235,7 +236,7 @@ pub fn user_for_sign_in(
         .prepare(
             "SELECT tenant_id, role FROM (
                SELECT tenant_id, role, created_at FROM workspace_invites WHERE email = ?1 AND created_at > ?2
-               UNION ALL SELECT tenant_id, role, 0 FROM invites WHERE email = ?1)
+               UNION ALL SELECT tenant_id, role, created_at FROM invites WHERE email = ?1 AND created_at > ?2)
              ORDER BY created_at, tenant_id",
         )?
         .query_map(params![email, cutoff], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -283,13 +284,19 @@ pub fn user_for_sign_in(
         .optional()?)
 }
 
+/// What `sessions.id` holds for a cookie value: its SHA-256, so a backup carries no usable session.
+pub fn session_key(session_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(session_id.as_bytes()))
+}
+
 /// Starts a session in the person's current workspace (see `pick_tenant`).
 pub fn create_session(control: &Connection, user_id: &str, ttl_ms: i64) -> Result<String> {
     let id = format!("{}{}", new_id(), new_id()).replace('-', "");
     control.execute(
         "INSERT INTO sessions (id, user_id, expires_at, tenant_id) VALUES (?1, ?2, ?3, ?4)",
         params![
-            id,
+            session_key(&id),
             user_id,
             now_ms() + ttl_ms,
             pick_tenant(control, user_id)?
@@ -306,14 +313,17 @@ pub fn user_for_session(control: &Connection, session_id: &str) -> Result<Option
             "SELECT u.id, u.email, u.name, m.tenant_id, m.role FROM sessions s JOIN users u ON u.id = s.user_id
              JOIN memberships m ON m.user_id = u.id AND m.tenant_id = COALESCE(s.tenant_id, u.tenant_id)
              WHERE s.id = ?1 AND s.expires_at > ?2",
-            params![session_id, now_ms()],
+            params![session_key(session_id), now_ms()],
             |r| Ok(User { id: r.get(0)?, email: r.get(1)?, name: r.get(2)?, tenant_id: r.get(3)?, role: r.get(4)? }),
         )
         .optional()?)
 }
 
 pub fn delete_session(control: &Connection, session_id: &str) -> Result<()> {
-    control.execute("DELETE FROM sessions WHERE id = ?1", [session_id])?;
+    control.execute(
+        "DELETE FROM sessions WHERE id = ?1",
+        [session_key(session_id)],
+    )?;
     Ok(())
 }
 
@@ -406,10 +416,12 @@ mod tests {
         .unwrap();
         drop(c);
         let c = open_control(dir.path()).unwrap();
-        let s1 = user_for_session(&c, "s1").unwrap().unwrap();
-        assert_eq!((s1.tenant_id.as_str(), s1.role.as_str()), ("t1", "admin"));
-        let s2 = user_for_session(&c, "s2").unwrap().unwrap();
-        assert_eq!((s2.tenant_id.as_str(), s2.role.as_str()), ("t2", "member"));
+        // Plaintext sessions are dropped by the migration; the hash of a stored id is not a login.
+        let n: i64 = c
+            .query_row("SELECT count(*) FROM sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0);
+        assert!(user_for_session(&c, "s1").unwrap().is_none());
         let n: i64 = c
             .query_row("SELECT count(*) FROM memberships", [], |r| r.get(0))
             .unwrap();
@@ -469,6 +481,45 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn session_ids_are_stored_hashed() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_control(dir.path()).unwrap();
+        c.execute_batch(
+            "INSERT INTO tenants (id, name) VALUES ('t1', 'T');
+             INSERT INTO users (id, email, tenant_id, role) VALUES ('u1', 'a@x.com', 't1', 'admin');
+             INSERT INTO memberships (user_id, tenant_id, role, created_at) VALUES ('u1', 't1', 'admin', 0);",
+        )
+        .unwrap();
+        let sid = create_session(&c, "u1", 60_000).unwrap();
+        let stored: String = c
+            .query_row("SELECT id FROM sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_ne!(stored, sid);
+        assert_eq!(stored, session_key(&sid));
+        assert_eq!(stored.len(), 64);
+        // The stored value is not itself a valid cookie.
+        assert!(user_for_session(&c, &stored).unwrap().is_none());
+        assert!(user_for_session(&c, &sid).unwrap().is_some());
+        delete_session(&c, &sid).unwrap();
+        assert!(user_for_session(&c, &sid).unwrap().is_none());
+    }
+
+    #[test]
+    fn legacy_invites_expire_after_14_days() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = open_control(dir.path()).unwrap();
+        c.execute("INSERT INTO tenants (id, name) VALUES ('t1', 'T')", [])
+            .unwrap();
+        c.execute(
+            "INSERT INTO invites (email, tenant_id, role, created_at) VALUES ('old@x.com', 't1', 'member', ?1), ('new@x.com', 't1', 'member', ?2)",
+            params![now_ms() - INVITE_TTL_MS - 1, now_ms()],
+        )
+        .unwrap();
+        assert!(user_for_sign_in(&c, "old@x.com", None).unwrap().is_none());
+        assert!(user_for_sign_in(&c, "new@x.com", None).unwrap().is_some());
     }
 
     #[test]

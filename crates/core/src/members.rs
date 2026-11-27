@@ -400,14 +400,14 @@ mod tests {
         control
             .execute(
                 "UPDATE sessions SET tenant_id = 't1' WHERE id = ?1",
-                [&sess_t1],
+                [crate::db::session_key(&sess_t1)],
             )
             .unwrap();
         let sess_t2 = create_session(&control, "b", 1_000_000).unwrap();
         control
             .execute(
                 "UPDATE sessions SET tenant_id = 't2' WHERE id = ?1",
-                [&sess_t2],
+                [crate::db::session_key(&sess_t2)],
             )
             .unwrap();
 

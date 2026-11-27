@@ -69,7 +69,7 @@ pub(super) async fn switch(
             if member {
                 tx.execute(
                     "UPDATE sessions SET tenant_id = ?1 WHERE id = ?2",
-                    params![id, sid],
+                    params![id, db::session_key(&sid)],
                 )?;
                 tx.execute(
                     "UPDATE users SET tenant_id = ?1 WHERE id = ?2",
