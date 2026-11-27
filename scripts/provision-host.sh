@@ -27,7 +27,8 @@ fi
 
 # under 4 GB RAM a call's Chromium needs room: 2 GB swap, used only under pressure
 if [ "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -lt 3500000 ] && ! swapon --show | grep -q /swapfile; then
-  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  [ -e /swapfile ] || { fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null; }
+  swapon /swapfile
   grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
   echo vm.swappiness=10 > /etc/sysctl.d/99-recapz.conf && sysctl -p /etc/sysctl.d/99-recapz.conf >/dev/null
 fi
