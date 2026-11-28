@@ -60,8 +60,9 @@ One ticket is one PR (about 300 source lines small, 600 medium). Order is by dep
 
 ## Open questions
 
-- Who owns the Zoom developer account, and can an unlisted app run for internal use? Blocks ticket 4. Maintainer.
-- Must external meetings (hosted by other organisations) be joinable? If yes, the app review is required before
-  they work and tickets 4 and 5 can only be verified on our own meetings until then. Maintainer.
-- Does the SDK's raw-data permission need the host to approve recording on each meeting? Check against Zoom's
-  current terms before ticket 4.
+Answered on 2026-11-28 (ticket #719), details in `docs/decisions/zoom-join-path.md`:
+
+- Account owner: the maintainer's personal Zoom developer account (transfer risk noted). Unlisted app for internal use: unverified.
+- External meetings: not required in v1, own-team meetings only. App review not started and not needed for v1.
+- Raw-data permission: host approval per meeting is unverified in official docs; the Meetings API join token for local recording may avoid it. Verify in a spike before ticket 4.
+- New, unverified: a search snippet said the Meeting SDK is not meant for bots or AI notetakers (RTMS instead). Confirm before ticket 4.
