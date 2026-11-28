@@ -11,6 +11,7 @@ use recapz_notetaker::{
     browser::Launch,
     meet::{MeetConfig, MeetDriver},
     profile,
+    zoom::{ZoomConfig, ZoomDriver},
 };
 use std::{
     fs,
@@ -19,6 +20,8 @@ use std::{
     time::Duration,
 };
 
+/// Where the Zoom sidecar listens unless `RECAPZ_ZOOM_SIDECAR_URL` says otherwise.
+const ZOOM_SIDECAR_URL: &str = "ws://127.0.0.1:9077";
 const TICK: Duration = Duration::from_secs(15);
 /// A calendar event is booked this long before it starts, so the notetaker is in the lobby on time.
 const LEAD_MS: i64 = 60_000;
@@ -160,6 +163,36 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
     let (d, t, i) = (s.data_dir.clone(), tenant.clone(), id.clone());
     let result = async {
         let c = db::open_tenant(&s.data_dir, &tenant)?;
+        let max_call_ms = i64::from(s.max_call_minutes.max(1)) * 60_000;
+        let platform: String =
+            c.query_row("SELECT platform FROM meetings WHERE id=?1", [&id], |r| {
+                r.get(0)
+            })?;
+        let notice = build_notice(
+            &recapz_core::settings::join_message(&c)?,
+            &recapz_core::settings::notetaker_name(&c)?,
+        );
+        if platform == "zoom" {
+            // The sidecar holds the Zoom credentials in its own environment; none pass through here.
+            let mut driver = ZoomDriver::new(ZoomConfig {
+                sidecar_url: std::env::var("RECAPZ_ZOOM_SIDECAR_URL")
+                    .unwrap_or_else(|_| ZOOM_SIDECAR_URL.into()),
+                name: recapz_core::settings::notetaker_name(&c)?,
+                notice,
+            });
+            return run_meeting(
+                c,
+                &s.data_dir,
+                &tenant,
+                &id,
+                &url,
+                max_call_ms,
+                &mut driver,
+                s.live.as_ref(),
+                now_ms,
+            )
+            .await;
+        }
         if let Some(why) = cannot_start(&s.data_dir, display) {
             return fail(&c, &s.data_dir, &tenant, &id, why);
         }
@@ -170,16 +203,12 @@ async fn call(s: Arc<Settings>, tenant: String, id: String, url: String) {
                 work_dir: tmp_dir(&s.data_dir).join(&id),
                 headless: false,
             },
-            notice: build_notice(
-                &recapz_core::settings::join_message(&c)?,
-                &recapz_core::settings::notetaker_name(&c)?,
-            ),
+            notice,
             require_notice: s.require_chat_notice,
             // Opt in with RECAPZ_NOTETAKER_DEBUG=1: a failing page step saves a screenshot.
             debug_dir: (std::env::var("RECAPZ_NOTETAKER_DEBUG").as_deref() == Ok("1"))
                 .then(|| s.data_dir.join("notetaker-debug").join(&id)),
         });
-        let max_call_ms = i64::from(s.max_call_minutes.max(1)) * 60_000;
         run_meeting(
             c,
             &s.data_dir,
@@ -556,5 +585,94 @@ Type 'opt out' to make it leave and delete the recording."
             "Recording. Type 'opt out' to make it leave and delete the recording."
         );
         assert!(recapz_notetaker::optout::is_opt_out("opt out"));
+    }
+
+    /// Runs a Zoom call for meeting `z1` against a fake sidecar that plays `script` and then hangs up.
+    async fn zoom_call(
+        script: Vec<tokio_tungstenite::tungstenite::Message>,
+    ) -> (tempfile::TempDir, String, rusqlite::Connection) {
+        use futures_util::{SinkExt, StreamExt};
+        let (dir, c) = setup();
+        c.execute(
+            "INSERT INTO meetings (id, title, platform, status, join_url, created_at) VALUES ('z1', 't', 'zoom', 'joining', 'https://zoom.us/j/123456789', 0)",
+            [],
+        )
+        .unwrap();
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", l.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (sock, _) = l.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+            ws.next().await; // the join frame
+            for m in script {
+                ws.send(m).await.unwrap();
+            }
+            ws.close(None).await.unwrap();
+            while ws.next().await.is_some() {}
+        });
+        let mut d = ZoomDriver::new(ZoomConfig {
+            sidecar_url: url,
+            name: "Recapz".into(),
+            notice: "notice".into(),
+        });
+        run_meeting(
+            db::open_tenant(dir.path(), "t1").unwrap(),
+            dir.path(),
+            "t1",
+            "z1",
+            "https://zoom.us/j/123456789",
+            i64::MAX,
+            &mut d,
+            None,
+            now_ms,
+        )
+        .await
+        .unwrap();
+        let s = c
+            .query_row("SELECT status FROM meetings WHERE id='z1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        (dir, s, c)
+    }
+
+    fn text(v: serde_json::Value) -> tokio_tungstenite::tungstenite::Message {
+        tokio_tungstenite::tungstenite::Message::text(v.to_string())
+    }
+
+    #[tokio::test]
+    async fn a_fake_sidecar_run_writes_the_wav_and_speakers_with_participant_names() {
+        use serde_json::json;
+        let mut script = vec![text(json!({"type": "admitted"}))];
+        script.push(text(
+            json!({"type": "speaker", "at_ms": 250, "name": "Ann Lee"}),
+        ));
+        for _ in 0..2 {
+            script.push(tokio_tungstenite::tungstenite::Message::binary(vec![
+                7u8;
+                32_000
+            ]));
+        }
+        script.push(text(json!({"type": "ended"})));
+        let (dir, status, _c) = zoom_call(script).await;
+        // Two seconds is under the crash minimum but the call ended cleanly, so it is transcribed.
+        assert_eq!(status, "transcribing");
+        let audio = db::tenant_dir(dir.path(), "t1").join("audio/z1");
+        let wav = fs::read(audio.join("recording.wav")).unwrap();
+        assert_eq!(wav.len(), 44 + 64_000);
+        assert_eq!(
+            fs::read_to_string(audio.join("speakers.jsonl")).unwrap(),
+            "{\"at_ms\":250,\"speaker\":\"Ann Lee\"}\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_sidecar_that_hangs_up_before_enough_audio_fails_the_meeting_with_a_reason() {
+        let (_d, status, c) = zoom_call(vec![text(serde_json::json!({"type": "admitted"}))]).await;
+        assert_eq!(status, "failed");
+        let error: String = c
+            .query_row("SELECT error FROM meetings WHERE id='z1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(error, "The call dropped before enough audio was captured");
     }
 }

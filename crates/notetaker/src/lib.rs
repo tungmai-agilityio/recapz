@@ -11,3 +11,4 @@ pub use recapz_core::speakers;
 #[cfg(all(test, feature = "browser-tests"))]
 mod test_support;
 pub mod wav;
+pub mod zoom;

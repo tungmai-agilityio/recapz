@@ -1721,6 +1721,7 @@ dependencies = [
  "recapz-core",
  "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
 ]
 
