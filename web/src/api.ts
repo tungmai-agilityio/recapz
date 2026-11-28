@@ -8,6 +8,8 @@ export interface Meeting {
   duration_ms?: number | null
   action_item_count?: number
   speakers?: { id: string; name: string }[]
+  /** A call being recorded: who has spoken so far (0-based speaker number, name or "Speaker N", talk time in ms). */
+  live_speakers?: { speaker: number; name: string; ms: number }[]
 }
 
 export interface MeetingDetail extends Meeting {

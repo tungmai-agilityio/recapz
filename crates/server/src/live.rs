@@ -199,6 +199,27 @@ impl LiveHub {
         Some(c.lines[a..b].iter().map(|(_, t, _)| t.clone()).collect())
     }
 
+    /// Who has spoken so far and for how long (latest label per speaker number, ordered by number);
+    /// empty when the call is not live here or nobody has spoken.
+    pub fn speakers(&self, id: &str) -> Vec<Who> {
+        let calls = self.calls.lock().unwrap();
+        let mut by: std::collections::BTreeMap<u32, Who> = Default::default();
+        for w in calls
+            .get(id)
+            .into_iter()
+            .flat_map(|c| c.lines.iter().filter_map(|l| l.2.as_ref()))
+        {
+            let e = by.entry(w.n).or_insert_with(|| Who {
+                n: w.n,
+                label: String::new(),
+                ms: 0,
+            });
+            e.label.clone_from(&w.label);
+            e.ms += w.ms;
+        }
+        by.into_values().collect()
+    }
+
     /// `None` when the call is not live here.
     pub fn subscribe(&self, id: &str) -> Option<Snapshot> {
         let calls = self.calls.lock().unwrap();

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import type { Meeting } from '../api'
 import { clock } from '../clock'
-import { talk, useLiveLines } from '../live-talk'
 import { Ribbon } from '../ui/Ribbon'
 import { Badge } from '../ui/Badge'
 
@@ -13,7 +12,7 @@ export function LiveCard({ m }: { m: Meeting }) {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
-  const { segments } = talk(useLiveLines(m.id))
+  const segments = (m.live_speakers ?? []).map((s) => ({ speaker: s.speaker, weight: Math.max(s.ms, 1) }))
   return (
     <div className="frame flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="live-card">
       <Badge tone="signal">Recording</Badge>

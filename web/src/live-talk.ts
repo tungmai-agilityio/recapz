@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react'
-import { watchLive } from './api'
-
 /** A finished live line. `speaker` is the provider's 0-based number (one colour per number), `label` the name or "Speaker N" to show, `ms` how long it took to say. */
 export interface Said { at_ms: number; text: string; speaker?: number; label?: string; ms?: number; gap?: boolean }
 
@@ -17,15 +14,4 @@ export function talk(lines: Said[]) {
   }
   const totals = [...label].sort((a, b) => a[0] - b[0]).map(([speaker, name]) => ({ speaker, label: name, ms: ms.get(speaker) ?? 0 }))
   return { totals, segments }
-}
-
-/** The finished lines of a live call, for a view that only needs its speakers (the Meetings live card). */
-export function useLiveLines(id: string): Said[] {
-  const [lines, setLines] = useState<Said[]>([])
-  useEffect(() => {
-    const stop = new AbortController()
-    watchLive(id, (e) => { if (e.type === 'final') setLines((ls) => [...ls, e]) }, stop.signal).catch(() => {})
-    return () => stop.abort()
-  }, [id])
-  return lines
 }
