@@ -261,3 +261,17 @@ test('no card without a recording call', async () => {
   await screen.findByText('Weekly sync')
   expect(screen.queryByTestId('live-card')).toBeNull()
 })
+
+test('the list shows member-facing platform labels', async () => {
+  const now = Date.now()
+  const labels = { meet: 'Google Meet', zoom: 'Zoom', upload: 'Upload', browser: 'Browser' }
+  const rows = Object.keys(labels).map((platform, i) => ({ id: String(i), title: `m-${platform}`, platform, status: 'ready', started_at: now - i, created_at: now }))
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  show()
+  await screen.findByText('m-meet')
+  for (const [platform, label] of Object.entries(labels)) {
+    const text = screen.getByText(`m-${platform}`).closest('li')!.textContent!
+    expect(text).toContain(label)
+    expect(screen.queryAllByText(platform)).toHaveLength(0)
+  }
+})
