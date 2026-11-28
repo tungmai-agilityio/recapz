@@ -105,6 +105,17 @@ export const putJoinSettings = async (s: JoinSettings): Promise<JoinSettings> =>
     method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify(s),
   }))).json()
 
+export type DefaultShare = 'owner' | 'attendees' | 'workspace'
+
+export const getDefaultShare = async (): Promise<{ share: DefaultShare }> =>
+  (await check(await fetch('/api/settings/default-share'))).json()
+
+/** Admin only. Applies to meetings created from now on. */
+export const putDefaultShare = async (share: DefaultShare): Promise<{ share: DefaultShare }> =>
+  (await check(await fetch('/api/settings/default-share', {
+    method: 'PUT', headers: { 'content-type': 'application/json', ...csrf() }, body: JSON.stringify({ share }),
+  }))).json()
+
 export interface Usage {
   speech_micro_usd: number
   llm_micro_usd: number

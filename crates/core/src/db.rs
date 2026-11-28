@@ -63,6 +63,7 @@ pub fn open_tenant(data_dir: &Path, tenant_id: &str) -> Result<Connection> {
         M::up(include_str!("../migrations/tenant_008.sql")),
         M::up(include_str!("../migrations/tenant_009.sql")),
         M::up(include_str!("../migrations/tenant_010.sql")),
+        M::up(include_str!("../migrations/tenant_011.sql")),
     ]);
     open(&tenant_dir(data_dir, tenant_id).join("recapz.sqlite"), &m)
 }

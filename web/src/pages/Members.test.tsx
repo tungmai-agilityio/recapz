@@ -17,6 +17,7 @@ function run(calls: string[] = [], fail?: Response, role = 'admin', email = 'off
   vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${u}${typeof init?.body === 'string' ? ' ' + init.body : ''}`)
     if (u === '/api/me') return new Response(JSON.stringify({ email: 'ana@example.com', name: 'Ana', role }))
+    if (u === '/api/settings/default-share') return new Response(JSON.stringify({ share: 'attendees' }))
     if (init?.method && fail) return fail
     if (init?.method === 'POST') return new Response(JSON.stringify({ link: 'https://x.test/', email }), { status: 201 })
     if (init?.method) return new Response(null, { status: 204 })
@@ -41,6 +42,14 @@ test('a member gets a notice and the members API is never requested', async () =
   run(calls, undefined, 'member')
   expect(await screen.findByText('Only an admin can manage members.')).toBeTruthy()
   expect(calls).toEqual(['GET /api/me'])
+})
+
+test('default sharing shows the saved value and a change sends PUT', async () => {
+  const calls: string[] = []
+  run(calls)
+  expect((await screen.findByLabelText('Attendees') as HTMLInputElement).checked).toBe(true)
+  fireEvent.click(screen.getByLabelText('Everyone in the workspace'))
+  await waitFor(() => expect(calls).toContain('PUT /api/settings/default-share {"share":"workspace"}'))
 })
 
 test('changing a role sends PATCH', async () => {

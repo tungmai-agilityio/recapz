@@ -116,3 +116,61 @@ async fn settings_have_defaults_admin_updates_member_refused_and_bad_input_rejec
     let (_, _, b) = send(&app, req("GET", &boss, "")).await;
     assert_eq!(b, new, "rejected input changes nothing");
 }
+
+#[tokio::test]
+async fn default_share_is_admin_only_validated_and_needs_csrf() {
+    let dir = tempfile::tempdir().unwrap();
+    let control = db::open_control(dir.path()).unwrap();
+    db::bootstrap_admin(&control, "boss@example.com").unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    control
+        .execute(
+            "INSERT INTO invites (email, tenant_id, role) VALUES ('amy@example.com', ?1, 'member')",
+            [&tid],
+        )
+        .unwrap();
+    let cfg = Config {
+        data_dir: dir.path().into(),
+        dev_login: true,
+        ..Config::default()
+    };
+    let app = routes::router(cfg, Arc::new(Mutex::new(control)));
+    let boss = send(&app, login("boss@example.com")).await.1.unwrap();
+    let amy = send(&app, login("amy@example.com")).await.1.unwrap();
+    let call = |method: &str, cookie: &str, body: &str, csrf: bool| {
+        let mut b = Request::builder()
+            .method(method)
+            .uri("/api/settings/default-share")
+            .header(header::CONTENT_TYPE, "application/json");
+        b = if csrf {
+            b.header(header::COOKIE, format!("{cookie}; recapz_csrf=t"))
+                .header("x-csrf-token", "t")
+        } else {
+            b.header(header::COOKIE, cookie)
+        };
+        b.body(Body::from(body.to_string())).unwrap()
+    };
+    let attendees = r#"{"share":"attendees"}"#;
+    let workspace = r#"{"share":"workspace"}"#;
+
+    let (s, _, b) = send(&app, call("GET", &amy, "", true)).await;
+    assert_eq!((s, b.as_str()), (StatusCode::OK, attendees));
+    let (s, _, _) = send(&app, call("PUT", &amy, workspace, true)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, _) = send(&app, call("PUT", &boss, workspace, false)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "no CSRF token");
+    let (s, _, b) = send(&app, call("PUT", &boss, r#"{"share":"everyone"}"#, true)).await;
+    assert_eq!(
+        (s, b.as_str()),
+        (
+            StatusCode::BAD_REQUEST,
+            "share must be owner, attendees or workspace"
+        )
+    );
+    let (_, _, b) = send(&app, call("GET", &boss, "", true)).await;
+    assert_eq!(b, attendees, "refused changes save nothing");
+    let (s, _, b) = send(&app, call("PUT", &boss, workspace, true)).await;
+    assert_eq!((s, b.as_str()), (StatusCode::OK, workspace));
+    let (_, _, b) = send(&app, call("GET", &amy, "", true)).await;
+    assert_eq!(b, workspace);
+}

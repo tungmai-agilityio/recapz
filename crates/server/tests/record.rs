@@ -211,6 +211,30 @@ async fn start_checks_its_input() {
 }
 
 #[tokio::test]
+async fn a_new_recording_takes_the_workspace_default_share() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_addr, app) = serve(dir.path()).await;
+    let boss = login(&app, "boss@example.com").await;
+    let first = record(&app, &boss).await;
+    tenant(dir.path())
+        .execute(
+            "INSERT INTO settings (key, value) VALUES ('default_share', 'owner')",
+            [],
+        )
+        .unwrap();
+    let second = record(&app, &boss).await;
+    let share = |id: &str| -> String {
+        tenant(dir.path())
+            .query_row("SELECT share FROM meetings WHERE id=?1", [id], |r| r.get(0))
+            .unwrap()
+    };
+    assert_eq!(
+        (share(&first).as_str(), share(&second).as_str()),
+        ("attendees", "owner")
+    );
+}
+
+#[tokio::test]
 async fn a_recording_is_streamed_stopped_and_handed_to_transcription() {
     let dir = tempfile::tempdir().unwrap();
     let (addr, app) = serve(dir.path()).await;
