@@ -527,6 +527,24 @@ mod tests {
     }
 
     #[test]
+    fn a_booked_meeting_takes_the_workspace_default_share() {
+        let (_d, c) = db();
+        crate::settings::set_default_share(&c, "workspace").unwrap();
+        switched_on(
+            &c,
+            "u1",
+            "a",
+            10_000,
+            "https://meet.google.com/abc-defg-hij",
+        );
+        book_due(&c, 5_000, 5_000).unwrap();
+        let share: String = c
+            .query_row("SELECT share FROM meetings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(share, "workspace");
+    }
+
+    #[test]
     fn only_switched_on_events_with_a_link_that_have_not_ended_are_booked() {
         let (_d, c) = db();
         let url = "https://zoom.us/j/123456789";

@@ -132,6 +132,10 @@ pub fn router_with_mail(
             "/api/settings/transcript-retention",
             get(get_transcript_retention).put(put_transcript_retention),
         )
+        .route(
+            "/api/settings/default-share",
+            get(get_default_share).put(put_default_share),
+        )
         .route("/api/usage", get(get_usage))
         .route("/api/notetaker/status", get(get_notetaker_status))
         .route("/api/workspaces", get(workspaces::list))
@@ -712,6 +716,41 @@ async fn put_settings(
     })
     .await???;
     Ok(Json(b))
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct DefaultShare {
+    /// `owner`, `attendees` or `workspace`: who can see a new meeting besides its owner.
+    share: String,
+}
+
+async fn get_default_share(State(app): State<App>, jar: CookieJar) -> Res<Json<DefaultShare>> {
+    let u = app.current_user(&jar).await?;
+    let share = app
+        .tenant(u.tenant_id.clone(), |c| {
+            recapz_core::settings::default_share(c)
+        })
+        .await?;
+    Ok(Json(DefaultShare { share }))
+}
+
+/// Admin only. Applies to meetings created from now on; existing ones keep their sharing.
+async fn put_default_share(
+    State(app): State<App>,
+    jar: CookieJar,
+    Json(body): Json<DefaultShare>,
+) -> Res<Json<DefaultShare>> {
+    let u = app.current_user(&jar).await?;
+    if u.role != "admin" {
+        return Err(ApiError::Denied("only an admin can change default sharing"));
+    }
+    let share = body.share.clone();
+    app.tenant(u.tenant_id.clone(), move |c| {
+        Ok(recapz_core::settings::set_default_share(c, &share)
+            .map_err(|_| ApiError::BadRequest("share must be owner, attendees or workspace")))
+    })
+    .await??;
+    Ok(Json(body))
 }
 
 #[derive(Serialize)]

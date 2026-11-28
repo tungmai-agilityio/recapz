@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { cancelInvite, getMe, getMembers, inviteMember, removeMember, setMemberRole, Unauthorized, type InviteEmail, type Role } from '../api'
+import { cancelInvite, getDefaultShare, getMe, putDefaultShare, type DefaultShare, getMembers, inviteMember, removeMember, setMemberRole, Unauthorized, type InviteEmail, type Role } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Face } from '../ui/Face'
@@ -19,6 +19,36 @@ const sentText = (r: { to: string; email: InviteEmail }) => ({
   off: 'Invite saved. Email is not set up, so share this link:',
   failed: `Invite saved, but the email to ${r.to} could not be sent. Share this link:`,
 })[r.email]
+
+const SHARES: { value: DefaultShare; label: string }[] = [
+  { value: 'owner', label: 'Only the owner' },
+  { value: 'attendees', label: 'Attendees' },
+  { value: 'workspace', label: 'Everyone in the workspace' },
+]
+
+function DefaultSharing() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const q = useQuery({ queryKey: ['default-share'], queryFn: getDefaultShare })
+  const save = useMutation({
+    mutationFn: putDefaultShare,
+    onSuccess: (r) => { qc.setQueryData(['default-share'], r); toast('Default sharing saved') },
+    onError: (e) => toast(reason(e, 'Could not save.')),
+  })
+  if (!q.data) return null
+  return (
+    <fieldset className="frame flex flex-col gap-2 text-sm" disabled={save.isPending}>
+      <legend className="font-semibold">Default sharing</legend>
+      <p className="text-mute">Who can see a new meeting besides its owner. Existing meetings keep their sharing.</p>
+      {SHARES.map((s) => (
+        <label key={s.value} className="flex items-center gap-2">
+          <input type="radio" name="default-share" value={s.value} checked={q.data.share === s.value} onChange={() => save.mutate(s.value)} />
+          {s.label}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
 
 export function Members() {
   const qc = useQueryClient()
@@ -97,7 +127,8 @@ export function Members() {
           </p>
         )}
       </form>
-      {list.isError && !(list.error instanceof Unauthorized) && <p role="alert" className="text-sm text-bad">Could not load the members.</p>}
+      {me.data?.role === 'admin' && <DefaultSharing />}
+      {list.isError &&!(list.error instanceof Unauthorized) && <p role="alert" className="text-sm text-bad">Could not load the members.</p>}
       {list.data && (
         <div className="frame">
           <Table label="Members" head={['Member', 'Email', 'Role', 'Meetings', '']}>

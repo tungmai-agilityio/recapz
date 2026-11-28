@@ -50,6 +50,26 @@ pub fn set_join_rule(c: &Connection, rule: &str) -> Result<()> {
     Ok(())
 }
 
+const DEFAULT_SHARE: &str = "default_share";
+
+/// Who can see a new meeting besides its owner: `owner`, `attendees` (the default) or `workspace`.
+/// A database trigger applies it to every new meeting.
+pub fn default_share(c: &Connection) -> Result<String> {
+    text(c, DEFAULT_SHARE, "attendees")
+}
+
+pub fn set_default_share(c: &Connection, share: &str) -> Result<()> {
+    if !["owner", "attendees", "workspace"].contains(&share) {
+        bail!("unknown share");
+    }
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![DEFAULT_SHARE, share],
+    )?;
+    Ok(())
+}
+
 const NOTETAKER_NAME: &str = "notetaker_name";
 const JOIN_MESSAGE: &str = "join_message";
 pub const DEFAULT_NOTETAKER_NAME: &str = "Recapz notetaker";
