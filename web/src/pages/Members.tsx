@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { cancelInvite, getDefaultShare, getMe, putDefaultShare, type DefaultShare, getMembers, inviteMember, removeMember, setMemberRole, Unauthorized, type InviteEmail, type Role } from '../api'
+import { cancelInvite, getDefaultShare, getMe, getMembers, inviteMember, putDefaultShare, removeMember, setMemberRole, Unauthorized, type DefaultShare, type InviteEmail, type Role } from '../api'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Face } from '../ui/Face'
@@ -128,7 +128,7 @@ export function Members() {
         )}
       </form>
       {me.data?.role === 'admin' && <DefaultSharing />}
-      {list.isError &&!(list.error instanceof Unauthorized) && <p role="alert" className="text-sm text-bad">Could not load the members.</p>}
+      {list.isError && !(list.error instanceof Unauthorized) && <p role="alert" className="text-sm text-bad">Could not load the members.</p>}
       {list.data && (
         <div className="frame">
           <Table label="Members" head={['Member', 'Email', 'Role', 'Meetings', '']}>
