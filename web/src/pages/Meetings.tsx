@@ -104,6 +104,8 @@ export function Meetings() {
   const { data, error, isLoading } = useQuery({
     queryKey: ['meetings'],
     queryFn: getMeetings,
+    // The live card's ribbon comes from this list, so refresh it every 5 s while a call is recording.
+    refetchInterval: (q) => (q.state.data?.some((m) => m.status === 'recording') ? 5000 : false),
     retry: (n, e) => !(e instanceof Unauthorized) && n < 2,
   })
   const toast = useToast()

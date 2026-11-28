@@ -101,7 +101,7 @@ definition of done for every web PR.
       the prototype's "Transcribing · 64%" has no percent in the app, and there is no opted-out state.
 - [ ] Aside "Next up today": time, title, per-meeting switch (`role=switch`), "Join rules" link (built in #137). The time and "Open link" no longer break across lines; checked in Chromium at 1280, 1100 and 390 px, Daylight light only, with screenshots on the fix PR. Left unticked: on 2026-11-20 (#331) no calendar was connected, so the card showed only its empty text ("Nothing else today. Connect Google Calendar on Recording & privacy.") at 1280 and 390 px; rows and switches were not seen against the prototype's
 - [ ] Live card (recording badge, elapsed time, ribbon, Open live view) only while recording
-      Open: built without the ribbon (the live stream has no speaker labels): Recording badge, title, platform, time
+      Open: the ribbon (T-416) comes from the live meeting list item (`live_speakers`: number, name, talk time; the list refreshes every 5 s while a call records), so it appears once a speaker has been heard and only when live transcription is on. The prototype already shows the card ribbon, "Speaking now" and talk time (checked 2026-11-28), so it needed no change. Recording badge, title, platform, time
       since the call was admitted (counts every second), and an "Open live view" link; one card per recording call
       above the list. Checked in jsdom only: no call was recording on 2026-11-20 (#331), so the card was not seen. The prototype shows its ribbon and "Open live view" in the aside; the app puts the card above the list. Rows with status `recording`
       also keep their Recording badge, and the rail links to the live view.
@@ -206,8 +206,7 @@ non-owners once the list returns the owner.
       live state in the repo. Pause or Resume and Stop and leave (confirm dialog) show to the owner or an admin (`can_edit`) while the call is live, with a Paused badge and "Recording paused/resumed" gap lines in the transcript (T-415). They need the live stream, so without live transcription configured the routes answer 404 and the buttons report that the call is no longer live. jsdom only: not checked in a browser.
 - [ ] Live ribbon, live transcript, speaking now, talk time, noted so far
       Open: the live transcript is built (lines with the time into the call, the partial line in grey, click a line to
-      ask about it). The ribbon, speaking now, talk time and noted so far are not: the live stream has no speaker
-      labels or notes (`docs/decisions/hosted-speech.md`).
+      ask about it). T-416 adds the speaker on each line, the ribbon, "Speaking now" (the last speaker, for 4 s after the last text) and talk time per speaker, from the provider's speaker numbers on the live stream; they carry a name when the notetaker's active-speaker samples name them (most votes wins), else "Speaker 1, 2". jsdom only; the provider's live speaker numbers are unverified against a real call. Noted so far is not built: the live stream has no notes (`docs/decisions/hosted-speech.md`).
 - [ ] Live Ask panel ("Only you see these"): context line (last 60 s, or a clicked transcript line, with "use last 60 s"),
       optional extra words, Ask now button and `A` hotkey; answer cards newest first with asker, quote, time taken, answer,
       and Document or Meeting sources with page or time; "Passages only" card for documents not sent to the language model;

@@ -12,9 +12,15 @@ fn event(name: &str, data: serde_json::Value) -> String {
 fn render(m: &Msg) -> String {
     match m {
         Msg::Partial(t) => event("partial", serde_json::json!({ "text": t })),
-        Msg::Final { at_ms, text } => {
-            event("final", serde_json::json!({ "at_ms": at_ms, "text": text }))
-        }
+        Msg::Final { at_ms, text, who } => event(
+            "final",
+            match who {
+                Some(w) => {
+                    serde_json::json!({ "at_ms": at_ms, "text": text, "speaker": w.n, "label": w.label, "ms": w.ms })
+                }
+                None => serde_json::json!({ "at_ms": at_ms, "text": text }),
+            },
+        ),
         Msg::Unavailable => event("unavailable", serde_json::json!({})),
         Msg::Paused { at_ms } => event("paused", serde_json::json!({ "at_ms": at_ms })),
         Msg::Resumed { at_ms } => event("resumed", serde_json::json!({ "at_ms": at_ms })),
@@ -113,7 +119,7 @@ pub async fn live(State(app): State<App>, jar: CookieJar, Path(id): Path<String>
         let mut head: Vec<Msg> = snap
             .lines
             .into_iter()
-            .map(|(at_ms, text)| Msg::Final { at_ms, text })
+            .map(|(at_ms, text, who)| Msg::Final { at_ms, text, who })
             .collect();
         if !snap.partial.is_empty() {
             head.push(Msg::Partial(snap.partial));

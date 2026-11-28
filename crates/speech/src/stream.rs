@@ -1,5 +1,5 @@
 //! Deepgram streaming: sends the notetaker's 16 kHz mono i16 frames over a WebSocket and yields
-//! partial and final text, without speakers. Never blocks or fails the caller: any trouble ends in
+//! partial and final text; each final line carries the provider's speaker number. Never blocks or fails the caller: any trouble ends in
 //! one `LiveEvent::Unavailable`, and later frames are dropped. Errors and logs carry no key and no text.
 use std::io::ErrorKind;
 use std::net::TcpStream;
@@ -19,8 +19,13 @@ const POLL: Duration = Duration::from_millis(50);
 pub enum LiveEvent {
     /// Text that may still change.
     Partial(String),
-    /// Text the provider will not change.
-    Final(String),
+    /// Text the provider will not change. `speaker` is its 0-based speaker number (`None` when the provider
+    /// gave none) and `ms` how long the words took to say.
+    Final {
+        text: String,
+        speaker: Option<u32>,
+        ms: i64,
+    },
     /// The connection failed or dropped. Recording goes on; the live view says so.
     Unavailable,
 }
@@ -41,7 +46,7 @@ impl DeepgramStream {
             return (Self { frames: ftx }, erx);
         };
         let url = format!(
-            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&punctuate=true&smart_format=true&endpointing=400&utterance_end_ms=1000&mip_opt_out=true"
+            "{base_url}?model=nova-3&language={lang}&encoding=linear16&sample_rate=16000&channels=1&diarize=true&interim_results=true&punctuate=true&smart_format=true&endpointing=400&utterance_end_ms=1000&mip_opt_out=true"
         );
         let key = api_key.to_string();
         thread::spawn(move || {
@@ -73,7 +78,7 @@ fn run(
         format!("Token {key}").parse().map_err(|_| ())?,
     );
     let (mut ws, _) = tungstenite::connect(req).map_err(|_| ())?;
-    let mut pending = String::new();
+    let mut pending = Pending::default();
     match ws.get_mut() {
         MaybeTlsStream::Plain(s) => set_poll(s),
         MaybeTlsStream::Rustls(s) => set_poll(s.get_mut()),
@@ -132,18 +137,32 @@ fn set_poll(s: &TcpStream) -> Result<(), ()> {
     s.set_read_timeout(Some(POLL)).map_err(|_| ())
 }
 
+/// Finished pieces of the line being built, and who is speaking them.
+#[derive(Default)]
+struct Pending {
+    text: String,
+    speaker: Option<u32>,
+    ms: i64,
+}
+
 /// Sends the buffered finished pieces as one `Final` line.
-fn flush(pending: &mut String, events: &Sender<LiveEvent>) {
-    if !pending.is_empty() {
-        let _ = events.send(LiveEvent::Final(std::mem::take(pending)));
+fn flush(pending: &mut Pending, events: &Sender<LiveEvent>) {
+    let p = std::mem::take(pending);
+    if !p.text.is_empty() {
+        let _ = events.send(LiveEvent::Final {
+            text: p.text,
+            speaker: p.speaker,
+            ms: p.ms,
+        });
     }
 }
 
 /// Turns one provider message into events. The provider finalises many short pieces per sentence;
 /// they are held in `pending` and sent as one `Final` when it reports the speaker paused
-/// (`speech_final`) or the utterance ended, so a line is a whole sentence, not a fragment.
-/// Everything else (metadata, empty audio) is ignored.
-fn handle(msg: &str, pending: &mut String, events: &Sender<LiveEvent>) {
+/// (`speech_final`) or the utterance ended, so a line is a whole sentence, not a fragment. A piece by a
+/// different speaker than the line so far ends that line first. Everything else (metadata, empty audio)
+/// is ignored.
+fn handle(msg: &str, pending: &mut Pending, events: &Sender<LiveEvent>) {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else {
         return;
     };
@@ -156,21 +175,32 @@ fn handle(msg: &str, pending: &mut String, events: &Sender<LiveEvent>) {
                 .trim();
             if v["is_final"].as_bool() == Some(true) {
                 if !text.is_empty() {
-                    if !pending.is_empty() {
-                        pending.push(' ');
+                    // The speaker of a piece is the one of its first word.
+                    let speaker = v["channel"]["alternatives"][0]["words"][0]["speaker"]
+                        .as_u64()
+                        .map(|n| n as u32);
+                    if pending.speaker.is_some() && speaker.is_some() && pending.speaker != speaker
+                    {
+                        flush(pending, events);
                     }
-                    pending.push_str(text);
+                    if pending.text.is_empty() {
+                        pending.speaker = speaker;
+                    } else {
+                        pending.text.push(' ');
+                    }
+                    pending.text.push_str(text);
+                    pending.ms += (v["duration"].as_f64().unwrap_or(0.0) * 1000.0).round() as i64;
                 }
                 if v["speech_final"].as_bool() == Some(true) {
                     flush(pending, events);
-                } else if !pending.is_empty() {
-                    let _ = events.send(LiveEvent::Partial(pending.clone()));
+                } else if !pending.text.is_empty() {
+                    let _ = events.send(LiveEvent::Partial(pending.text.clone()));
                 }
             } else if !text.is_empty() {
-                let shown = if pending.is_empty() {
+                let shown = if pending.text.is_empty() {
                     text.to_string()
                 } else {
-                    format!("{pending} {text}")
+                    format!("{} {text}", pending.text)
                 };
                 let _ = events.send(LiveEvent::Partial(shown));
             }
@@ -187,6 +217,14 @@ mod tests {
     use std::sync::mpsc::RecvTimeoutError;
 
     const WAIT: Duration = Duration::from_secs(5);
+
+    fn fin(text: &str) -> LiveEvent {
+        LiveEvent::Final {
+            text: text.into(),
+            speaker: None,
+            ms: 0,
+        }
+    }
 
     fn results(text: &str, fin: bool) -> Message {
         format!(r#"{{"type":"Results","is_final":{fin},"speech_final":{fin},"channel":{{"alternatives":[{{"transcript":"{text}"}}]}}}}"#).into()
@@ -242,6 +280,7 @@ mod tests {
             "opted out of model improvement: {uri}"
         );
         for p in [
+            "diarize=true",
             "punctuate=true",
             "smart_format=true",
             "endpointing=400",
@@ -254,16 +293,10 @@ mod tests {
             events.recv_timeout(WAIT).unwrap(),
             LiveEvent::Partial("xin".into())
         );
-        assert_eq!(
-            events.recv_timeout(WAIT).unwrap(),
-            LiveEvent::Final("xin chào".into())
-        );
+        assert_eq!(events.recv_timeout(WAIT).unwrap(), fin("xin chào"));
         drop(s);
         // the flushed tail arrives after the drop, then the channel ends without Unavailable
-        assert_eq!(
-            events.recv_timeout(WAIT).unwrap(),
-            LiveEvent::Final("hết".into())
-        );
+        assert_eq!(events.recv_timeout(WAIT).unwrap(), fin("hết"));
         assert_eq!(
             events.recv_timeout(WAIT),
             Err(RecvTimeoutError::Disconnected)
@@ -279,7 +312,7 @@ mod tests {
     #[test]
     fn finalised_pieces_make_one_line_until_the_speaker_pauses() {
         let (tx, rx) = mpsc::channel();
-        let mut pending = String::new();
+        let mut pending = Pending::default();
         for m in [
             msg("Xin chào", false, false),
             msg("Xin chào,", true, false),
@@ -299,12 +332,50 @@ mod tests {
                 LiveEvent::Partial("Xin chào".into()),
                 LiveEvent::Partial("Xin chào,".into()),
                 LiveEvent::Partial("Xin chào, mọi người".into()),
-                LiveEvent::Final("Xin chào, mọi người.".into()),
+                fin("Xin chào, mọi người."),
                 LiveEvent::Partial("Tiếp".into()),
-                LiveEvent::Final("Tiếp".into()),
+                fin("Tiếp"),
             ]
         );
-        assert!(pending.is_empty());
+        assert!(pending.text.is_empty());
+    }
+
+    /// A finished piece spoken by `speaker` for `secs` seconds.
+    fn said(text: &str, speaker: u32, secs: f64, speech_final: bool) -> String {
+        format!(
+            r#"{{"type":"Results","is_final":true,"speech_final":{speech_final},"duration":{secs},"channel":{{"alternatives":[{{"transcript":"{text}","words":[{{"word":"x","speaker":{speaker}}}]}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn a_new_speaker_ends_the_line_and_each_line_carries_who_and_how_long() {
+        let (tx, rx) = mpsc::channel();
+        let mut pending = Pending::default();
+        for m in [
+            said("Hello", 0, 0.5, false),
+            said("there.", 0, 0.75, false),
+            said("Hi!", 1, 0.25, true),
+            said("Bye.", 0, 1.0, true),
+        ] {
+            handle(&m, &mut pending, &tx);
+        }
+        drop(tx);
+        let line = |text: &str, speaker, ms| LiveEvent::Final {
+            text: text.into(),
+            speaker: Some(speaker),
+            ms,
+        };
+        let got: Vec<_> = rx.iter().collect();
+        assert_eq!(
+            got,
+            vec![
+                LiveEvent::Partial("Hello".into()),
+                LiveEvent::Partial("Hello there.".into()),
+                line("Hello there.", 0, 1250),
+                line("Hi!", 1, 250),
+                line("Bye.", 0, 1000),
+            ]
+        );
     }
 
     #[test]

@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use recapz_core::db;
 use recapz_server::{
     config::Config,
-    live::{hub, Control, Msg},
+    live::{hub, Control, Msg, Who},
     routes,
 };
 use rusqlite::params;
@@ -111,6 +111,7 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
             Msg::Final {
                 at_ms: 1500,
                 text: "the price is nine million".into(),
+                who: None,
             },
         );
     }
@@ -159,6 +160,21 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
         read_until(&mut body, "\n\n").await,
         "event: unavailable\ndata: {}\n\n"
     );
+    // A line with a speaker carries the number (its colour), the name to show and how long it took.
+    hub().push(
+        "live-shared",
+        Msg::Final {
+            at_ms: 4000,
+            text: "agreed".into(),
+            who: Some(Who {
+                n: 1,
+                label: "Ann".into(),
+                ms: 900,
+            }),
+        },
+    );
+    let who_line = "event: final\ndata: {\"at_ms\":4000,\"label\":\"Ann\",\"ms\":900,\"speaker\":1,\"text\":\"agreed\"}\n\n";
+    assert_eq!(read_until(&mut body, "\n\n").await, who_line);
 
     // A workspace member joining late gets the line, the partial and the failure notice.
     let res = app
@@ -171,7 +187,7 @@ async fn members_with_access_get_the_live_transcript_and_others_get_nothing() {
     let got = read_until(&mut body, "event: unavailable\ndata: {}\n\n").await;
     assert_eq!(
         got,
-        format!("{line}event: partial\ndata: {{\"text\":\"and the\"}}\n\nevent: unavailable\ndata: {{}}\n\n")
+        format!("{line}{who_line}event: unavailable\ndata: {{}}\n\n")
     );
 
     // Ending the call (or an opt-out) closes the stream and drops the transcript.
@@ -304,4 +320,61 @@ async fn only_the_owner_or_an_admin_pauses_resumes_or_stops_a_live_call() {
     );
     hub().clear("ctl-amy");
     hub().clear("ctl-boss");
+}
+
+#[tokio::test]
+async fn the_meetings_list_carries_who_has_spoken_in_a_recording_call_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let boss = login(&app, "boss@example.com").await;
+    seed(dir.path());
+    let control = db::open_control(dir.path()).unwrap();
+    let tid = db::tenant_ids(&control).unwrap().remove(0);
+    let t = db::open_tenant(dir.path(), &tid).unwrap();
+    t.execute(
+        "UPDATE meetings SET id = 'list-talk', title = 'list-talk' WHERE id = 'live-shared'",
+        [],
+    )
+    .unwrap();
+    hub().start("list-talk");
+    let say = |n, label: &str, ms| Msg::Final {
+        at_ms: 1,
+        text: "hi".into(),
+        who: Some(Who {
+            n,
+            label: label.into(),
+            ms,
+        }),
+    };
+    hub().push("list-talk", say(1, "Speaker 2", 1000));
+    hub().push("list-talk", say(0, "Speaker 1", 3000));
+    hub().push("list-talk", say(1, "Bob", 500));
+    let res = app
+        .oneshot(
+            Request::get("/api/meetings")
+                .header(header::COOKIE, &boss)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let rows: serde_json::Value =
+        serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let row = |id: &str| {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(
+        row("list-talk")["live_speakers"],
+        serde_json::json!([
+            {"speaker": 0, "name": "Speaker 1", "ms": 3000},
+            {"speaker": 1, "name": "Bob", "ms": 1500}
+        ])
+    );
+    assert!(row("live-private").get("live_speakers").is_none());
+    hub().clear("list-talk");
 }

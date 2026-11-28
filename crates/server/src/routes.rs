@@ -887,6 +887,16 @@ struct MeetingRow {
     duration_ms: Option<i64>,
     action_item_count: i64,
     speakers: Vec<ListSpeaker>,
+    /// A call being recorded here: who has spoken and for how long, from the live transcript.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    live_speakers: Vec<LiveSpeaker>,
+}
+
+#[derive(Serialize)]
+struct LiveSpeaker {
+    speaker: u32,
+    name: String,
+    ms: i64,
 }
 
 #[derive(Serialize)]
@@ -924,6 +934,7 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
                         duration_ms: r.get(6)?,
                         action_item_count: r.get(7)?,
                         speakers: Vec::new(),
+                        live_speakers: Vec::new(),
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -945,6 +956,13 @@ async fn list_meetings(State(app): State<App>, jar: CookieJar) -> Res<Json<Vec<M
             }
             for r in &mut rows {
                 r.speakers = by.remove(&r.id).unwrap_or_default();
+                if r.status == "recording" {
+                    r.live_speakers = crate::live::hub()
+                        .speakers(&r.id)
+                        .into_iter()
+                        .map(|w| LiveSpeaker { speaker: w.n, name: w.label, ms: w.ms })
+                        .collect();
+                }
             }
             Ok(rows)
         })
