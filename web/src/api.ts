@@ -117,6 +117,10 @@ export interface Usage {
 /** Admin only: this month's estimated cost, the cap and the costliest meetings. */
 export const getUsage = async (): Promise<Usage> => (await check(await fetch('/api/usage'))).json()
 
+const PLATFORMS: Record<string, string> = { meet: 'Google Meet', zoom: 'Zoom', upload: 'Upload', browser: 'Browser' }
+/** The member-facing name of a meeting's platform; an unknown value is shown as is. */
+export const platformLabel = (p: string) => PLATFORMS[p] ?? p
+
 export const getMeetings = async (): Promise<Meeting[]> =>
   (await check(await fetch('/api/meetings'))).json()
 

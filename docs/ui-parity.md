@@ -90,6 +90,7 @@ definition of done for every web PR.
       speaker ribbon and faces from `speakers` (hidden when empty); no screenshot yet. The ribbon is one segment per
       speaker, not a timeline, because the list API has no speaking times)
       Checked by eye in the 2026-11-17 screenshot pass (1280 and 390 px). Speaker colours match the Report (#150).
+      Platform label (#725): the row shows "Google Meet", "Zoom", "Upload" or "Browser" instead of the stored value. The prototype only has Meet rows and no Zoom, so there is no prototype screenshot of the Zoom label (written reason); the label is plain text in the same span, so both skins and the 390 px row are unchanged in layout. Exact labels are asserted in Meetings.test.tsx.
       Rechecked on 2026-11-20 (#331): grouping, time, title, duration, platform and the stacked rows at 390 px match;
       the test meetings have no speakers or action items, so the ribbon, faces and count were not seen. The prototype
       shows 24-hour times and "Monday 9 Nov"; the app shows "04:22 PM" and "Tuesday, November 17", and a Delete

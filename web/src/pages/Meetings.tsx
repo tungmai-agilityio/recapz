@@ -14,7 +14,7 @@ import { Face } from '../ui/Face'
 import { Ribbon } from '../ui/Ribbon'
 import { groupByDay, hoursLabel, meetingTime, minutesLabel, statusBadge } from './meeting-days'
 import { Field, inputClass } from '../ui/Field'
-import { deleteMeeting, devLogin, getMeetings, joinMeeting, Unauthorized, type Meeting } from '../api'
+import { deleteMeeting, devLogin, getMeetings, joinMeeting, platformLabel, Unauthorized, type Meeting } from '../api'
 
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const thisMonth = (ms: number) => { const a = new Date(ms), b = new Date(); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() }
@@ -160,7 +160,7 @@ export function Meetings() {
                 <div className="min-w-0">
                   <Link to={`/meetings/${m.id}`} className="block truncate font-semibold tracking-tight hover:text-primary">{m.title}</Link>
                   <p className="flex flex-wrap gap-x-2.5 text-xs text-mute"><span className="font-mono @xl:hidden">{at(meetingTime(m))}</span>
-                    {m.duration_ms ? <span>{minutesLabel(m.duration_ms)}</span> : null}<span>{m.platform}</span>
+                    {m.duration_ms ? <span>{minutesLabel(m.duration_ms)}</span> : null}<span>{platformLabel(m.platform)}</span>
                     {m.action_item_count ? <span>{m.action_item_count} action {m.action_item_count === 1 ? 'item' : 'items'}</span> : null}</p>
                 </div>
                 <span className="@max-xl:col-span-full @max-xl:row-start-2 @max-xl:empty:hidden">
