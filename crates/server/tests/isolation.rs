@@ -317,7 +317,8 @@ async fn ask_and_live_ask_never_cite_the_other_workspace() {
     let (s, _, body) = send(&f.app, ask("how much is the zebrafish retainer?")).await;
     assert_eq!(s, StatusCode::OK);
     assert!(
-        !body.contains("m2") && !body.contains("d2") && !body.contains("sixty"),
+        // Quoted ids: a bare "d2" matches inside the random message-id uuid in the stream.
+        !body.contains(r#""m2""#) && !body.contains(r#""d2""#) && !body.contains("sixty"),
         "{body}"
     );
     assert!(f.stub.requests().is_empty());
@@ -333,7 +334,10 @@ async fn ask_and_live_ask_never_cite_the_other_workspace() {
     assert_eq!(sent.len(), 1);
     assert!(!sent[0].prompt.contains("zebrafish"), "{}", sent[0].prompt);
     assert!(!sent[0].prompt.contains("sixty"), "{}", sent[0].prompt);
-    assert!(!body.contains("m2") && !body.contains("d2"), "{body}");
+    assert!(
+        !body.contains(r#""m2""#) && !body.contains(r#""d2""#),
+        "{body}"
+    );
 
     // Control: after switching, the same question reaches the second workspace's meeting and document.
     let switch = format!("/api/workspaces/{}/switch", f.second);
